@@ -164,15 +164,16 @@ out3 MARKER-OUT-3 MARKER-ERR-3
 out4 MARKER-OUT-4 MARKER-ERR-4"
 
 # ── crashes x jobs ───────────────────────────────────────────────────────────
-# Several different crash types running concurrently — checks each crashing
+# Several concurrently-crashing tests (all SIGABRT — see combo_fixture.c's
+# comment on why SIGFPE/SIGSEGV aren't portable here) — checks each crashing
 # slot's own outcome isn't cross-attributed to a sibling crashing nearby.
 "$COMBO" --no-color --jobs=5 --json="$WORKDIR/crashjobs.json" combo_crashjobs \
   >/dev/null 2>&1 || true
-check_map "crashes x jobs: each concurrent crash type classified independently" \
+check_map "crashes x jobs: each concurrent crash classified independently" \
   "$(json_outcomes "$WORKDIR/crashjobs.json")" \
-  "c_abort ucrashed
-c_fpe ucrashed
-c_segv ucrashed
+  "c_abort1 ucrashed
+c_abort2 ucrashed
+c_abort3 ucrashed
 c_pass passed
 c_fail failed"
 

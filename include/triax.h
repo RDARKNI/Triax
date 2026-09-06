@@ -3192,7 +3192,7 @@ static struct {
   const int term[3];
   const int crash[6];
   struct {
-    struct sigaction nop, ign, dfl, crash, term;
+    struct sigaction ign, dfl, crash, term;
   } sas;
   struct {
     struct sigaction ign[3];
@@ -3239,9 +3239,6 @@ static inline void           triaxi_sighandler_crash(int sig) {
   longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED); /*sig must be in TRIAXI_signals_crashes*/
 }
 
-// exists only to interrupt blocking syscalls with EINTR (see TRIAXI_collect_one)
-static inline void triaxi_sighandler_noop(int sig) { (void)sig; }
-
 #  else
 /* Isolation child: makes abort() exit with a detectable crash code
    on all compilers, including MinGW and pre-2015 MSVC. */
@@ -3252,10 +3249,8 @@ static inline void triaxi_sighandler_abort(int sig) {
 
 static inline void triaxi_signals_init(void) {
 #  ifndef _WIN32
-  sigemptyset(&TRIAXI_signals.sas.nop.sa_mask);
   sigemptyset(&TRIAXI_signals.sas.ign.sa_mask);
   sigemptyset(&TRIAXI_signals.sas.dfl.sa_mask);
-  TRIAXI_signals.sas.nop.sa_handler   = triaxi_sighandler_noop;
   TRIAXI_signals.sas.ign.sa_handler   = SIG_IGN;
   TRIAXI_signals.sas.dfl.sa_handler   = SIG_DFL;
 

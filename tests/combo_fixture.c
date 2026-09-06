@@ -12,12 +12,8 @@
 #include "triax.h"
 
 #include <signal.h>
-#include <time.h>
 
-static inline void combo_sleep_ms(long ms) {
-  struct timespec ts = {ms / 1000, (ms % 1000) * 1000000L};
-  nanosleep(&ts, NULL);
-}
+#include "portable.h"
 
 // ── isolation x jobs: a fixed mix of outcomes, all isolated, run under
 // --jobs=N>1 so several land in the same concurrent batch. ──────────────────
@@ -28,7 +24,7 @@ triax_test(combo_isojobs, crash1, 0) { raise(SIGABRT); }
 triax_test(combo_isojobs, pass2, 0) { triax_assert_true(1); }
 triax_test(combo_isojobs, fail2, 0) { triax_assert_true(0); }
 triax_test(combo_isojobs, pass3, 0) { triax_assert_true(1); }
-triax_test(combo_isojobs, crash2, 0) { raise(SIGFPE); }
+triax_test(combo_isojobs, crash2, 0) { raise(SIGABRT); }
 triax_test(combo_isojobs, pass4, 0) { triax_assert_true(1); }
 
 // ── timeout x jobs: one slow test with a short timeout alongside several
@@ -36,10 +32,12 @@ triax_test(combo_isojobs, pass4, 0) { triax_assert_true(1); }
 // blocked its job slot instead of being reaped concurrently with the rest,
 // total wall time would grow with N instead of staying near the timeout. ───
 triax_suite(combo_timeoutjobs, .isolation = TRIAX_ISOLATION_ON);
-triax_test(combo_timeoutjobs, slow_timeout, .timeout_ms = 300) { sleep(100); }
-triax_test(combo_timeoutjobs, fast1, 0) { combo_sleep_ms(200); triax_assert_true(1); }
-triax_test(combo_timeoutjobs, fast2, 0) { combo_sleep_ms(200); triax_assert_true(1); }
-triax_test(combo_timeoutjobs, fast3, 0) { combo_sleep_ms(200); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, slow_timeout, .timeout_ms = 300) {
+  triaxi_test_sleep_ms(100000);
+}
+triax_test(combo_timeoutjobs, fast1, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, fast2, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, fast3, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
 
 // ── parameters x jobs: one parameterized test, several elements, run under
 // --jobs=N so invocations execute concurrently across slots — verifies each
@@ -78,13 +76,19 @@ triax_test(combo_capturejobs, out4, 0) {
   triax_assert_true(1);
 }
 
-// ── crashes x jobs: several different crash types running concurrently —
-// verifies each crashing slot's own signal/reason isn't cross-attributed to
-// a sibling crashing at close to the same time. ─────────────────────────────
+// ── crashes x jobs: several crashing tests running concurrently — verifies
+// each crashing slot's own outcome isn't cross-attributed to a sibling
+// crashing at close to the same time. All raise SIGABRT specifically:
+// triax's Windows path only installs a translating handler
+// (triaxi_sighandler_abort, via RaiseException) for SIGABRT — raise(SIGFPE)/
+// raise(SIGSEGV) there would just hit the CRT's default (untranslated)
+// disposition and likely misreport as a plain exit rather than a crash, so
+// this doesn't test "different signal types", only "multiple concurrent
+// crashes". ──────────────────────────────────────────────────────────────
 triax_suite(combo_crashjobs, .isolation = TRIAX_ISOLATION_ON);
-triax_test(combo_crashjobs, c_abort, 0) { raise(SIGABRT); }
-triax_test(combo_crashjobs, c_fpe, 0) { raise(SIGFPE); }
-triax_test(combo_crashjobs, c_segv, 0) { raise(SIGSEGV); }
+triax_test(combo_crashjobs, c_abort1, 0) { raise(SIGABRT); }
+triax_test(combo_crashjobs, c_abort2, 0) { raise(SIGABRT); }
+triax_test(combo_crashjobs, c_abort3, 0) { raise(SIGABRT); }
 triax_test(combo_crashjobs, c_pass, 0) { triax_assert_true(1); }
 triax_test(combo_crashjobs, c_fail, 0) { triax_assert_true(0); }
 
@@ -107,8 +111,8 @@ triax_test(combo_fixture_crash, sibling_runs_fine, 0) { triax_assert_true(1); }
 // CLEANUP branch already special-cases exit.type == TIMEOUT) that had no
 // test at all before this — every existing timeout test times out from
 // plain body code or mid-assertion, never from a hanging fixture.
-static void combo_fixture_init_hangs(void) { sleep(100); }
-static void combo_fixture_fini_hangs(void) { sleep(100); }
+static void combo_fixture_init_hangs(void) { triaxi_test_sleep_ms(100000); }
+static void combo_fixture_fini_hangs(void) { triaxi_test_sleep_ms(100000); }
 triax_test(combo_fixture_crash, timeout_in_init, .init = combo_fixture_init_hangs,
            .timeout_ms = 300) {
   triax_assert_true(1); // unreached
@@ -136,7 +140,7 @@ triax_suite(combo_reporters, .isolation = TRIAX_ISOLATION_ON);
 triax_test(combo_reporters, r_passed, 0) { triax_assert_true(1); }
 triax_test(combo_reporters, r_failed, 0) { triax_assert_true(0); }
 triax_test(combo_reporters, r_skipped, 0) { triax_skip(); }
-triax_test(combo_reporters, r_timeout, .timeout_ms = 50) { sleep(100); }
+triax_test(combo_reporters, r_timeout, .timeout_ms = 50) { triaxi_test_sleep_ms(100000); }
 triax_test(combo_reporters, r_ucrashed, 0) { raise(SIGABRT); }
 triax_test(combo_reporters, r_uexited, 0) { exit(3); }
 triax_test(combo_reporters, r_test_error, 0) { (void)triax_param(int); /* not parameterized */ }

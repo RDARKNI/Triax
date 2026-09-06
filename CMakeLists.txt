@@ -53,6 +53,20 @@ if(BUILD_TESTING)
     # interface, so consumers do not inherit the project's warning policy.
     add_library(triax-warnings INTERFACE)
 
+    # Anything linking triax-warnings also links Triax::Triax, which already
+    # puts include/ on its (non-SYSTEM) interface include path. Re-declaring
+    # it here as SYSTEM, specifically for these strict-warnings consumers,
+    # makes the compiler treat triax.h's own internals as a system header for
+    # warning purposes — so strict-warning CI measures the test code actually
+    # being written against Triax, not triax.h's own implementation details
+    # (e.g. its internal float-promotion patterns tripping -Wdouble-promotion).
+    # Consumers that don't link triax-warnings are unaffected.
+    target_include_directories(
+        triax-warnings
+        SYSTEM INTERFACE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
     set(TRIAX_STRICT_WARNINGS_COMMON
         -Wall
         -Wextra

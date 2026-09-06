@@ -2,7 +2,7 @@
 
 ## 1.0.0
 
-Initial public release candidate under the Triax name.
+Initial public release under the Triax name.
 
 - Single-header C/C++ testing framework.
 - Optional per-test process isolation.

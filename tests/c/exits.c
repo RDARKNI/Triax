@@ -12,13 +12,15 @@
 #include "triax.h"
 #include "triax_selfverify.h"
 
+#include "portable.h"
+
 triax_suite(exits, .isolation = TRIAX_ISOLATION_ON);
 
 triaxi_validate(exits, skip, TRIAXI_VALIDATE_SKIPPED) { triax_skip(); }
 triaxi_validate(exits, pass, TRIAXI_VALIDATE_PASSED) { triax_assert_true(1); }
 triaxi_validate(exits, fail, TRIAXI_VALIDATE_FAILED) { triax_assert_true(0); }
 triaxi_validate_opts(exits, timeout, TRIAXI_VALIDATE_TIMEOUT, 1, TRIAXI_VALIDATE_ISOLATION_INHERIT) {
-  sleep(100);
+  triaxi_test_sleep_ms(100000);
 }
 triaxi_validate(exits, uexit, TRIAXI_VALIDATE_UEXITED) { triax_assert_true((exit(1), 1)); }
 triaxi_validate(exits, ufault, TRIAXI_VALIDATE_UCRASHED) { triax_assert_true(raise(SIGABRT)); }
@@ -74,7 +76,7 @@ triaxi_validate_opts(exits, timeout_fail, TRIAXI_VALIDATE_FAILED, 100,
 }
 triaxi_validate_opts(exits, timeout_timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
-  sleep(10);
+  triaxi_test_sleep_ms(10000);
 }
 
 static inline int spin_forever(void) {

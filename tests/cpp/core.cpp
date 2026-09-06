@@ -1,9 +1,9 @@
 #define TRIAX_MULTI_TU
 #include "triax.h"
 
+#ifdef __cpp_lib_string_view
 static int add(int a, int b) { return a + b; }
 
-#ifdef __cpp_lib_string_view
 triax_test(core, equality, .skip(false)) {
   triax_assert_eq(add(2, 3), 5);
   triax_expect_true(true);
