@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DTRIAX_BUILD_EXAMPLES=ON
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  clang-sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: C sanitizer self-test
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude -Itests tests/c/main.c tests/c/core.c tests/c/fixtures.c tests/c/exits.c tests/c/assertions.c tests/c/strings.c tests/c/memory.c tests/c/print.c tests/c/inputs.c tests/c/arrays.c tests/c/errors.c -o selftest-c-san
+          ./selftest-c-san --no-color
+      - name: C++ sanitizer self-test
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          clang++ -std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude -Itests tests/cpp/main.cpp tests/cpp/core.cpp tests/cpp/fmt.cpp tests/cpp/inputs.cpp -o selftest-cpp-san
+          ./selftest-cpp-san --no-color
+      - name: Combination fixtures sanitizer build (not gated on outcome — see native job's ctest)
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: |
+          clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude tests/combo_fixture.c -o combo-fixture-c-san
+          clang++ -std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude tests/combo_fixture.cpp -o combo-fixture-cpp-san
+          clang -std=c11 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude tests/multitu_c_a.c tests/multitu_c_b.c -o multitu-c-san
+          clang++ -std=c++17 -g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude tests/multitu_cpp_a.cpp tests/multitu_cpp_b.cpp -o multitu-cpp-san
+          bash tests/validate_combinations.sh ./combo-fixture-c-san ./combo-fixture-cpp-san ./multitu-c-san ./multitu-cpp-san
