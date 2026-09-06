@@ -1035,10 +1035,10 @@ static_assert(offsetof(TRIAXI_TestConfig, params) == sizeof(Triax_Attributes), "
 # endif
 
 typedef struct TRIAXI_Test {
-  const char* const suitename;
-  const char* const name;
-  const char* const file;
-  void (*const func)(void);
+  const char* suitename;
+  const char* name;
+  const char* file;
+  void (*func)(void);
   union {
     TRIAXI_TestConfig config; // user-facing initialisation
     struct {
@@ -1214,20 +1214,20 @@ private:
 // ordinary internal-linkage object declared alongside it; only its address
 // goes in the section.
 #  define TRIAXI_MAKE_TEST(x, ...)                                                                 \
-      static const TRIAXI_Test x##_obj = __VA_ARGS__;                                              \
-      TRIAXI_TEST_SECTION TRIAXI_LINKER_USE(x)                                                     \
-      TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const x = &x##_obj
+     static const TRIAXI_Test                         x##_obj = __VA_ARGS__;                       \
+     TRIAXI_TEST_SECTION                              TRIAXI_LINKER_USE(x)                         \
+     TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const x = &x##_obj
 #  define TRIAXI_MAKE_SUITEREG(x, ...)                                                             \
-      static const TRIAXI_SuiteReg x##_obj = __VA_ARGS__;                                          \
-      TRIAXI_SUITE_SECTION TRIAXI_LINKER_USE(x)                                                    \
-      TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const x = &x##_obj
+     static const TRIAXI_SuiteReg                         x##_obj = __VA_ARGS__;                   \
+     TRIAXI_SUITE_SECTION                                 TRIAXI_LINKER_USE(x)                     \
+     TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const x = &x##_obj
 # else
 #  define TRIAXI_MAKE_TEST(x, ...)                                                                 \
-      TRIAXI_TEST_SECTION                       TRIAXI_LINKER_USE(x)                               \
-      TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x = __VA_ARGS__
+     TRIAXI_TEST_SECTION                       TRIAXI_LINKER_USE(x)                                \
+     TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x = __VA_ARGS__
 #  define TRIAXI_MAKE_SUITEREG(x, ...)                                                             \
-      TRIAXI_SUITE_SECTION                          TRIAXI_LINKER_USE(x)                           \
-      TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
+     TRIAXI_SUITE_SECTION                          TRIAXI_LINKER_USE(x)                            \
+     TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
 # endif
 
 # if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
@@ -1269,7 +1269,7 @@ TRIAXI_EXTERN_C_END
      TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                        \
      TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                            \
                       {#suitename, #name, __FILE__, triaxf_##suitename##_##name,                   \
-                       TRIAXI_Test_attrs_init(__VA_ARGS__)});                                       \
+                       TRIAXI_Test_attrs_init(__VA_ARGS__)});                                      \
      TRIAXI_IGNWARN_GNU_END                                                                        \
      static void triaxf_##suitename##_##name(void)
 #  define triaxi_suite(name, ...)                                                                  \
@@ -1293,9 +1293,9 @@ TRIAXI_EXTERN_C_END
        }                                                                                           \
        TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                      \
        TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                          \
-                        TRIAXI_Test(#suitename, #name, __FILE__,                                    \
-                                    triaxfwrapped_##suitename##_##name,                             \
-                                    TRIAXI_Test_attrs_init(__VA_ARGS__)));                          \
+                        TRIAXI_Test(#suitename, #name, __FILE__,                                   \
+                                    triaxfwrapped_##suitename##_##name,                            \
+                                    TRIAXI_Test_attrs_init(__VA_ARGS__)));                         \
        TRIAXI_IGNWARN_GNU_END                                                                      \
      }                                                                                             \
      static void triaxf_##suitename##_##name(void)
@@ -3147,18 +3147,18 @@ static inline void triaxi_sections_init(void) {
       do {                                                                                         \
         extern const T* const T##_a;                                                               \
         extern const T* const T##_z;                                                               \
-        const T* const* triaxi_pbeg = &T##_a + 1;                                                  \
-        const T* const* triaxi_pend = &T##_z;                                                      \
-        size_t           triaxi_n   = 0;                                                           \
+        const T* const*       triaxi_pbeg = &T##_a + 1;                                            \
+        const T* const*       triaxi_pend = &T##_z;                                                \
+        size_t                triaxi_n    = 0;                                                     \
         for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
           if (*p) { ++triaxi_n; }                                                                  \
-        }                                                                                           \
-        T* triaxi_arr = triaxi_n ? (T*)malloc(triaxi_n * sizeof(T)) : NULL;                         \
+        }                                                                                          \
+        T* triaxi_arr = triaxi_n ? (T*)malloc(triaxi_n * sizeof(T)) : NULL;                        \
         if (triaxi_n && !triaxi_arr) { triaxi_fatal(); }                                           \
         size_t triaxi_i = 0;                                                                       \
         for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
           if (*p) { triaxi_arr[triaxi_i++] = **p; }                                                \
-        }                                                                                           \
+        }                                                                                          \
         (field).beg = triaxi_arr;                                                                  \
         (field).end = triaxi_arr + triaxi_n;                                                       \
       } while (0)
