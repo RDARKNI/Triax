@@ -19,7 +19,8 @@ triax_suite(exits, .isolation = TRIAX_ISOLATION_ON);
 triaxi_validate(exits, skip, TRIAXI_VALIDATE_SKIPPED) { triax_skip(); }
 triaxi_validate(exits, pass, TRIAXI_VALIDATE_PASSED) { triax_assert_true(1); }
 triaxi_validate(exits, fail, TRIAXI_VALIDATE_FAILED) { triax_assert_true(0); }
-triaxi_validate_opts(exits, timeout, TRIAXI_VALIDATE_TIMEOUT, 1, TRIAXI_VALIDATE_ISOLATION_INHERIT) {
+triaxi_validate_opts(exits, timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
+                     TRIAXI_VALIDATE_ISOLATION_INHERIT) {
   triaxi_test_sleep_ms(100000);
 }
 triaxi_validate(exits, uexit, TRIAXI_VALIDATE_UEXITED) { triax_assert_true((exit(1), 1)); }
@@ -39,7 +40,9 @@ triaxi_validate(exits, exit_noexit_fail, TRIAXI_VALIDATE_FAILED) { triax_assert_
 triaxi_validate(exits, exit_wrongcode_fail, TRIAXI_VALIDATE_FAILED) {
   triax_assert_exit(5, exit(0));
 }
-triaxi_validate(exits, exit_ucrash, TRIAXI_VALIDATE_UCRASHED) { triax_assert_exit(5, raise(SIGABRT)); }
+triaxi_validate(exits, exit_ucrash, TRIAXI_VALIDATE_UCRASHED) {
+  triax_assert_exit(5, raise(SIGABRT));
+}
 triaxi_validate(exits, crash_pass, TRIAXI_VALIDATE_PASSED) {
   triax_assert_fault(TRIAX_FAULT_ABORT, raise(SIGABRT));
 }
@@ -80,7 +83,8 @@ triaxi_validate_opts(exits, timeout_timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
 }
 
 static inline int spin_forever(void) {
-  for (;;) { printf(""); }
+  for (;;) {}
+  return 0;
 }
 triax_suite(timeout, .isolation = TRIAX_ISOLATION_ON);
 triaxi_validate_opts(timeout, timeout_in_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
