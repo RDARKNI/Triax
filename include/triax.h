@@ -1609,7 +1609,23 @@ static inline Triax_Str triax_read_stdout(void) {
 # if TRIAXI_CPP
   std::cout.flush();
 # endif
-  fflush(stdout);
+  if (fflush(stdout)) { triaxi_fatal(); }
+# ifdef _WIN32
+  /*
+   * TEMPORARY diagnostic for the Windows capture-read investigation — remove
+   * once the Windows runner has reported back what size/handle values it
+   * sees here. Not meant to survive to a real commit.
+   */
+  {
+    LARGE_INTEGER triaxi_dbg_size;
+    if (!GetFileSizeEx(TRIAXI_exec.out, &triaxi_dbg_size)) { triaxi_fatal(); }
+    intptr_t triaxi_dbg_stdout_h = _get_osfhandle(_fileno(stdout));
+    fprintf(TRIAXI_true_stderr, "capture: exec.out=%p stdout=%p size=%lld\n",
+            (void*)TRIAXI_exec.out, (void*)triaxi_dbg_stdout_h,
+            (long long)triaxi_dbg_size.QuadPart);
+    fflush(TRIAXI_true_stderr);
+  }
+# endif
   return triaxi_file_read_user(TRIAXI_exec.out);
 }
 static inline Triax_Str triax_read_stderr(void) {
