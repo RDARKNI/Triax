@@ -149,10 +149,19 @@
 #  include <string>
 #  include <type_traits>
 #  include <utility>
-#  ifdef __has_include
+// __has_include(<header>) only answers "does this file exist on disk" — on
+// MSVC's STL specifically, the header exists as soon as any C++ mode is
+// selected, but its *contents* hard-error (STL4038) if the active language
+// standard predates what the header requires. Gating on the language
+// version too (not just presence) avoids ever attempting the #include in a
+// mode where it's certain to fail, e.g. this project's own advertised
+// cxx_std_11 baseline.
+#  if TRIAXI_CPP >= 201703L && defined(__has_include)
 #   if __has_include(<string_view>)
 #    include <string_view>
 #   endif
+#  endif
+#  if TRIAXI_CPP >= 202002L && defined(__has_include)
 #   if __has_include(<format>)
 #    include <format>
 #   endif
@@ -1190,12 +1199,36 @@ private:
 #  error "Triax: unsupported compiler/linker registration backend"
 # endif
 
-# define TRIAXI_MAKE_TEST(x)                                                                       \
-    TRIAXI_TEST_SECTION                       TRIAXI_LINKER_USE(x)                                 \
-    TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x
-# define TRIAXI_MAKE_SUITEREG(x)                                                                   \
-    TRIAXI_SUITE_SECTION                          TRIAXI_LINKER_USE(x)                             \
-    TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x
+# if TRIAXI_REG_MSVC_COFF
+// MSVC COFF $a/$m/$z subsections are concatenated in that order, but nothing
+// guarantees tight packing of an arbitrary struct's size/alignment across
+// that concatenation the way triaxi_sections_init()'s sentinel-plus-one
+// pointer arithmetic would need — a linker that aligns the next subsection's
+// contribution more strongly than TRIAXI_Test's own alignment could leave
+// that arithmetic landing in padding rather than the first real entry, with
+// every field after that misread. Registering a *pointer* to each object
+// instead of the object itself avoids this: every section entry is then a
+// plain pointer — same size and natural alignment as every other entry, so
+// there's no padding for the arithmetic to land in — matching the standard
+// .CRT$XCU-style registration idiom. The actual test/suite data lives in an
+// ordinary internal-linkage object declared alongside it; only its address
+// goes in the section.
+#  define TRIAXI_MAKE_TEST(x, ...)                                                                 \
+      static const TRIAXI_Test x##_obj = __VA_ARGS__;                                              \
+      TRIAXI_TEST_SECTION TRIAXI_LINKER_USE(x)                                                     \
+      TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const x = &x##_obj
+#  define TRIAXI_MAKE_SUITEREG(x, ...)                                                             \
+      static const TRIAXI_SuiteReg x##_obj = __VA_ARGS__;                                          \
+      TRIAXI_SUITE_SECTION TRIAXI_LINKER_USE(x)                                                    \
+      TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const x = &x##_obj
+# else
+#  define TRIAXI_MAKE_TEST(x, ...)                                                                 \
+      TRIAXI_TEST_SECTION                       TRIAXI_LINKER_USE(x)                               \
+      TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x = __VA_ARGS__
+#  define TRIAXI_MAKE_SUITEREG(x, ...)                                                             \
+      TRIAXI_SUITE_SECTION                          TRIAXI_LINKER_USE(x)                           \
+      TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
+# endif
 
 # if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 #  if TRIAXI_REG_MSVC_COFF
@@ -1203,10 +1236,13 @@ private:
 #   pragma section("TRXTST$z", read)
 #   pragma section("TRXSUT$a", read)
 #   pragma section("TRXSUT$z", read)
-__declspec(allocate("TRXTST$a")) const TRIAXI_Test     TRIAXI_Test_a     = {TRIAXI_ZINIT};
-__declspec(allocate("TRXTST$z")) const TRIAXI_Test     TRIAXI_Test_z     = {TRIAXI_ZINIT};
-__declspec(allocate("TRXSUT$a")) const TRIAXI_SuiteReg TRIAXI_SuiteReg_a = {TRIAXI_ZINIT};
-__declspec(allocate("TRXSUT$z")) const TRIAXI_SuiteReg TRIAXI_SuiteReg_z = {TRIAXI_ZINIT};
+// Bounds sentinels: plain null pointers, not object values — see the
+// TRIAXI_MAKE_TEST comment above for why pointers are what makes the $a/$m/$z
+// concatenation safe to walk.
+__declspec(allocate("TRXTST$a")) const TRIAXI_Test* const     TRIAXI_Test_a     = NULL;
+__declspec(allocate("TRXTST$z")) const TRIAXI_Test* const     TRIAXI_Test_z     = NULL;
+__declspec(allocate("TRXSUT$a")) const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
+__declspec(allocate("TRXSUT$z")) const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
 #  elif TRIAXI_REG_GNU_SECTION
 // __start_SECNAME/__stop_SECNAME are only auto-defined by the linker if the
 // named section actually exists in the link; a program with no triax_test (or
@@ -1214,8 +1250,8 @@ __declspec(allocate("TRXSUT$z")) const TRIAXI_SuiteReg TRIAXI_SuiteReg_z = {TRIA
 // both sections to always exist. triaxi_register_tests/triaxi_register_suites
 // already skip zero-initialised (name == NULL) entries.
 TRIAXI_EXTERN_C_BEG
-TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel)         = {TRIAXI_ZINIT};
-TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel) = {TRIAXI_ZINIT};
+TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel, {TRIAXI_ZINIT});
+TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
 TRIAXI_EXTERN_C_END
 #  endif
 # endif
@@ -1231,14 +1267,14 @@ TRIAXI_EXTERN_C_END
 #  define triaxi_test(suitename, name, ...)                                                        \
      static void triaxf_##suitename##_##name(void);                                                \
      TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                        \
-     TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name)                                            \
-         = {#suitename, #name, __FILE__, triaxf_##suitename##_##name,                              \
-            TRIAXI_Test_attrs_init(__VA_ARGS__)};                                                  \
+     TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                            \
+                      {#suitename, #name, __FILE__, triaxf_##suitename##_##name,                   \
+                       TRIAXI_Test_attrs_init(__VA_ARGS__)});                                       \
      TRIAXI_IGNWARN_GNU_END                                                                        \
      static void triaxf_##suitename##_##name(void)
 #  define triaxi_suite(name, ...)                                                                  \
      TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                        \
-     TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name) = {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)};     \
+     TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});      \
      TRIAXI_IGNWARN_GNU_END typedef char TRIAXI_DUMMY
 
 # else
@@ -1256,16 +1292,17 @@ TRIAXI_EXTERN_C_END
          longjmp(TRIAXI_exec.jmp, (int)outcome);                                                   \
        }                                                                                           \
        TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                      \
-       TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name)                                          \
-           = TRIAXI_Test(#suitename, #name, __FILE__, triaxfwrapped_##suitename##_##name,          \
-                         TRIAXI_Test_attrs_init(__VA_ARGS__));                                     \
+       TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                          \
+                        TRIAXI_Test(#suitename, #name, __FILE__,                                    \
+                                    triaxfwrapped_##suitename##_##name,                             \
+                                    TRIAXI_Test_attrs_init(__VA_ARGS__)));                          \
        TRIAXI_IGNWARN_GNU_END                                                                      \
      }                                                                                             \
      static void triaxf_##suitename##_##name(void)
 #  define triaxi_suite(name, ...)                                                                  \
      extern "C" {                                                                                  \
        TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                      \
-       TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name) = {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)};   \
+       TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});    \
        TRIAXI_IGNWARN_GNU_END                                                                      \
      }                                                                                             \
      typedef char TRIAXI_DUMMY
@@ -3095,9 +3132,36 @@ static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
 
 static inline void triaxi_sections_init(void) {
 #  if TRIAXI_REG_MSVC_COFF
+  /*
+   * TRIAXI_Test_a/_z (and the SuiteReg equivalents) are now pointers, not
+   * objects — see TRIAXI_MAKE_TEST's comment for why. &T##_a + 1 / &T##_z
+   * therefore walks a pointer array (uniform size/alignment, so the $a/$m/$z
+   * subsection concatenation can't insert padding inside it), landing
+   * exactly on the first and one-past-the-last real entry. Each entry then
+   * gets copied by value into a freshly allocated, genuinely-packed array —
+   * so every other place in this file that treats TRIAXI_global.tests/
+   * suiteregs as a plain contiguous C array of objects keeps working
+   * unmodified, on this backend as on every other.
+   */
 #   define TRIAXI_SECTION_INIT_MSVC(T, field)                                                      \
-      extern const T T##_a, T##_z;                                                                 \
-      (field).beg = &T##_a + 1, (field).end = &T##_z;
+      do {                                                                                         \
+        extern const T* const T##_a;                                                               \
+        extern const T* const T##_z;                                                               \
+        const T* const* triaxi_pbeg = &T##_a + 1;                                                  \
+        const T* const* triaxi_pend = &T##_z;                                                      \
+        size_t           triaxi_n   = 0;                                                           \
+        for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
+          if (*p) { ++triaxi_n; }                                                                  \
+        }                                                                                           \
+        T* triaxi_arr = triaxi_n ? (T*)malloc(triaxi_n * sizeof(T)) : NULL;                         \
+        if (triaxi_n && !triaxi_arr) { triaxi_fatal(); }                                           \
+        size_t triaxi_i = 0;                                                                       \
+        for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
+          if (*p) { triaxi_arr[triaxi_i++] = **p; }                                                \
+        }                                                                                           \
+        (field).beg = triaxi_arr;                                                                  \
+        (field).end = triaxi_arr + triaxi_n;                                                       \
+      } while (0)
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_Test, TRIAXI_global.tests);
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_SuiteReg, TRIAXI_global.suiteregs);
 #   undef TRIAXI_SECTION_INIT_MSVC

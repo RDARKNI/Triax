@@ -92,13 +92,18 @@ Useful CLI options include:
 --timeout=MS
 --jobs=N
 --tags=list
+--no-color
 --fail-fast
+--break
+--debug
 --text[=dst]
 --json[=dst]
 --tap[=dst]
 --junit[=dst]
 --list
 ```
+
+`--break` raises a breakpoint trap on assertion failure, for running under an attached debugger. `--debug` implies `--break` plus `--jobs=1` and no isolation/timeout, so a failing test stops in-process instead of in a child.
 
 Filters may be a suite (`math`) or a single test (`math::addition`).
 
@@ -129,20 +134,13 @@ The project is intended for desktop/server systems code where failure isolation 
 
 ## Building the repository tests
 
-With CMake:
-
 ```sh
-cmake -S . -B build -DTRIAX_BUILD_TESTS=ON
+cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-Or directly:
-
-```sh
-cc -std=c11 -Wall -Wextra -Wpedantic -Iinclude tests/selftest.c -o triax-selftest-c
-c++ -std=c++17 -Wall -Wextra -Wpedantic -Iinclude tests/selftest.cpp -o triax-selftest-cpp
-```
+`BUILD_TESTING` (from CMake's `CTest` module) defaults on for this project when built at the top level; pass `-DBUILD_TESTING=OFF` to skip configuring the test targets.
 
 ## License
 

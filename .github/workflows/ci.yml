@@ -20,6 +20,20 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+  strict-warnings:
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure (GCC, warnings-as-errors)
+        run: cmake -S . -B build -DTRIAX_WARNINGS_AS_ERRORS=ON -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   clang-sanitizers:
     runs-on: ubuntu-latest
     steps:
