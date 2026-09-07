@@ -1563,6 +1563,40 @@ static inline Triax_Str triax_read_stdout(void) {
   std::cout.flush();
 # endif
   if (fflush(stdout)) { triaxi_fatal(); }
+# ifdef _WIN32
+  /*
+   * TEMPORARY diagnostic for the Windows capture-read investigation — remove
+   * once the Windows runner has reported back what it sees here. Checks
+   * whether TRIAXI_exec.out and stdout's *current* handle actually identify
+   * the same underlying kernel file object (DuplicateHandle should make
+   * them so, but this confirms it rather than assuming it), and what
+   * GetFileSizeEx reports on exec.out right at this point.
+   */
+  {
+    LARGE_INTEGER triaxi_dbg_size;
+    if (!GetFileSizeEx(TRIAXI_exec.out, &triaxi_dbg_size)) { triaxi_fatal(); }
+    intptr_t                   triaxi_dbg_stdout_h = _get_osfhandle(_fileno(stdout));
+    BY_HANDLE_FILE_INFORMATION triaxi_dbg_out_info, triaxi_dbg_stdout_info;
+    int triaxi_dbg_out_ok = GetFileInformationByHandle(TRIAXI_exec.out, &triaxi_dbg_out_info);
+    int triaxi_dbg_stdout_ok
+        = (triaxi_dbg_stdout_h != -1 && triaxi_dbg_stdout_h != -2)
+       && GetFileInformationByHandle((HANDLE)triaxi_dbg_stdout_h, &triaxi_dbg_stdout_info);
+    int triaxi_dbg_same
+        = triaxi_dbg_out_ok && triaxi_dbg_stdout_ok
+       && triaxi_dbg_out_info.nFileIndexHigh == triaxi_dbg_stdout_info.nFileIndexHigh
+       && triaxi_dbg_out_info.nFileIndexLow == triaxi_dbg_stdout_info.nFileIndexLow
+       && triaxi_dbg_out_info.dwVolumeSerialNumber == triaxi_dbg_stdout_info.dwVolumeSerialNumber;
+    char triaxi_dbg_buf[256];
+    int  triaxi_dbg_n = snprintf(
+        triaxi_dbg_buf, sizeof(triaxi_dbg_buf),
+        "capture: exec.out=%p stdout_h=%p out_info_ok=%d stdout_info_ok=%d same_file=%d size=%lld\n",
+        (void*)TRIAXI_exec.out, (void*)triaxi_dbg_stdout_h, triaxi_dbg_out_ok, triaxi_dbg_stdout_ok,
+        triaxi_dbg_same, (long long)triaxi_dbg_size.QuadPart);
+    if (triaxi_dbg_n > 0 && TRIAXI_true_stderr) {
+      triaxi_file_write(TRIAXI_true_stderr, triaxi_dbg_buf, (size_t)triaxi_dbg_n);
+    }
+  }
+# endif
   return triaxi_file_read(TRIAXI_exec.out);
 }
 static inline Triax_Str triax_read_stderr(void) {
@@ -5682,7 +5716,9 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
     triaxi_run_func(&h->invocation, h->shared);
     _exit(0);
   default: // parent
-    if (setpgid(h->process, h->process) && errno != EACCES && errno != ESRCH) { triaxi_fatal(); }
+    if (setpgid(h->process, h->process) && errno != EACCES && errno != EPERM && errno != ESRCH) {
+      triaxi_fatal();
+    }
     return;
   }
 #  else
