@@ -274,12 +274,13 @@ check_debug_case exit_needs_isolation test_error exit_assert_without_isolation
 # ── multi-TU x C/C++ ─────────────────────────────────────────────────────────
 # One suite's tests registered from two different translation units —
 # checks the runner aggregates cross-TU registrations correctly, for both
-# languages.
-for pair in "C:$MULTITU_C:multitu" "C++:$MULTITU_CPP:multitu_cpp"; do
-  lang="${pair%%:*}"
-  rest="${pair#*:}"
-  bin="${rest%%:*}"
-  suite="${rest#*:}"
+# languages. Takes lang/bin/suite as separate arguments rather than packing
+# them into one colon-delimited string: on Windows $bin is itself a
+# drive-letter path (e.g. D:/a/Triax/.../triax-multitu-c.exe), so ':' can't
+# be used as a field separator without colliding with it.
+check_multitu() {
+  local lang="$1" bin="$2" suite="$3"
+  local listing expected_listing
   listing="$("$bin" --list | tr -d '\r' | sort | tr '\n' ',')"
   expected_listing="$(printf '%s::from_a_pass\n%s::from_b_fail\n%s::from_b_pass\n' \
     "$suite" "$suite" "$suite" | sort | tr '\n' ',')"
@@ -295,7 +296,9 @@ for pair in "C:$MULTITU_C:multitu" "C++:$MULTITU_CPP:multitu_cpp"; do
     "from_a_pass passed
 from_b_pass passed
 from_b_fail failed"
-done
+}
+check_multitu "C" "$MULTITU_C" "multitu"
+check_multitu "C++" "$MULTITU_CPP" "multitu_cpp"
 
 # ── all reporters x every outcome ───────────────────────────────────────────
 # One test per outcome (7 of 8; uexception is C++-only, checked separately
