@@ -5681,28 +5681,6 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
   switch ((h->process = fork())) {
   case -1: triaxi_fatal();
   case 0: // child
-    /*
-     * Only the child calls setpgid, not the parent — unlike a job-control
-     * shell (where the classic pattern has both sides race to call it,
-     * because the shell can't control what its child does before it execs),
-     * Triax's child stays inside Triax's own code and does this as its
-     * literal first action, before resetting signal dispositions,
-     * redirecting stdout/stderr, or running a single line of fixture/test
-     * code. No descendant of this process can exist yet, so there is
-     * nothing for a concurrent parent-side setpgid to race against, and
-     * nothing later needs the group to exist any sooner than this: the
-     * collection/timeout paths that signal -h->process (see
-     * triaxi_terminate_group and the timeout-kill fallback below) already
-     * tolerate ESRCH/EPERM for the case the group doesn't exist yet, falling
-     * back to signalling h->process directly, and by the time either of
-     * those paths runs — the child having exited, or a timeout having
-     * elapsed — this call has long since completed. A second, concurrent
-     * setpgid(h->process, h->process) from the parent used to run here too,
-     * racing this one to create the *same* new group; that's what
-     * intermittently produced EPERM from Darwin's setpgid on macOS CI. With
-     * only one side ever attempting it, there's no concurrent creation to
-     * race, so a failure here is a real, non-transient error.
-     */
     if (setpgid(0, 0)) { triaxi_fatal(); }
     TRIAXI_exec.isolated = true;
     triaxi_process_control_reset();
