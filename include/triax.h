@@ -120,8 +120,8 @@
 #  if TRIAXI_MSVC && TRIAXI_C && TRIAXI_C < 201112L
 #   error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
 #  endif
-
 #  include <fcntl.h>
+#  include <io.h>
 #  include <malloc.h> /* _resetstkoflw */
 #  include <wchar.h>
 #  include <windows.h>
@@ -171,9 +171,7 @@
 # endif
 
 # if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
-#  ifdef _WIN32
-#   include <io.h>
-#  else
+#  ifndef _WIN32
 #   include <sys/wait.h>
 #   ifdef __linux__
 #    include <sys/syscall.h>
@@ -3172,7 +3170,6 @@ static inline void triaxi_sections_init(void) {
    * suiteregs as a plain contiguous C array of objects keeps working
    * unmodified, on this backend as on every other.
    */
-
 #   define TRIAXI_SECTION_INIT_MSVC(T, field)                                                      \
       do {                                                                                         \
         extern const T* const T##_a;                                                               \
