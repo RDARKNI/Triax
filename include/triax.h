@@ -3128,17 +3128,21 @@ static inline void triaxi_sections_init(void) {
       do {                                                                                         \
         extern const T* const T##_a;                                                               \
         extern const T* const T##_z;                                                               \
-        const T* const*       triaxi_pbeg = &T##_a + 1;                                            \
-        const T* const*       triaxi_pend = &T##_z;                                                \
-        size_t                triaxi_n    = 0;                                                     \
-        for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
-          if (*p) { ++triaxi_n; }                                                                  \
+        uintptr_t triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);                    \
+        uintptr_t triaxi_pend = (uintptr_t)(const void*)&T##_z;                                    \
+        size_t    triaxi_n    = 0;                                                                 \
+        for (uintptr_t p = triaxi_pbeg; p < triaxi_pend; p += sizeof(void*)) {                     \
+          const T* triaxi_entry = NULL;                                                            \
+          memcpy(&triaxi_entry, (const void*)p, sizeof(triaxi_entry));                             \
+          if (triaxi_entry) { ++triaxi_n; }                                                        \
         }                                                                                          \
         T* triaxi_arr = TRIAXI_ALLOC_ARRAY(T, triaxi_n);                                           \
         if (triaxi_n && !triaxi_arr) { triaxi_fatal(); }                                           \
         size_t triaxi_i = 0;                                                                       \
-        for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
-          if (*p) { triaxi_arr[triaxi_i++] = **p; }                                                \
+        for (uintptr_t p = triaxi_pbeg; p < triaxi_pend; p += sizeof(void*)) {                     \
+          const T* triaxi_entry = NULL;                                                            \
+          memcpy(&triaxi_entry, (const void*)p, sizeof(triaxi_entry));                             \
+          if (triaxi_entry) { triaxi_arr[triaxi_i++] = *triaxi_entry; }                             \
         }                                                                                          \
         (field).beg = triaxi_arr;                                                                  \
         (field).end = triaxi_arr + triaxi_n;                                                       \
@@ -4486,6 +4490,7 @@ static inline void triaxi_print_run_end_json(const TRIAXI_RunCtx* run) {
                  "\n",
                  run->out.streams.json);
 }
+
 static inline void triaxi_print_test_end_tap(const TRIAXI_RunCtx*         run,
                                              const TRIAXI_TestInvocation* inv,
                                              const TRIAXI_RunResult* r, const TRIAXI_TestResult* tr,
