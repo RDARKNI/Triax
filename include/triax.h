@@ -3128,9 +3128,9 @@ static inline void triaxi_sections_init(void) {
       do {                                                                                         \
         extern const T* const T##_a;                                                               \
         extern const T* const T##_z;                                                               \
-        uintptr_t triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);                    \
-        uintptr_t triaxi_pend = (uintptr_t)(const void*)&T##_z;                                    \
-        size_t    triaxi_n    = 0;                                                                 \
+        uintptr_t             triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);        \
+        uintptr_t             triaxi_pend = (uintptr_t)(const void*)&T##_z;                        \
+        size_t                triaxi_n    = 0;                                                     \
         for (uintptr_t p = triaxi_pbeg; p < triaxi_pend; p += sizeof(void*)) {                     \
           const T* triaxi_entry = NULL;                                                            \
           memcpy(&triaxi_entry, (const void*)p, sizeof(triaxi_entry));                             \
@@ -3142,7 +3142,7 @@ static inline void triaxi_sections_init(void) {
         for (uintptr_t p = triaxi_pbeg; p < triaxi_pend; p += sizeof(void*)) {                     \
           const T* triaxi_entry = NULL;                                                            \
           memcpy(&triaxi_entry, (const void*)p, sizeof(triaxi_entry));                             \
-          if (triaxi_entry) { triaxi_arr[triaxi_i++] = *triaxi_entry; }                             \
+          if (triaxi_entry) { triaxi_arr[triaxi_i++] = *triaxi_entry; }                            \
         }                                                                                          \
         (field).beg = triaxi_arr;                                                                  \
         (field).end = triaxi_arr + triaxi_n;                                                       \
@@ -3620,6 +3620,7 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
     r.nargs        = 2;
     return r;
   }
+
   case TRIAXI_AT_memzero: {
     const char* nul = (const char*)memchr(beg, '\0', (size_t)(end - beg));
     if (!nul) { triaxi_fatal(); }
@@ -4403,6 +4404,7 @@ static inline void triaxi_print_test_beg_json(const TRIAXI_RunCtx*         run,
     putc('\"', out);
   }
 }
+
 static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
                                               const TRIAXI_TestResult* r) {
   FILE* out = run->out.streams.json;
@@ -4473,7 +4475,6 @@ static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
       triaxi_print_json_bytes(out, r->capt.err);
     }
   }
-
   triaxi_fputlit("\n        }", out);
 }
 static inline void triaxi_print_suite_end_json(const TRIAXI_RunCtx* run) {
@@ -5001,7 +5002,6 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
 #  define triaxi_crash_handlers_teardown() triaxi_crash_handlers_impl(TRIAXI_signals.old.crash[i])
 
 static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shared* shared) {
-
   const TRIAXI_Test* const t = inv->test;
   const TRIAXI_Fixtures*   fixtures[]
       = {&inv->fixtures.run, &inv->fixtures.suite, &inv->fixtures.test};
