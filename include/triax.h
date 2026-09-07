@@ -1276,9 +1276,13 @@ TRIAXI_EXTERN_C_END
          try {                                                                                     \
            triaxf_##suitename##_##name();                                                          \
            return;                                                                                 \
-         } catch (TRIAXI_TestException abort) { outcome = abort.outcome; } catch (...) {           \
-           outcome = TRIAXI_EXEC_EXCEPTION;                                                        \
-         }                                                                                         \
+         } catch (TRIAXI_TestException abort) {                                                    \
+           outcome = abort.outcome;                                                                \
+           fputs("caught\n", stderr);                                                              \
+           fflush(stderr);                                                                         \
+         } catch (...) { outcome = TRIAXI_EXEC_EXCEPTION; }                                        \
+         fputs("before longjmp\n", stderr);                                                        \
+         fflush(stderr);                                                                           \
          longjmp(TRIAXI_exec.jmp, (int)outcome);                                                   \
        }                                                                                           \
        TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                      \
@@ -5001,9 +5005,8 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   const TRIAXI_Fixtures*   fixtures[]
       = {&inv->fixtures.run, &inv->fixtures.suite, &inv->fixtures.test};
   TRIAXI_exec.in_test = true;
-  TRIAXI_exec.param
-      = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : NULL;
-  TRIAXI_exec.shared              = shared;
+  TRIAXI_exec.param  = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : 0;
+  TRIAXI_exec.shared = shared;
   TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_NONE;
   TRIAXI_exec.shared->exit.code   = 0;
   int64_t                     t0  = triaxi_now_ms();
@@ -5013,7 +5016,10 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 #  else
   volatile int fault = 0;
 #  endif
-  switch (setjmp(TRIAXI_exec.jmp)) {
+  int TRIAXI_dbg_j = setjmp(TRIAXI_exec.jmp);
+  fprintf(stderr, "setjmp -> %d\n", TRIAXI_dbg_j);
+  fflush(stderr);
+  switch (TRIAXI_dbg_j) {
   default: triaxi_unreachable();
   case TRIAXI_EXEC_RETURNED:
     triaxi_win_try {
@@ -5058,7 +5064,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   triaxi_flush_all();
   TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
   switch (res) {
-  default               : triaxi_unreachable();
+  default               : triaxi_fatal(); triaxi_unreachable();
   case TRIAXI_EXEC_ERROR: break; // todo does this really not set anything?
   case TRIAXI_EXEC_RETURNED:
     TRIAXI_exec.shared->state     = TRIAXI_STATE_DONE;

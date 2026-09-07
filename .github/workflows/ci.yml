@@ -13,12 +13,53 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Configure crash dump collection (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dumpDir = "$env:RUNNER_TEMP\crashdumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
       - name: Configure
         run: cmake -S . -B build -DTRIAX_BUILD_EXAMPLES=ON
       - name: Build
-        run: cmake --build build --config Release
+        # RelWithDebInfo instead of Release: on multi-config generators (MSVC
+        # on windows-latest) this produces real PDBs without materially
+        # changing optimization behavior. Single-config generators (the
+        # ubuntu-latest/macos-latest Makefiles builds) ignore --config
+        # entirely here, since no CMAKE_BUILD_TYPE was set at configure time
+        # — so this only actually changes anything on Windows.
+        run: cmake --build build --config RelWithDebInfo
       - name: Test
-        run: ctest --test-dir build -C Release --output-on-failure
+        id: test
+        continue-on-error: true
+        run: ctest --test-dir build -C RelWithDebInfo --output-on-failure
+      - name: Diagnose C++ failure (Windows)
+        if: runner.os == 'Windows' && steps.test.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Host "=== Full C++ run ==="
+          & .\build\RelWithDebInfo\triax-selftest-cpp.exe --no-color --verbosity=always
+
+          Write-Host "=== Deliberate failure only ==="
+          & .\build\RelWithDebInfo\triax-selftest-cpp.exe --no-color --verbosity=always "debug::deliberate_failure"
+      - name: Upload crash dumps (Windows)
+        if: runner.os == 'Windows' && steps.test.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-crash-dumps
+          path: |
+            ${{ runner.temp }}\crashdumps\*.dmp
+            build\RelWithDebInfo\*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
 
   strict-warnings:
     runs-on: ubuntu-latest
