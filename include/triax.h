@@ -3098,12 +3098,6 @@ static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
 
 #  pragma region runner_registration
 
-#  if TRIAXI_CPP
-#   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? new T[n] : NULL)
-#  else
-#   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? (T*)malloc((n) * sizeof(T)) : NULL)
-#  endif
-
 static inline void triaxi_sections_init(void) {
 #  if TRIAXI_REG_MSVC_COFF
 
@@ -3114,15 +3108,34 @@ static inline void triaxi_sections_init(void) {
 #   endif
 
   /*
-   * TRIAXI_Test_a/_z (and the SuiteReg equivalents) are now pointers, not
-   * objects — see TRIAXI_MAKE_TEST's comment for why. &T##_a + 1 / &T##_z
-   * therefore walks a pointer array (uniform size/alignment, so the $a/$m/$z
-   * subsection concatenation can't insert padding inside it), landing
-   * exactly on the first and one-past-the-last real entry. Each entry then
-   * gets copied by value into a freshly allocated, genuinely-packed array —
-   * so every other place in this file that treats TRIAXI_global.tests/
-   * suiteregs as a plain contiguous C array of objects keeps working
-   * unmodified, on this backend as on every other.
+   * TRIAXI_Test_a/_z (and the SuiteReg equivalents) are pointers, not
+   * objects — see TRIAXI_MAKE_TEST's comment above for why: it keeps every
+   * section entry the same size/alignment, so the $a/$m/$z subsection
+   * concatenation can't insert padding between them.
+   *
+   * The walk below reads that pointer table via plain uintptr_t arithmetic
+   * and memcpy, deliberately not by treating &T##_a/&T##_z as a T** and
+   * stepping/dereferencing across it. That distinction matters: T##_a and
+   * T##_z are each their own independently-declared extern object as far as
+   * the compiler's front end and optimizer are concerned — nothing in the
+   * language says they, plus every registered entry placed in between, form
+   * one contiguous array. This section-based registration idiom (the same
+   * one behind ELF's __start_/__stop_ and MSVC's own .CRT$XCU) only works
+   * because the linker actually places them contiguously; the compiler is
+   * never told that and has no obligation to respect it. Stepping a T**
+   * from &T##_a + 1 to &T##_z and dereferencing along the way is therefore
+   * undefined behavior by the strict object model — and not just
+   * theoretically: an earlier version of this macro did exactly that,
+   * built and ran correctly under MSVC /Ob1 (RelWithDebInfo), and crashed
+   * deterministically under /Ob2 (Release) with a read landing exactly at
+   * the end of the module's own mapped image. Full inlining at /Ob2 was
+   * enough to expose this walk and TRIAXI_Test's C++ copy-assignment
+   * (small enough to inline there) together to the optimizer, which is what
+   * let it miscompile. Reading each slot through uintptr_t address
+   * arithmetic plus memcpy avoids the whole class of hazard: there is no
+   * pointer whose validity depends on "being part of the same array as
+   * T##_a", only integer math and a raw byte copy, so none of the compiler's
+   * object-bounds assumptions ever apply to it.
    */
 #   define TRIAXI_SECTION_INIT_MSVC(T, field)                                                      \
       do {                                                                                         \

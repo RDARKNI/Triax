@@ -80,16 +80,19 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  # Manual-only experiment (see workflow_dispatch above): isolates whether
-  # the intermittent Windows C++ SegFault under investigation is sensitive
-  # to optimization level. The ordinary `native` job already moved to
-  # RelWithDebInfo for PDBs; this job builds actual Release instead, while
-  # still keeping /Zi + /DEBUG (via plain CMAKE_*_FLAGS, not a permanent
-  # CMakeLists.txt change) so a crash here is still fully diagnosable, and
-  # repeats triax-cpp/triax-cpp-parallel many times since the crash doesn't
-  # reproduce every run. Not run on every push: 30 repeats of the C++ suite
-  # is too expensive to pay on every commit for what is a one-off
-  # comparison, not a permanent regression gate.
+  # Manual-only regression guard for the Release-optimization-sensitive
+  # section-walk bug fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer
+  # walked past a single object's declared bounds miscompiled under MSVC
+  # /Ob2 (full inlining) but not /Ob1, producing a deterministic SegFault
+  # reading exactly at the end of the module's own mapped image. The
+  # ordinary `native` job runs RelWithDebInfo (/Ob1, for PDBs) and would
+  # never have caught this; this job builds actual Release instead, keeping
+  # /Zi + /DEBUG (via plain CMAKE_*_FLAGS, not a permanent CMakeLists.txt
+  # change) so a regression here is still fully diagnosable, and repeats
+  # triax-cpp/triax-cpp-parallel many times in case a future regression is
+  # as intermittent as this one briefly appeared to be. Not run on every
+  # push: 30 repeats of the C++ suite is too expensive to pay on every
+  # commit for what is now just insurance, not an active investigation.
   windows-release-stress:
     if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
