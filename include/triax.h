@@ -3048,12 +3048,17 @@ static inline void triaxi_stdfds_backup_close(const TRIAXI_StdBackup* backup) {
 }
 
 static inline void triaxi_stdfds_redirect(TRIAXI_TestSlot* h) {
-  TRIAXI_exec.out = h->out, TRIAXI_exec.log = h->log, TRIAXI_exec.err = h->err;
+  TRIAXI_exec.log = h->log;
   for (int i = 0; i < 2; ++i) {
     int         stdidx = !i ? 1 : 2;
-    TRIAXI_File tmp    = !i ? TRIAXI_exec.out : TRIAXI_exec.err;
+    TRIAXI_File tmp    = !i ? h->out : h->err;
 #  ifndef _WIN32
     if (triaxi_dup2(tmp, stdidx) < 0) { triaxi_fatal(); }
+    if (!i) {
+      TRIAXI_exec.out = h->out;
+    } else {
+      TRIAXI_exec.err = h->err;
+    }
 #  else
     DWORD  stdhandle = !i ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE;
     HANDLE dup;
@@ -3067,6 +3072,11 @@ static inline void triaxi_stdfds_redirect(TRIAXI_TestSlot* h) {
     _close(fd);
     intptr_t osfh = _get_osfhandle(stdidx);
     if (osfh == -1 || osfh == -2) { triaxi_fatal(); }
+    if (!i) {
+      TRIAXI_exec.out = (HANDLE)osfh;
+    } else {
+      TRIAXI_exec.err = (HANDLE)osfh;
+    }
     if (!SetStdHandle(stdhandle, (HANDLE)osfh)) { triaxi_fatal(); }
 #  endif
   }
