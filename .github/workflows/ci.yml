@@ -106,7 +106,22 @@ jobs:
           New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
           New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
       - name: Configure (Release, kept symbols)
-        run: cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_C_FLAGS="/Zi" -DCMAKE_CXX_FLAGS="/Zi" -DCMAKE_EXE_LINKER_FLAGS="/DEBUG"
+        # -DCMAKE_CXX_FLAGS="/Zi" (a previous version of this step) replaces
+        # CMake's entire default general-flags string on the command line
+        # rather than appending to it — and for MSVC that default is where
+        # /EHsc lives (seeded via Windows-MSVC.cmake's CMAKE_CXX_FLAGS_INIT),
+        # not in the per-config Release flags. That silently built every
+        # C++ TU without exception-unwind semantics (MSVC warns C4530),
+        # invalidating the whole comparison this job exists to make. Fixed
+        # by leaving CMAKE_CXX_FLAGS/CMAKE_C_FLAGS untouched (so /EHsc stays)
+        # and reconstructing the full CMAKE_*_FLAGS_RELEASE default
+        # explicitly instead, since the same override-not-append rule
+        # applies there too.
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON `
+            -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" `
+            -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" `
+            -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/INCREMENTAL:NO /DEBUG"
       - name: Build
         run: cmake --build build --config Release
       - name: Stress C++ Release
