@@ -5680,57 +5680,36 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 #  ifndef _WIN32
   switch ((h->process = fork())) {
   case -1: triaxi_fatal();
-  case 0:   // child
+  case 0: // child
     /*
-     * Both this child and the parent (see the "parent" branch below) race to
-     * put the child into its own process group right after fork(); whichever
-     * side gets there first makes the other's call redundant. A single
-     * setpgid()-then-check-getpgrp() can't fully resolve that race: if this
-     * call fails with EPERM before EITHER side has actually completed the
-     * change yet, getpgrp() immediately afterward just reads that same
-     * not-yet-fixed state, so it can't tell "someone already fixed this"
-     * apart from "nobody has fixed this yet" — the two look identical at
-     * that single instant. Retrying briefly does resolve it: the race window
-     * is a handful of kernel instructions wide, so if this really is benign,
-     * one of the two sides succeeds within a few iterations. A bound is kept
-     * so a genuine, persistent permission failure (not a start-of-day race)
-     * still reaches triaxi_fatal() instead of spinning forever.
+     * Only the child calls setpgid, not the parent — unlike a job-control
+     * shell (where the classic pattern has both sides race to call it,
+     * because the shell can't control what its child does before it execs),
+     * Triax's child stays inside Triax's own code and does this as its
+     * literal first action, before resetting signal dispositions,
+     * redirecting stdout/stderr, or running a single line of fixture/test
+     * code. No descendant of this process can exist yet, so there is
+     * nothing for a concurrent parent-side setpgid to race against, and
+     * nothing later needs the group to exist any sooner than this: the
+     * collection/timeout paths that signal -h->process (see
+     * triaxi_terminate_group and the timeout-kill fallback below) already
+     * tolerate ESRCH/EPERM for the case the group doesn't exist yet, falling
+     * back to signalling h->process directly, and by the time either of
+     * those paths runs — the child having exited, or a timeout having
+     * elapsed — this call has long since completed. A second, concurrent
+     * setpgid(h->process, h->process) from the parent used to run here too,
+     * racing this one to create the *same* new group; that's what
+     * intermittently produced EPERM from Darwin's setpgid on macOS CI. With
+     * only one side ever attempting it, there's no concurrent creation to
+     * race, so a failure here is a real, non-transient error.
      */
-    for (int triaxi_attempts = 0;; ++triaxi_attempts) {
-      if (!setpgid(0, 0) || getpgrp() == getpid()) { break; }
-      int e = errno;
-      if (e != EPERM || triaxi_attempts >= 999) { errno = e, triaxi_fatal(); }
-    }
-    /*
-     * Restore the pre-Triax signal dispositions (SIGTERM/SIGINT/SIGHUP,
-     * SIGPIPE/SIGUSR1/SIGUSR2, crash signals) and alternate stack before
-     * fixtures/user code run. Isolated tests are observed from the parent
-     * via exit status, not in-process signal handling (that's only wired up
-     * for non-isolated tests, see triaxi_crash_handlers_setup below), so the
-     * child needs none of the runner's own signal machinery — leaving it in
-     * place would mean a test of SIGPIPE, alarms, or signal inheritance
-     * isn't running in the environment the program would normally see.
-     */
+    if (setpgid(0, 0)) { triaxi_fatal(); }
     TRIAXI_exec.isolated = true;
     triaxi_process_control_reset();
     triaxi_stdfds_redirect(h);
     triaxi_run_func(&h->invocation, h->shared);
     _exit(0);
   default: // parent
-    if (setpgid(h->process, h->process)) {
-      int e = errno;
-      if (e == EACCES || e == ESRCH) { /* benign parent/child race */
-      } else if (e == EPERM) {
-        pid_t pgid = getpgid(h->process);
-        if (pgid == -1) {
-          if (errno != ESRCH) { errno = e, triaxi_fatal(); }
-        } else if (pgid != h->process) {
-          errno = e, triaxi_fatal();
-        }
-      } else {
-        errno = e, triaxi_fatal();
-      }
-    }
     return;
   }
 #  else
