@@ -5680,10 +5680,26 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 #  ifndef _WIN32
   switch ((h->process = fork())) {
   case -1: triaxi_fatal();
-  case 0: // child
-    if (setpgid(0, 0)) {
+  case 0:   // child
+    /*
+     * Both this child and the parent (see the "parent" branch below) race to
+     * put the child into its own process group right after fork(); whichever
+     * side gets there first makes the other's call redundant. A single
+     * setpgid()-then-check-getpgrp() can't fully resolve that race: if this
+     * call fails with EPERM before EITHER side has actually completed the
+     * change yet, getpgrp() immediately afterward just reads that same
+     * not-yet-fixed state, so it can't tell "someone already fixed this"
+     * apart from "nobody has fixed this yet" — the two look identical at
+     * that single instant. Retrying briefly does resolve it: the race window
+     * is a handful of kernel instructions wide, so if this really is benign,
+     * one of the two sides succeeds within a few iterations. A bound is kept
+     * so a genuine, persistent permission failure (not a start-of-day race)
+     * still reaches triaxi_fatal() instead of spinning forever.
+     */
+    for (int triaxi_attempts = 0;; ++triaxi_attempts) {
+      if (!setpgid(0, 0) || getpgrp() == getpid()) { break; }
       int e = errno;
-      if (e != EPERM || getpgrp() != getpid()) { errno = e, triaxi_fatal(); }
+      if (e != EPERM || triaxi_attempts >= 999) { errno = e, triaxi_fatal(); }
     }
     /*
      * Restore the pre-Triax signal dispositions (SIGTERM/SIGINT/SIGHUP,
