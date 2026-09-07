@@ -17,7 +17,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $dumpDir = "$env:RUNNER_TEMP\crashdumps"
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
           New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
           $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
           New-Item -Path $key -Force | Out-Null
@@ -39,26 +39,30 @@ jobs:
         continue-on-error: true
         run: ctest --test-dir build -C RelWithDebInfo --output-on-failure
       - name: Diagnose C++ failure (Windows)
-        if: runner.os == 'Windows' && steps.test.outcome == 'failure'
+        if: ${{ always() && runner.os == 'Windows' && steps.test.outcome == 'failure' }}
         shell: pwsh
         run: |
           Write-Host "=== Full C++ run ==="
           & .\build\RelWithDebInfo\triax-selftest-cpp.exe --no-color --verbosity=always
+          Write-Host "exit code: $LASTEXITCODE"
 
           Write-Host "=== Deliberate failure only ==="
           & .\build\RelWithDebInfo\triax-selftest-cpp.exe --no-color --verbosity=always "debug::deliberate_failure"
+          Write-Host "exit code: $LASTEXITCODE"
+
+          exit 0
       - name: Upload crash dumps (Windows)
-        if: runner.os == 'Windows' && steps.test.outcome == 'failure'
+        if: ${{ always() && runner.os == 'Windows' && steps.test.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
         with:
           name: windows-crash-dumps
           path: |
-            ${{ runner.temp }}\crashdumps\*.dmp
-            build\RelWithDebInfo\*.pdb
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
           if-no-files-found: ignore
           retention-days: 7
       - name: Fail if tests failed
-        if: steps.test.outcome == 'failure'
+        if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
   strict-warnings:
