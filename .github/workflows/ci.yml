@@ -125,25 +125,25 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
       - name: Stress C++ Release
-        # Temporarily scaled down to a single, cheap --list invocation while
-        # testing the integer-address-walk hypothesis in
-        # TRIAXI_SECTION_INIT_MSVC (triax.h) — iteration 1 already crashed
-        # every previous run, so 30 repeats of the full ctest suite aren't
-        # needed to validate/refute this specific experiment. Restore the
-        # full stress loop once this hypothesis is confirmed either way.
+        # Full stress loop restored: the cheap single --list check (a
+        # temporary substitution while testing the integer-address-walk
+        # hypothesis in TRIAXI_SECTION_INIT_MSVC) passed cleanly on the same
+        # build configuration that crashed deterministically on iteration 1
+        # every previous run with the old pointer-based walk — strong
+        # evidence the hypothesis is correct. This repeats the full suite
+        # many times to build confidence before treating it as settled.
         id: stress
         continue-on-error: true
         shell: pwsh
         run: |
-          Write-Host "=== C++ --list ==="
-          & .\build\Release\triax-selftest-cpp.exe --list
-          Write-Host "exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-          Write-Host "=== C --list (comparison) ==="
-          & .\build\Release\triax-selftest-c.exe --list
-          Write-Host "exit code: $LASTEXITCODE"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          for ($i = 1; $i -le 30; $i++) {
+            Write-Host "=== iteration $i ==="
+            ctest --test-dir build -C Release -R "triax-cpp$|triax-cpp-parallel$" --output-on-failure
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Failed on iteration $i"
+              exit $LASTEXITCODE
+            }
+          }
       - name: Upload crash dumps
         if: ${{ always() && steps.stress.outcome == 'failure' }}
         uses: actions/upload-artifact@v4
