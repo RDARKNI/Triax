@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   native:
@@ -78,6 +79,62 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # Manual-only experiment (see workflow_dispatch above): isolates whether
+  # the intermittent Windows C++ SegFault under investigation is sensitive
+  # to optimization level. The ordinary `native` job already moved to
+  # RelWithDebInfo for PDBs; this job builds actual Release instead, while
+  # still keeping /Zi + /DEBUG (via plain CMAKE_*_FLAGS, not a permanent
+  # CMakeLists.txt change) so a crash here is still fully diagnosable, and
+  # repeats triax-cpp/triax-cpp-parallel many times since the crash doesn't
+  # reproduce every run. Not run on every push: 30 repeats of the C++ suite
+  # is too expensive to pay on every commit for what is a one-off
+  # comparison, not a permanent regression gate.
+  windows-release-stress:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (Release, kept symbols)
+        run: cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_C_FLAGS="/Zi" -DCMAKE_CXX_FLAGS="/Zi" -DCMAKE_EXE_LINKER_FLAGS="/DEBUG"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Stress C++ Release
+        id: stress
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 30; $i++) {
+            Write-Host "=== iteration $i ==="
+            ctest --test-dir build -C Release -R "triax-cpp$|triax-cpp-parallel$" --output-on-failure
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "Failed on iteration $i"
+              exit $LASTEXITCODE
+            }
+          }
+      - name: Upload crash dumps
+        if: ${{ always() && steps.stress.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-stress-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if stress run failed
+        if: ${{ always() && steps.stress.outcome == 'failure' }}
+        run: exit 1
 
   clang-sanitizers:
     runs-on: ubuntu-latest
