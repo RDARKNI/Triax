@@ -42,6 +42,7 @@ json_outcomes() {
   # Prints "name outcome" for every test in a triax JSON report's first suite.
   python3 -c "
 import json, sys
+sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t['outcome'])
@@ -53,6 +54,7 @@ json_outcomes_by_invocation() {
   # (only) test — for parameterized-test checks, where name is shared.
   python3 -c "
 import json, sys
+sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['invocation'], t['outcome'])
@@ -63,6 +65,7 @@ json_capture() {
   # Prints "name stdout stderr" for every test in a JSON report's first suite.
   python3 -c "
 import json, sys
+sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t.get('stdout', ''), t.get('stderr', ''))
@@ -73,6 +76,7 @@ json_phase_outcomes() {
   # Prints "name outcome phase-or-dash" for every test.
   python3 -c "
 import json, sys
+sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t['outcome'], t.get('phase', '-'))
@@ -206,7 +210,8 @@ check_debug_case() {
     >/dev/null 2>&1 || true
   local result
   result="$(python3 -c "
-import json
+import json, sys
+sys.stdout.reconfigure(newline='\n')
 d = json.load(open('$WORKDIR/debug_$name.json'))
 t = d['suites'][0]['tests'][0]
 print(t['outcome'], t.get('termination', {}).get('reason', '-'))
@@ -284,7 +289,8 @@ r_uexited uexited
 r_test_error test_error"
 
 tap_result="$(python3 -c "
-import re
+import re, sys
+sys.stdout.reconfigure(newline='\n')
 lines = open('$WORKDIR/rep.tap').read().splitlines()
 out = []
 for l in lines:
@@ -314,6 +320,8 @@ $tap_result"
 fi
 
 junit_result="$(python3 -c "
+import sys
+sys.stdout.reconfigure(newline='\n')
 import xml.etree.ElementTree as ET
 root = ET.parse('$WORKDIR/rep.xml').getroot()
 out = []
