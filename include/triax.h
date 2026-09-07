@@ -1275,7 +1275,7 @@ TRIAXI_EXTERN_C_END
          TRIAXI_ExecOutcome outcome;                                                               \
          try {                                                                                     \
            triaxf_##suitename##_##name();                                                          \
-           return;                                                                                 \
+           outcome = TRIAXI_EXEC_RETURNED;                                                         \
          } catch (TRIAXI_TestException abort) { outcome = abort.outcome; } catch (...) {           \
            outcome = TRIAXI_EXEC_EXCEPTION;                                                        \
          }                                                                                         \
@@ -5665,7 +5665,10 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
   switch ((h->process = fork())) {
   case -1: triaxi_fatal();
   case 0: // child
-    if (setpgid(0, 0)) { triaxi_fatal(); }
+    if (setpgid(0, 0)) {
+      int e = errno;
+      if (e != EPERM || getpgrp() != getpid()) { errno = e, triaxi_fatal(); }
+    }
     /*
      * Restore the pre-Triax signal dispositions (SIGTERM/SIGINT/SIGHUP,
      * SIGPIPE/SIGUSR1/SIGUSR2, crash signals) and alternate stack before
@@ -5682,8 +5685,19 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
     triaxi_run_func(&h->invocation, h->shared);
     _exit(0);
   default: // parent
-    if (setpgid(h->process, h->process) && errno != EACCES && errno != EPERM && errno != ESRCH) {
-      triaxi_fatal();
+    if (setpgid(h->process, h->process)) {
+      int e = errno;
+      if (e == EACCES || e == ESRCH) { /* benign parent/child race */
+      } else if (e == EPERM) {
+        pid_t pgid = getpgid(h->process);
+        if (pgid == -1) {
+          if (errno != ESRCH) { errno = e, triaxi_fatal(); }
+        } else if (pgid != h->process) {
+          errno = e, triaxi_fatal();
+        }
+      } else {
+        errno = e, triaxi_fatal();
+      }
     }
     return;
   }
