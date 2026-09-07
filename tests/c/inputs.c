@@ -13,9 +13,9 @@
 #include "triax_selfverify.h"
 #include <assert.h>
 
-triaxi_validate_opts(crash, assert_fires, TRIAXI_VALIDATE_PASSED, TRIAXI_VALIDATE_TIMEOUT_INHERIT,
+triaxi_validate_opts(crash, abort_fires, TRIAXI_VALIDATE_PASSED, TRIAXI_VALIDATE_TIMEOUT_INHERIT,
                      TRIAXI_VALIDATE_ISOLATION_OFF) {
-  triax_assert_fault(TRIAX_FAULT_ANY, assert(0));
+  triax_assert_fault(TRIAX_FAULT_ANY, abort());
   triax_expect_true(0);
 }
 
