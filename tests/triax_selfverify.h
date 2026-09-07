@@ -102,6 +102,8 @@ static inline int triaxi_validate_expected_exit(TRIAXI_ValidateOutcome outcome) 
 
 static inline int triaxi_validate_make_tmp(char* buf, size_t cap) {
 #ifdef _WIN32
+  (void)cap; // GetTempFileNameA always writes at most MAX_PATH chars; buf is
+             // sized well above that by its one caller.
   char  dir[MAX_PATH];
   DWORD n = GetTempPathA((DWORD)sizeof(dir), dir);
   if (!n || n >= sizeof(dir)) { return -1; }

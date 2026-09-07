@@ -140,7 +140,32 @@ if(BUILD_TESTING)
                 /W4
                 ${TRIAX_STRICT_WARNINGS_MSVC}
                 $<$<COMPILE_LANGUAGE:CXX>:/permissive->
+                # C4996 ("unsafe" CRT function): the suggested _s replacements
+                # (sprintf_s, fopen_s, _dupenv_s, ...) are Annex K / MSVC-only,
+                # not available on macOS/Linux — the same category judged bad
+                # advice for portable C earlier for clang-tidy's
+                # insecureAPI.DeprecatedOrUnsafeBufferHandling. Only affects
+                # Triax's own test/self-verify code here, not consumers.
+                /wd4996
+                # C4702 (unreachable code): fires on genuinely, deliberately
+                # unreachable code inherent to testing crash/hang/noreturn
+                # behavior — e.g. code after abort()/exit() inside
+                # assert_fault's expression (both CRT-noreturn-annotated on
+                # MSVC), or after a test helper that spins forever by design,
+                # relying on an external timeout to interrupt it. True in
+                # every instance found, not a real defect, and unavoidable
+                # given what these tests are for.
+                /wd4702
+                # C4189 (local variable initialized but not referenced):
+                # MSVC-specific false positive from TRIAXI_STR/TRIAXI_CONTRAV's
+                # _Generic + compound-literal "coerce every branch to a valid
+                # expression" trick (see triax.h) — GCC/Clang never warn on
+                # the same code. The unselected _Generic association's
+                # compound literal is never evaluated at runtime; MSVC's
+                # diagnostics pass just doesn't seem to know that yet.
+                /wd4189
         )
+        target_compile_definitions(triax-warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
     else()
         target_compile_options(
             triax-warnings

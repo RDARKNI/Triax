@@ -62,16 +62,6 @@
 #  define TRIAXI_GNU_COMPAT 0L
 # endif
 
-/// @brief Marks a function as printf-like so the compiler validates format
-/// strings against variadic arguments at every call site (1-indexed,
-/// counting from the start of the parameter list).
-# if TRIAXI_GNU_COMPAT
-#  define TRIAXI_PRINTF_FMT(fmt_idx, first_arg_idx)                                                \
-     __attribute__((format(printf, fmt_idx, first_arg_idx)))
-# else
-#  define TRIAXI_PRINTF_FMT(fmt_idx, first_arg_idx)
-# endif
-
 // Registration backend is independent of the runtime platform.
 // clang-cl defines _MSC_VER and uses the MSVC/COFF registration path;
 // MinGW GCC/Clang use GNU section attributes even though _WIN32 is defined.
@@ -121,7 +111,6 @@
 #   error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
 #  endif
 #  include <fcntl.h>
-#  include <io.h>
 #  include <malloc.h> /* _resetstkoflw */
 #  include <wchar.h>
 #  include <windows.h>
@@ -171,7 +160,10 @@
 # endif
 
 # if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
-#  ifndef _WIN32
+#  ifdef _WIN32
+#   include <io.h>
+
+#  else
 #   include <sys/wait.h>
 #   ifdef __linux__
 #    include <sys/syscall.h>
@@ -1483,7 +1475,7 @@ typedef struct TRIAXI_Shared {
 
 TRIAXI_EXTERN_C_BEG
 
-TRIAXI_SHARED_LINKAGE FILE* TRIAXI_true_stderr;
+TRIAXI_SHARED_LINKAGE FILE* TRIAXI_true_stderr; // todo broken on windows
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
   bool                    isolated, in_test, debug_break;
@@ -1608,22 +1600,6 @@ static inline Triax_Str triax_read_stdout(void) {
   std::cout.flush();
 # endif
   if (fflush(stdout)) { triaxi_fatal(); }
-# ifdef _WIN32
-  /*
-   * TEMPORARY diagnostic for the Windows capture-read investigation — remove
-   * once the Windows runner has reported back what size/handle values it
-   * sees here. Not meant to survive to a real commit.
-   */
-  {
-    LARGE_INTEGER triaxi_dbg_size;
-    if (!GetFileSizeEx(TRIAXI_exec.out, &triaxi_dbg_size)) { triaxi_fatal(); }
-    intptr_t triaxi_dbg_stdout_h = _get_osfhandle(_fileno(stdout));
-    fprintf(TRIAXI_true_stderr, "capture: exec.out=%p stdout=%p size=%lld\n",
-            (void*)TRIAXI_exec.out, (void*)triaxi_dbg_stdout_h,
-            (long long)triaxi_dbg_size.QuadPart);
-    fflush(TRIAXI_true_stderr);
-  }
-# endif
   return triaxi_file_read_user(TRIAXI_exec.out);
 }
 static inline Triax_Str triax_read_stderr(void) {
@@ -1949,8 +1925,14 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
 # endif
 }
 
-TRIAXI_PRINTF_FMT(3, 4)
-static inline bool triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
+/// @brief Marks a function as printf-like so the compiler validates format
+/// strings against variadic arguments at every call site (1-indexed,
+/// counting from the start of the parameter list).
+# if TRIAXI_GNU_COMPAT
+__attribute__((format(printf, 3, 4)))
+# endif
+static inline bool
+    triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
   (void)v;
   if (!failed) { return 0; }
 
