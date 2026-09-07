@@ -156,22 +156,22 @@ static inline int triaxi_validate_spawn(const char* filter, const char* json_pat
     n = snprintf(timeout_arg, sizeof(timeout_arg), "--timeout=%" PRIu32, timeout_ms);
     if (n < 0 || (size_t)n >= sizeof(timeout_arg)) { return -1; }
   }
-  const char* isolation_arg = isolation == TRIAXI_VALIDATE_ISOLATION_ON    ? "--isolation=on"
-                              : isolation == TRIAXI_VALIDATE_ISOLATION_OFF ? "--isolation=off"
-                                                                          : NULL;
+  const char* isolation_arg = isolation == TRIAXI_VALIDATE_ISOLATION_ON  ? "--isolation=on"
+                            : isolation == TRIAXI_VALIDATE_ISOLATION_OFF ? "--isolation=off"
+                                                                         : NULL;
 
-  pid_t pid = fork();
+  pid_t       pid           = fork();
   if (pid < 0) { return -1; }
 
   if (pid == 0) {
     if (setenv("TRIAXI_VALIDATE_CHILD", "1", 1) != 0) { _exit(126); }
 
     char* argv[9];
-    int   i    = 0;
-    argv[i++]  = triaxi_validate_argv_str(triaxi_validate_executable);
-    argv[i++]  = triaxi_validate_argv_str("--text=none");
-    argv[i++]  = triaxi_validate_argv_str("--no-color");
-    argv[i++]  = json_arg;
+    int   i   = 0;
+    argv[i++] = triaxi_validate_argv_str(triaxi_validate_executable);
+    argv[i++] = triaxi_validate_argv_str("--text=none");
+    argv[i++] = triaxi_validate_argv_str("--no-color");
+    argv[i++] = json_arg;
     if (timeout_ms != TRIAXI_VALIDATE_TIMEOUT_INHERIT) { argv[i++] = timeout_arg; }
     if (isolation_arg) { argv[i++] = triaxi_validate_argv_str(isolation_arg); }
     argv[i++] = triaxi_validate_argv_str(filter);
@@ -200,13 +200,13 @@ static inline int triaxi_validate_spawn(const char* filter, const char* json_pat
     int tn = snprintf(timeout_arg, sizeof(timeout_arg), " --timeout=%" PRIu32, timeout_ms);
     if (tn < 0 || (size_t)tn >= sizeof(timeout_arg)) { return -1; }
   }
-  const char* isolation_arg = isolation == TRIAXI_VALIDATE_ISOLATION_ON    ? " --isolation=on"
-                              : isolation == TRIAXI_VALIDATE_ISOLATION_OFF ? " --isolation=off"
-                                                                          : "";
+  const char* isolation_arg = isolation == TRIAXI_VALIDATE_ISOLATION_ON  ? " --isolation=on"
+                            : isolation == TRIAXI_VALIDATE_ISOLATION_OFF ? " --isolation=off"
+                                                                         : "";
 
-  char cmd[8192];
-  int  n = snprintf(cmd, sizeof(cmd), "\"%s\" --text=none --no-color --json=\"%s\"%s%s \"%s\"",
-                    triaxi_validate_executable, json_path, timeout_arg, isolation_arg, filter);
+  char        cmd[8192];
+  int n = snprintf(cmd, sizeof(cmd), "\"%s\" --text=none --no-color --json=\"%s\"%s%s \"%s\"",
+                   triaxi_validate_executable, json_path, timeout_arg, isolation_arg, filter);
   if (n < 0 || (size_t)n >= sizeof(cmd)) { return -1; }
 
   char* old     = NULL;
@@ -365,7 +365,9 @@ static inline void triaxi_validate_run_ex(const char* filter, TRIAXI_ValidateOut
   triax_assert_nonnull(json);
 
   triax_expect_true(triaxi_validate_json_has_outcome(json, outcome));
-  if (expected_reason) { triax_expect_true(triaxi_validate_json_has_reason(json, expected_reason)); }
+  if (expected_reason) {
+    triax_expect_true(triaxi_validate_json_has_reason(json, expected_reason));
+  }
 
   free(json);
 }
@@ -393,8 +395,8 @@ static inline void triaxi_validate_run_user_error(const char* filter, const char
 }
 
 static inline void triaxi_validate_run_user_error_opts(const char* filter, const char* reason,
-                                                        uint32_t                 timeout_ms,
-                                                        TRIAXI_ValidateIsolation isolation) {
+                                                       uint32_t                 timeout_ms,
+                                                       TRIAXI_ValidateIsolation isolation) {
   triaxi_validate_run_ex(filter, TRIAXI_VALIDATE_TEST_ERROR, timeout_ms, isolation, reason);
 }
 
@@ -470,7 +472,7 @@ static inline void triaxi_validate_run_user_error_opts(const char* filter, const
       return;                                                                                      \
     }                                                                                              \
     triaxi_validate_run_user_error(#suite "::" #name, (reason));                                   \
-  }                                                                                                 \
+  }                                                                                                \
   static void TRIAXI_SV_CAT3(triaxi_validate_body_, suite, _##name)(void)
 
 #define triaxi_validate_opts_user_error(suite, name, reason, timeout_ms, isolation)                \
@@ -481,7 +483,7 @@ static inline void triaxi_validate_run_user_error_opts(const char* filter, const
       return;                                                                                      \
     }                                                                                              \
     triaxi_validate_run_user_error_opts(#suite "::" #name, (reason), (timeout_ms), (isolation));   \
-  }                                                                                                 \
+  }                                                                                                \
   static void TRIAXI_SV_CAT3(triaxi_validate_body_, suite, _##name)(void)
 
 #define triaxi_validate_user_error_attrs(suite, name, reason, ...)                                 \
@@ -492,7 +494,7 @@ static inline void triaxi_validate_run_user_error_opts(const char* filter, const
       return;                                                                                      \
     }                                                                                              \
     triaxi_validate_run_user_error(#suite "::" #name, (reason));                                   \
-  }                                                                                                 \
+  }                                                                                                \
   static void TRIAXI_SV_CAT3(triaxi_validate_body_, suite, _##name)(void)
 
 #endif /* TRIAX_SELFVERIFY_H */
