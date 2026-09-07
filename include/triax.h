@@ -5003,11 +5003,11 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   TRIAXI_exec.in_test = true;
   TRIAXI_exec.param
       = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : NULL;
-  TRIAXI_exec.shared             = shared;
-  TRIAXI_exec.shared->exit.type  = TRIAXI_EXIT_NONE;
-  TRIAXI_exec.shared->exit.code  = 0;
-  int64_t                     t0 = triaxi_now_ms();
-  volatile TRIAXI_ExecOutcome res;
+  TRIAXI_exec.shared              = shared;
+  TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_NONE;
+  TRIAXI_exec.shared->exit.code   = 0;
+  int64_t                     t0  = triaxi_now_ms();
+  volatile TRIAXI_ExecOutcome res = TRIAXI_EXEC_RETURNED;
 #  if defined(_WIN32) && TRIAXI_MSVC_COMPAT
   volatile DWORD fault = 0;
 #  else
@@ -5026,7 +5026,6 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
       TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;
       t->func();
     }
-    res = TRIAXI_EXEC_RETURNED;
     triaxi_win_except(TRIAXI_exec.isolated ? EXCEPTION_CONTINUE_SEARCH
                                            : EXCEPTION_EXECUTE_HANDLER) {
 #  if defined(_WIN32) && TRIAXI_MSVC_COMPAT
