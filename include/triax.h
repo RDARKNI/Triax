@@ -5045,7 +5045,6 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 #  endif
     break;
   }
-  TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
   if (res == TRIAXI_EXEC_CRASHED) {
   } else if (res == TRIAXI_EXEC_ERROR) {
   } else {
@@ -5054,8 +5053,8 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
       TRIAXI_exec.shared->state = TRIAXI_STATE_FINI;
       fixtures[fi]->fini();
     }
+    TRIAXI_exec.shared->state = TRIAXI_STATE_CLEANUP;
   }
-  TRIAXI_exec.shared->state = TRIAXI_STATE_CLEANUP;
   triaxi_flush_all();
   TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
   switch (res) {
