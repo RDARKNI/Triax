@@ -898,11 +898,11 @@ static inline uint32_t triaxi_elapsed_ms(int64_t t0) { return (uint32_t)(triaxi_
 
 # ifndef _WIN32
 typedef int TRIAXI_File;
-#  define triaxi_file_close(f) close(f)
+#  define triaxi_file_close(f) (close(f) ? triaxi_fatal() : (void)0)
 #  define triaxi_file_valid(f) ((f) >= 0)
 # else
 typedef HANDLE TRIAXI_File;
-#  define triaxi_file_close(f) CloseHandle(f)
+#  define triaxi_file_close(f) (!CloseHandle(f) ? triaxi_fatal() : (void)0)
 #  define triaxi_file_valid(f) ((f) != INVALID_HANDLE_VALUE)
 # endif
 
@@ -1406,8 +1406,7 @@ typedef enum TRIAXI_Error {
   TRIAXI_ERROR_ASSERT_IN_FIXTURE,
   TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION,
 
-  TRIAXI_ERROR_FILE_OPEN,
-  TRIAXI_ERROR_FILE_READ,
+  TRIAXI_ERROR_FILE_OPEN
 } TRIAXI_Error;
 
 enum {
@@ -1443,12 +1442,10 @@ typedef struct TRIAXI_Exit {
 } TRIAXI_Exit;
 
 # ifdef _WIN32
-#  define TRIAXI_INDEX_NONE SIZE_MAX
+#  define TRIAXI_INDEX_NONE UINT32_MAX
 typedef struct TRIAXI_WinLaunch {
-  TRIAXI_File log, out, err;
-  size_t      suite_idx;
-  size_t      test_idx;
-  size_t      invocation_idx;
+  TRIAXI_File true_stderr, log, out, err;
+  uint32_t    suite_idx, test_idx, invocation_idx;
 } TRIAXI_WinLaunch;
 # endif
 
@@ -1475,9 +1472,9 @@ typedef struct TRIAXI_Shared {
 
 TRIAXI_EXTERN_C_BEG
 
-TRIAXI_SHARED_LINKAGE FILE* TRIAXI_true_stderr; // todo broken on windows
-TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
-  TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
+TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
+TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState {       // per-test execution state
+  TRIAXI_File             log, out, err; // files where logs, stdout, stderr are written to
   bool                    isolated, in_test, debug_break;
   const void*             param;
   jmp_buf                 jmp;
@@ -1523,101 +1520,11 @@ static inline void triaxi_allocations_free_all(void) {
   TRIAXI_exec.allocations.cap = TRIAXI_exec.allocations.count = 0;
 }
 
-static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
-  size_t len = triaxi_file_size(f);
-  if (!len) { return TRIAXI_T(Triax_Str){"", 0}; };
-  char* str = (char*)triaxi_allocate(len);
-  triaxi_file_read_into(f, str, len);
-  return TRIAXI_T(Triax_Str){str, len};
-}
-
-static inline Triax_Str triaxi_file_read_user(TRIAXI_File f) {
-# ifndef _WIN32
-  struct stat st;
-  if (fstat(f, &st)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_READ); }
-  if (st.st_size < 0 || (uintmax_t)st.st_size > SIZE_MAX) {
-    triaxi_user_error(TRIAXI_ERROR_FILE_READ);
-  }
-  size_t len = (size_t)st.st_size;
-# else
-  LARGE_INTEGER size64;
-  if (!GetFileSizeEx(f, &size64)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_READ); }
-  if (size64.QuadPart < 0 || (uintmax_t)size64.QuadPart > SIZE_MAX) {
-    triaxi_user_error(TRIAXI_ERROR_FILE_READ);
-  }
-  size_t len = (size_t)size64.QuadPart;
-# endif
-  if (!len) { return TRIAXI_T(Triax_Str){"", 0}; }
-
-  char* str = (char*)triaxi_allocate(len);
-# ifndef _WIN32
-  const size_t max_chunk = (size_t)(SIZE_MAX >> 1);
-  for (size_t pos = 0; pos < len;) {
-    ssize_t r = pread(f, str + pos, TRIAXI_MIN(len - pos, max_chunk), (off_t)pos);
-    if (r == -1) {
-      if (errno == EINTR) { continue; }
-      triaxi_user_syserror(TRIAXI_ERROR_FILE_READ);
-    }
-    if (r == 0) { triaxi_user_error(TRIAXI_ERROR_FILE_READ); }
-    pos += (size_t)r;
-  }
-# else
-  LARGE_INTEGER z = {TRIAXI_ZINIT}, orig;
-  if (!SetFilePointerEx(f, z, &orig, FILE_CURRENT) || !SetFilePointerEx(f, z, NULL, FILE_BEGIN)) {
-    triaxi_user_syserror(TRIAXI_ERROR_FILE_READ);
-  }
-  for (uint64_t pos = 0; pos < len;) {
-    uint64_t nbytes = len - pos;
-    DWORD    chunk  = (DWORD)((nbytes > 0xFFFFFFFFUL) ? 0xFFFFFFFFUL : nbytes);
-    DWORD    r      = 0;
-    if (!ReadFile(f, str + pos, chunk, &r, NULL)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_READ); }
-    if (!r) { triaxi_user_error(TRIAXI_ERROR_FILE_READ); }
-    pos += r;
-  }
-  if (!SetFilePointerEx(f, orig, NULL, FILE_BEGIN)) {
-    triaxi_user_syserror(TRIAXI_ERROR_FILE_READ);
-  }
-# endif
-  return TRIAXI_T(Triax_Str){str, len};
-}
-
-static inline Triax_Str triax_read_file(const char* path) {
-  if (!path) {
-    errno = EINVAL;
-    triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN);
-  }
-
-  TRIAXI_File f = triaxi_file_open_r(path);
-  if (!triaxi_file_valid(f)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
-
-  Triax_Str res = triaxi_file_read_user(f);
-  triaxi_file_close(f);
-  return res;
-}
-
-static inline Triax_Str triax_read_stdout(void) {
-# if TRIAXI_CPP
-  std::cout.flush();
-# endif
-  if (fflush(stdout)) { triaxi_fatal(); }
-  return triaxi_file_read_user(TRIAXI_exec.out);
-}
-static inline Triax_Str triax_read_stderr(void) {
-# if TRIAXI_CPP
-  std::cerr.flush();
-# endif
-  fflush(stderr);
-  return triaxi_file_read_user(TRIAXI_exec.err);
-}
-# pragma endregion exec_state
-
-# pragma region log_protocol
-
-static inline void triaxi_log_write(const void* buf, size_t len) {
+static inline void triaxi_file_write(TRIAXI_File f, const void* buf, size_t len) {
   const char* ptr = (const char*)buf;
 # ifndef _WIN32
   while (len) {
-    ssize_t w = write(TRIAXI_exec.log, ptr, len);
+    ssize_t w = write(f, ptr, len);
     if (w == -1) {
       if (errno == EINTR) { continue; }
       triaxi_fatal();
@@ -1629,9 +1536,48 @@ static inline void triaxi_log_write(const void* buf, size_t len) {
 # else
   for (DWORD w; len > 0; ptr += (size_t)w, len -= (size_t)w) {
     DWORD chunk = (len > 0xFFFFFFFFu) ? 0xFFFFFFFFu : (DWORD)len;
-    if (!WriteFile(TRIAXI_exec.log, ptr, chunk, &w, 0) || !w) { triaxi_fatal(); }
+    if (!WriteFile(f, ptr, chunk, &w, 0) || !w) { triaxi_fatal(); }
   }
 # endif
+}
+
+static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
+  size_t len = triaxi_file_size(f);
+  if (!len) { return TRIAXI_T(Triax_Str){"", 0}; };
+  char* str = (char*)triaxi_allocate(len);
+  triaxi_file_read_into(f, str, len);
+  return TRIAXI_T(Triax_Str){str, len};
+}
+
+static inline Triax_Str triax_read_file(const char* path) {
+  if (!path) { errno = EINVAL, triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
+  TRIAXI_File f = triaxi_file_open_r(path);
+  if (!triaxi_file_valid(f)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
+  Triax_Str res = triaxi_file_read(f);
+  triaxi_file_close(f);
+  return res;
+}
+
+static inline Triax_Str triax_read_stdout(void) {
+# if TRIAXI_CPP
+  std::cout.flush();
+# endif
+  if (fflush(stdout)) { triaxi_fatal(); }
+  return triaxi_file_read(TRIAXI_exec.out);
+}
+static inline Triax_Str triax_read_stderr(void) {
+# if TRIAXI_CPP
+  std::cerr.flush();
+# endif
+  if (fflush(stderr)) { triaxi_fatal(); }
+  return triaxi_file_read(TRIAXI_exec.err);
+}
+# pragma endregion exec_state
+
+# pragma region log_protocol
+
+static inline void triaxi_log_write(const void* buf, size_t len) {
+  triaxi_file_write(TRIAXI_exec.log, buf, len);
 }
 
 static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t neg, uint32_t cr,
@@ -1964,7 +1910,6 @@ static inline bool triaxi_AF_null(bool v, const void* e1) {
 }
 static inline bool triaxi_AF_memeq(bool v, const void* e1, const void* e2, size_t e3) {
   const unsigned char *_e1 = (const unsigned char*)e1, *_e2 = (const unsigned char*)e2;
-
   for (size_t i = 0; i < e3; ++i) {
     if (_e1[i] != _e2[i]) {
       if (v) { return 0; }
@@ -2988,6 +2933,17 @@ static inline void triaxi_mkdirp(const char* path) {
     *p = c;
   }
 }
+static inline TRIAXI_File triaxi_file_from_stream(FILE* f) {
+#  ifndef _WIN32
+  int fd = triaxi_fileno(f);
+  if (fd < 0) { return 0; }
+  return fd;
+#  else
+  intptr_t h = _get_osfhandle(triaxi_fileno(f));
+  if (h == -1 || h == -2) { return 0; }
+  return (HANDLE)h;
+#  endif
+}
 
 static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
   TRIAXI_File res;
@@ -3074,14 +3030,20 @@ static inline TRIAXI_StdBackup triaxi_stdfds_backup_create(void) {
   if (!(r.out.file = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
   if ((fd = triaxi_dup(2)) < 0) { triaxi_fatal(); }
   if (!(r.err.file = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
-  TRIAXI_true_stderr = r.err.file;
+  TRIAXI_true_stderr = triaxi_file_from_stream(r.err.file);
+  if (!TRIAXI_true_stderr) { triaxi_fatal(); }
+#  ifdef _WIN32
+  if (!SetHandleInformation(TRIAXI_true_stderr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
+    triaxi_fatal();
+  }
+#  endif
   return r;
 }
 
 static inline void triaxi_stdfds_backup_close(const TRIAXI_StdBackup* backup) {
   FILE *const out = backup->out.file, *const err = backup->err.file;
   if (fclose(out)) { triaxi_fatal(); }
-  TRIAXI_true_stderr = NULL;
+  TRIAXI_true_stderr = 0; // todo better sentinel value
   if (fclose(err)) { triaxi_fatal(); }
 }
 
@@ -3521,12 +3483,24 @@ static inline void triaxi_process_control_reset(void) {
 }
 TRIAXI_EXTERN_C_BEG
 triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
-  FILE* err = TRIAXI_true_stderr ? TRIAXI_true_stderr : stderr;
 #  ifndef _WIN32
-  fprintf(err, "%s:%d - triax framework error: %s\n", file, line,
-          errno ? strerror(errno) : "(not provided)");
-
-  (void)fflush(err);
+  int         error = errno;
+  TRIAXI_File err   = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
+  if (err) {
+    int    nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
+                           "%s:%d - triax framework error: %s\n", file, line,
+                        error ? strerror(error) : "(not provided)");
+    size_t len  = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, sizeof(TRIAXI_exec.storage) - 1) : 0;
+    for (const char* ptr = TRIAXI_exec.storage; len;) {
+      ssize_t n = write(err, ptr, len);
+      if (n < 0) {
+        if (errno == EINTR) { continue; }
+        break;
+      }
+      if (!n) { break; }
+      ptr += (size_t)n, len -= (size_t)n;
+    }
+  }
   if (TRIAXI_exec.in_test) {
     if (TRIAXI_exec.isolated) {
       sigaction(SIGTERM, &TRIAXI_signals.sas.ign, NULL);
@@ -3542,25 +3516,37 @@ triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
     abort();
   }
 #  else
-
-  DWORD error = GetLastError();
+  DWORD       error = GetLastError();
+  TRIAXI_File err   = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
+  int         nfmt;
   if (error) {
-    char* buf = NULL;
-    DWORD len = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
-                                   | FORMAT_MESSAGE_IGNORE_INSERTS,
-                               NULL, error, 0, (LPSTR)&buf, 0, NULL);
-    if (len && buf) {
-      while (len && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) { --len; }
-      fprintf(err, "%s:%d - triax framework error: %.*s\n", file, line, (int)len, buf);
-      LocalFree(buf);
+    char* sysbuf = NULL;
+    DWORD syslen = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
+                                      | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                  NULL, error, 0, (LPSTR)&sysbuf, 0, NULL);
+    if (syslen && sysbuf) {
+      while (syslen && (sysbuf[syslen - 1] == '\n' || sysbuf[syslen - 1] == '\r')) { --syslen; }
+      nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
+                      "%s:%d - triax framework error: %.*s\n", file, line, (int)syslen, sysbuf);
+      LocalFree(sysbuf);
     } else {
-      fprintf(err, "%s:%d - triax framework error: Windows error %lu\n", file, line,
-              (unsigned long)error);
+      nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
+                      "%s:%d - triax framework error: Windows error %lu\n", file, line,
+                      (unsigned long)error);
     }
   } else {
-    fprintf(err, "%s:%d - triax framework error\n", file, line);
+    nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
+                    "%s:%d - triax framework error\n", file, line);
   }
-  (void)fflush(err);
+  size_t len = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, sizeof(TRIAXI_exec.storage) - 1) : 0;
+  if (err) {
+    for (const char* ptr = TRIAXI_exec.storage; len;) {
+      DWORD chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
+      DWORD n;
+      if (!WriteFile(err, ptr, chunk, &n, NULL) || !n) { break; }
+      ptr += n, len -= n;
+    }
+  }
 
   if (!TRIAXI_exec.isolated && !TRIAXI_exec.in_test) {
     for (size_t i = 0; i < triaxi_countof(TRIAXI_global.slots); ++i) {
@@ -3710,7 +3696,6 @@ static inline const char* triaxi_error_name(TRIAXI_Error error) {
   case TRIAXI_ERROR_ASSERT_IN_FIXTURE            : return "assertion_in_fixture";
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION: return "exit_assert_without_isolation";
   case TRIAXI_ERROR_FILE_OPEN                    : return "file_open";
-  case TRIAXI_ERROR_FILE_READ                    : return "file_read";
   default                                        : triaxi_unreachable();
   }
 }
@@ -3725,7 +3710,6 @@ static inline const char* triaxi_error_tostr(TRIAXI_Error error) {
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION:
     return "exit assertions require process isolation";
   case TRIAXI_ERROR_FILE_OPEN: return "could not open file";
-  case TRIAXI_ERROR_FILE_READ: return "could not read file";
   default                    : triaxi_unreachable();
   }
 }
@@ -4743,10 +4727,8 @@ static inline void triaxi_print_run_end(const TRIAXI_RunCtx* run, const TRIAXI_R
 #  pragma endregion runner_printing
 
 #  pragma region runner_initialisation
-#  define triaxi_config_error_f(fmt, ...)                                                          \
-     (fprintf((TRIAXI_true_stderr ? TRIAXI_true_stderr : stderr), "Error: " fmt "\n",              \
-              __VA_ARGS__),                                                                        \
-      exit(2))
+#  define triaxi_config_error_f(fmt, ...) /* todo check if maybe true_stderr?*/                    \
+     (fprintf(stderr, "Error: " fmt "\n", __VA_ARGS__), exit(2))
 #  define triaxi_config_error(lit) triaxi_config_error_f("%s", (lit))
 
 static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  config,
@@ -4847,8 +4829,13 @@ static inline TRIAXI_Settings triaxi_settings_resolve(const Triax_Attributes* at
 }
 static inline TRIAXI_RunCtx triaxi_run_ctx_make(const Triax_RunConfig* config) {
   const TRIAXI_StdBackup saved = triaxi_stdfds_backup_create(); // needs to be here
-  TRIAXI_Settings settings     = triaxi_settings_resolve(&config->attrs, TRIAXI_default_settings);
-  size_t          njobs        = (size_t)TRIAXI_MAX(config->njobs, 1);
+#  ifdef _WIN32
+  for (size_t i = 0; i < TRIAXI_global.max_prev_slots; ++i) {
+    TRIAXI_global.shared[i].launch.true_stderr = TRIAXI_true_stderr;
+  }
+#  endif
+  TRIAXI_Settings settings = triaxi_settings_resolve(&config->attrs, TRIAXI_default_settings);
+  size_t          njobs    = (size_t)TRIAXI_MAX(config->njobs, 1);
   if (config->debug) {
     settings.isolation  = TRIAX_ISOLATION_OFF;
     settings.timeout_ms = TRIAX_TIMEOUT_NONE;
@@ -5341,8 +5328,8 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
 
   TRIAXI_Shared* const          child_shared = &shared[slot_idx];
   const TRIAXI_WinLaunch* const launch       = &child_shared->launch;
-
-  if (launch->test_idx >= (size_t)(TRIAXI_global.tests.end - TRIAXI_global.tests.beg)) {
+  TRIAXI_true_stderr                         = launch->true_stderr;
+  if (launch->test_idx >= (uint32_t)(TRIAXI_global.tests.end - TRIAXI_global.tests.beg)) {
     triaxi_fatal();
   }
   const TRIAXI_Test* const t           = TRIAXI_global.tests.beg + launch->test_idx;
@@ -5352,7 +5339,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   if (launch->suite_idx != TRIAXI_INDEX_NONE) {
     const TRIAXI_SuiteReg *beg = TRIAXI_global.suiteregs.beg, *end = TRIAXI_global.suiteregs.end;
 
-    if (launch->suite_idx >= (size_t)(end - beg)) { triaxi_fatal(); }
+    if (launch->suite_idx >= (uint32_t)(end - beg)) { triaxi_fatal(); }
 
     const TRIAXI_SuiteReg* sr = beg + launch->suite_idx;
     if (!sr->name || strcmp(sr->name, t->suitename)) { triaxi_fatal(); }
@@ -5375,6 +5362,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   h.log             = launch->log;
   h.out             = launch->out;
   h.err             = launch->err;
+
   h.invocation      = triaxi_test_invocation_make(&suite, t, pi);
   triaxi_flush_all();
   triaxi_stdfds_redirect(&h);
@@ -5700,13 +5688,13 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 #  else
   const TRIAXI_Test* const t      = h->invocation.test;
   TRIAXI_WinLaunch* const  launch = &h->shared->launch;
-  launch->invocation_idx          = t->params.elcount ? h->invocation.idx : TRIAXI_INDEX_NONE;
-  launch->test_idx                = (size_t)(t - TRIAXI_global.tests.beg);
-  launch->suite_idx               = TRIAXI_INDEX_NONE;
+  launch->invocation_idx = t->params.elcount ? (uint32_t)h->invocation.idx : TRIAXI_INDEX_NONE;
+  launch->test_idx       = (uint32_t)(t - TRIAXI_global.tests.beg);
+  launch->suite_idx      = TRIAXI_INDEX_NONE;
   for (const TRIAXI_SuiteReg* sr = TRIAXI_global.suiteregs.beg; sr != TRIAXI_global.suiteregs.end;
        ++sr) {
     if (sr->name && !strcmp(sr->name, t->suitename)) {
-      launch->suite_idx = (size_t)(sr - TRIAXI_global.suiteregs.beg);
+      launch->suite_idx = (uint32_t)(sr - TRIAXI_global.suiteregs.beg);
       break;
     }
   }
@@ -5738,7 +5726,12 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 
   if (!InitializeProcThreadAttributeList(sia.lpAttributeList, 1, 0, &attr_size)) { triaxi_fatal(); }
   HANDLE inherit_handles[] = {
-      h->log, h->out, h->err, sia.StartupInfo.hStdInput, TRIAXI_global.shared_mapping,
+      h->log,
+      h->out,
+      h->err,
+      launch->true_stderr,
+      sia.StartupInfo.hStdInput,
+      TRIAXI_global.shared_mapping,
   };
   if (!UpdateProcThreadAttribute(sia.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                                  inherit_handles, sizeof(inherit_handles), NULL, NULL)) {
