@@ -5033,6 +5033,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 #  endif
       res = TRIAXI_EXEC_CRASHED;
     }
+    break;
   case TRIAXI_EXEC_ASSERTED : res = TRIAXI_EXEC_ASSERTED; break;
   case TRIAXI_EXEC_SKIPPED  : res = TRIAXI_EXEC_SKIPPED; break;
   case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
