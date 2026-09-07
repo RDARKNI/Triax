@@ -78,25 +78,39 @@ run() {
 
 json_test_names() {
   # Prints "suite::test" for every test entry in a triax JSON report.
-  python3 -c "
+  # The path is passed as sys.argv[1], never interpolated into the Python
+  # source itself: MSYS/Git Bash's automatic POSIX->native path translation
+  # only rewrites whole argv[] entries handed to a native .exe, not
+  # substrings baked into a larger `-c "..."` script string — a path
+  # embedded via string interpolation reaches native Windows python3 as a
+  # literal, untranslated /tmp/... that it can't open.
+  python3 - "$(native_path "$1")" <<'PY' | normalize_lf
 import json
-d = json.load(open('$1'))
-for s in d['suites']:
-    for t in s['tests']:
-        print(f\"{s['name']}::{t['name']}\")
-" | normalize_lf
+import sys
+
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+
+for s in d["suites"]:
+    for t in s["tests"]:
+        print(f"{s['name']}::{t['name']}")
+PY
 }
 
 json_outcome_and_reason() {
   # Prints "<outcome> <reason-or-->" for the first test entry in a triax JSON
   # report. Used for fx_c::malformed_params below, where the interesting
   # part is the specific TRIAXI_Error, not just pass/fail.
-  python3 -c "
+  python3 - "$(native_path "$1")" <<'PY' | normalize_lf
 import json
-d = json.load(open('$1'))
-t = d['suites'][0]['tests'][0]
-print(t['outcome'], t.get('termination', {}).get('reason', '-'))
-" | normalize_lf
+import sys
+
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+
+t = d["suites"][0]["tests"][0]
+print(t["outcome"], t.get("termination", {}).get("reason", "-"))
+PY
 }
 
 # ── --help / --list ─────────────────────────────────────────────────────────

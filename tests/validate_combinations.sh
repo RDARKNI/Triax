@@ -61,7 +61,7 @@ sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t['outcome'])
-" "$1"
+" "$(native_path "$1")"
 }
 
 json_outcomes_by_invocation() {
@@ -73,7 +73,7 @@ sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['invocation'], t['outcome'])
-" "$1"
+" "$(native_path "$1")"
 }
 
 json_capture() {
@@ -84,7 +84,7 @@ sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t.get('stdout', ''), t.get('stderr', ''))
-" "$1"
+" "$(native_path "$1")"
 }
 
 json_phase_outcomes() {
@@ -95,7 +95,7 @@ sys.stdout.reconfigure(newline='\n')
 d = json.load(open(sys.argv[1]))
 for t in d['suites'][0]['tests']:
     print(t['name'], t['outcome'], t.get('phase', '-'))
-" "$1"
+" "$(native_path "$1")"
 }
 
 # check_map DESC ACTUAL_TEXT EXPECTED_TEXT
@@ -228,13 +228,23 @@ check_debug_case() {
   "$COMBO" --no-color --debug --json="$(native_path "$WORKDIR/debug_$name.json")" "combo_debug::$name" \
     >/dev/null 2>&1 || true
   local result
-  result="$(python3 -c "
-import json, sys
-sys.stdout.reconfigure(newline='\n')
-d = json.load(open('$WORKDIR/debug_$name.json'))
-t = d['suites'][0]['tests'][0]
-print(t['outcome'], t.get('termination', {}).get('reason', '-'))
-" | tr -d '\r')"
+  # sys.argv[1], not string-interpolated into the source: a path baked into
+  # a `-c "..."` script string is just a substring of one big argument to
+  # MSYS/Git Bash, so its automatic POSIX->native path translation (which
+  # only rewrites whole argv[] entries) never sees it — native Windows
+  # python3 would get a literal, untranslated /tmp/... it can't open.
+  result="$(python3 - "$(native_path "$WORKDIR/debug_$name.json")" <<'PY' | tr -d '\r'
+import json
+import sys
+
+sys.stdout.reconfigure(newline="\n")
+with open(sys.argv[1]) as f:
+    d = json.load(f)
+
+t = d["suites"][0]["tests"][0]
+print(t["outcome"], t.get("termination", {}).get("reason", "-"))
+PY
+)"
   local outcome="${result%% *}"
   if [ "$outcome" = "$expected_outcome" ] && {
     [ "$expected_reason" = "-" ] || [ "${result#* }" = "$expected_reason" ]
@@ -308,20 +318,23 @@ r_ucrashed ucrashed
 r_uexited uexited
 r_test_error test_error"
 
-tap_result="$(python3 -c "
-import re, sys
-sys.stdout.reconfigure(newline='\n')
-lines = open('$WORKDIR/rep.tap').read().splitlines()
+tap_result="$(python3 - "$(native_path "$WORKDIR/rep.tap")" <<'PY' | tr -d '\r'
+import re
+import sys
+
+sys.stdout.reconfigure(newline="\n")
+lines = open(sys.argv[1]).read().splitlines()
 out = []
 for l in lines:
     m = re.match(r'(not )?ok \d+ - \S+ > (\S+)(.*)', l)
     if not m:
         continue
-    status = 'not_ok' if m.group(1) else 'ok'
-    skip = 'SKIP' in m.group(3)
+    status = "not_ok" if m.group(1) else "ok"
+    skip = "SKIP" in m.group(3)
     out.append(f'{m.group(2)} {status} {skip}')
-print('\n'.join(sorted(out)))
-" | tr -d '\r')"
+print("\n".join(sorted(out)))
+PY
+)"
 expected_tap="$(printf '%s\n' \
   "r_passed ok False" \
   "r_failed not_ok False" \
@@ -339,27 +352,29 @@ got:
 $tap_result"
 fi
 
-junit_result="$(python3 -c "
+junit_result="$(python3 - "$(native_path "$WORKDIR/rep.xml")" <<'PY' | tr -d '\r'
 import sys
-sys.stdout.reconfigure(newline='\n')
 import xml.etree.ElementTree as ET
-root = ET.parse('$WORKDIR/rep.xml').getroot()
+
+sys.stdout.reconfigure(newline="\n")
+root = ET.parse(sys.argv[1]).getroot()
 out = []
-for tc in root.iter('testcase'):
-    name = tc.get('name')
-    failure = tc.find('failure')
-    error = tc.find('error')
-    skipped = tc.find('skipped')
+for tc in root.iter("testcase"):
+    name = tc.get("name")
+    failure = tc.find("failure")
+    error = tc.find("error")
+    skipped = tc.find("skipped")
     if failure is not None:
-        out.append(f'{name} failure {failure.get(\"type\")}')
+        out.append(f'{name} failure {failure.get("type")}')
     elif error is not None:
-        out.append(f'{name} error {error.get(\"type\")}')
+        out.append(f'{name} error {error.get("type")}')
     elif skipped is not None:
         out.append(f'{name} skipped -')
     else:
         out.append(f'{name} none -')
-print('\n'.join(sorted(out)))
-" | tr -d '\r')"
+print("\n".join(sorted(out)))
+PY
+)"
 expected_junit="$(printf '%s\n' \
   "r_passed none -" \
   "r_failed failure failed" \
@@ -389,13 +404,16 @@ if grep -q "^not ok 1 - combo_reporters_cpp > r_uexception" "$WORKDIR/rep_cpp.ta
 else
   fail "reporters x outcome: uexception (C++) TAP" "$(cat "$WORKDIR/rep_cpp.tap")"
 fi
-if python3 -c "
-import xml.etree.ElementTree as ET, sys
-root = ET.parse('$WORKDIR/rep_cpp.xml').getroot()
-tc = next(root.iter('testcase'))
-error = tc.find('error')
-sys.exit(0 if error is not None and error.get('type') == 'uexception' else 1)
-"; then
+if python3 - "$(native_path "$WORKDIR/rep_cpp.xml")" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+tc = next(root.iter("testcase"))
+error = tc.find("error")
+sys.exit(0 if error is not None and error.get("type") == "uexception" else 1)
+PY
+then
   ok "reporters x outcome: uexception (C++) JUnit correct"
 else
   fail "reporters x outcome: uexception (C++) JUnit" "$(cat "$WORKDIR/rep_cpp.xml")"

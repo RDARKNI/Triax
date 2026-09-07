@@ -82,7 +82,7 @@ fi
 status=0
 
 echo "== JSON =="
-if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$WORKDIR/out.json"; then
+if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$(native_path "$WORKDIR/out.json")"; then
   echo "FAIL: $WORKDIR/out.json is not valid JSON" >&2
   status=1
 else
