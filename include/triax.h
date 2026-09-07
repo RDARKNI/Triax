@@ -4971,10 +4971,8 @@ static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
           triaxi_sigaction(TRIAXI_signals.crash[i], &_h, NULL);                                    \
         }                                                                                          \
       } while (0)
-#   define triaxi_win_try {
-#   define triaxi_win_except(...)                                                                  \
-      }                                                                                            \
-      if (0)
+#   define triaxi_win_try
+#   define triaxi_win_except(...) if (0)
 #  elif TRIAXI_MSVC_COMPAT
 #   define triaxi_crash_handlers_impl(_h)
 #   define triaxi_win_try         __try
@@ -4997,19 +4995,72 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
 #  define triaxi_crash_handlers_setup()    triaxi_crash_handlers_impl(TRIAXI_signals.sas.crash)
 #  define triaxi_crash_handlers_teardown() triaxi_crash_handlers_impl(TRIAXI_signals.old.crash[i])
 
-static inline void triaxi_rf_fini(const TRIAXI_Fixtures** fixtures, TRIAXI_ExecOutcome res,
-                                  int64_t t0) {
-  for (size_t fi = 3; fi-- > 0;) {
-    if (!fixtures[fi]->fini) { continue; }
-    TRIAXI_exec.shared->state = TRIAXI_STATE_FINI;
-    fixtures[fi]->fini();
+static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shared* shared) {
+
+  const TRIAXI_Test* const t = inv->test;
+  const TRIAXI_Fixtures*   fixtures[]
+      = {&inv->fixtures.run, &inv->fixtures.suite, &inv->fixtures.test};
+  TRIAXI_exec.in_test = true;
+  TRIAXI_exec.param
+      = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : NULL;
+  TRIAXI_exec.shared             = shared;
+  TRIAXI_exec.shared->exit.type  = TRIAXI_EXIT_NONE;
+  TRIAXI_exec.shared->exit.code  = 0;
+  int64_t                     t0 = triaxi_now_ms();
+  volatile TRIAXI_ExecOutcome res;
+#  if defined(_WIN32) && TRIAXI_MSVC_COMPAT
+  volatile DWORD fault = 0;
+#  else
+  volatile int fault = 0;
+#  endif
+  switch (setjmp(TRIAXI_exec.jmp)) {
+  default: triaxi_unreachable();
+  case TRIAXI_EXEC_RETURNED:
+    triaxi_win_try {
+      if (!TRIAXI_exec.isolated) { triaxi_crash_handlers_setup(); }
+      for (size_t fi = 0; fi < triaxi_countof(fixtures); ++fi) {
+        if (!fixtures[fi]->init) { continue; }
+        TRIAXI_exec.shared->state = TRIAXI_STATE_INIT;
+        fixtures[fi]->init();
+      }
+      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;
+      t->func();
+    }
+    res = TRIAXI_EXEC_RETURNED;
+    triaxi_win_except(TRIAXI_exec.isolated ? EXCEPTION_CONTINUE_SEARCH
+                                           : EXCEPTION_EXECUTE_HANDLER) {
+#  if defined(_WIN32) && TRIAXI_MSVC_COMPAT
+      if ((fault = GetExceptionCode()) == EXCEPTION_STACK_OVERFLOW) { _resetstkoflw(); }
+#  endif
+      res = TRIAXI_EXEC_CRASHED;
+    }
+  case TRIAXI_EXEC_ASSERTED : res = TRIAXI_EXEC_ASSERTED; break;
+  case TRIAXI_EXEC_SKIPPED  : res = TRIAXI_EXEC_SKIPPED; break;
+  case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
+  case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
+  case TRIAXI_EXEC_CRASHED  : res = TRIAXI_EXEC_CRASHED;
+#  if !defined(_WIN32)
+    if (TRIAXI_exec.isolated) { triaxi_unreachable(); }
+    fault = TRIAXI_crash_signal;
+#  endif
+    break;
+  }
+  TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
+  if (res == TRIAXI_EXEC_CRASHED) {
+  } else if (res == TRIAXI_EXEC_ERROR) {
+  } else {
+    for (size_t fi = 3; fi-- > 0;) {
+      if (!fixtures[fi]->fini) { continue; }
+      TRIAXI_exec.shared->state = TRIAXI_STATE_FINI;
+      fixtures[fi]->fini();
+    }
   }
   TRIAXI_exec.shared->state = TRIAXI_STATE_CLEANUP;
   triaxi_flush_all();
   TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
   switch (res) {
-  case TRIAXI_EXEC_ERROR: triaxi_unreachable();
   default               : triaxi_unreachable();
+  case TRIAXI_EXEC_ERROR: break; // todo does this really not set anything?
   case TRIAXI_EXEC_RETURNED:
     TRIAXI_exec.shared->state     = TRIAXI_STATE_DONE;
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_EXIT;
@@ -5030,69 +5081,10 @@ static inline void triaxi_rf_fini(const TRIAXI_Fixtures** fixtures, TRIAXI_ExecO
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_EXCEPTION;
     break;
 
-  case TRIAXI_EXEC_CRASHED: triaxi_unreachable();
-  }
-}
-static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shared* shared) {
-  const TRIAXI_Test* const t = inv->test;
-  const TRIAXI_Fixtures*   fixtures[]
-      = {&inv->fixtures.run, &inv->fixtures.suite, &inv->fixtures.test};
-  TRIAXI_exec.in_test = true;
-  TRIAXI_exec.param
-      = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : NULL;
-  TRIAXI_exec.shared            = shared;
-  TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_NONE;
-  TRIAXI_exec.shared->exit.code = 0;
-  int64_t t0                    = triaxi_now_ms();
-  // Hardware crash -> NEVER FINI
-  // Crashes only caught in non-isolation
-  switch (setjmp(TRIAXI_exec.jmp)) {
-  default: triaxi_unreachable();
-  case TRIAXI_EXEC_RETURNED:
-    triaxi_win_try {
-      if (!TRIAXI_exec.isolated) { triaxi_crash_handlers_setup(); }
-      for (size_t fi = 0; fi < triaxi_countof(fixtures); ++fi) {
-        if (!fixtures[fi]->init) { continue; }
-        TRIAXI_exec.shared->state = TRIAXI_STATE_INIT;
-        fixtures[fi]->init();
-      }
-      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;
-      t->func();
-      triaxi_rf_fini(fixtures, TRIAXI_EXEC_RETURNED, t0);
-    }
-    triaxi_win_except(TRIAXI_exec.isolated ? EXCEPTION_CONTINUE_SEARCH
-                                           : EXCEPTION_EXECUTE_HANDLER) {
-#  if defined(_WIN32) && TRIAXI_MSVC_COMPAT
-      const DWORD fault = GetExceptionCode();
-      if (fault == EXCEPTION_STACK_OVERFLOW) { _resetstkoflw(); }
-      TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
-      TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
-      TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
-      break;
-#  elif !defined(_WIN32)
-      triaxi_unreachable();
-#  endif
-    }
-  case TRIAXI_EXEC_ASSERTED : triaxi_rf_fini(fixtures, TRIAXI_EXEC_ASSERTED, t0); break;
-  case TRIAXI_EXEC_SKIPPED  : triaxi_rf_fini(fixtures, TRIAXI_EXEC_SKIPPED, t0); break;
-  case TRIAXI_EXEC_EXCEPTION: triaxi_rf_fini(fixtures, TRIAXI_EXEC_EXCEPTION, t0); break;
-  case TRIAXI_EXEC_ERROR:
-    TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
-    triaxi_flush_all();
+  case TRIAXI_EXEC_CRASHED:
+    TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
+    TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
     break;
-  case TRIAXI_EXEC_CRASHED: {
-#  ifdef _WIN32
-    triaxi_unreachable();
-#  else
-    if (TRIAXI_exec.isolated) { triaxi_unreachable(); }
-    TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
-    if (TRIAXI_exec.shared->exit.type != TRIAXI_EXIT_ERROR) {
-      const int fault                 = TRIAXI_crash_signal;
-      TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
-      TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
-    }
-#  endif
-  }
   }
   if (TRIAXI_exec.isolated) { return; }
   triaxi_crash_handlers_teardown();
