@@ -34,6 +34,25 @@ FILTER="${2:-}"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
+# Native (non-MSYS) Windows executables can't resolve Git Bash's POSIX-style
+# temp paths (e.g. /tmp/tmp.XXXX) the way bash/python/xmllint can — passing
+# one straight through as a --json=/--tap=/--junit= argument leaves the .exe
+# unable to fopen() it, so the file is silently never written. cygpath -w
+# converts to the equivalent native path (e.g. C:/Users/.../Temp/tmp.XXXX)
+# for arguments the .exe itself must resolve; every other use of $WORKDIR
+# below (reading the files back via python/xmllint/awk) keeps the original
+# POSIX path.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+NATIVE_JSON="$(native_path "$WORKDIR/out.json")"
+NATIVE_TAP="$(native_path "$WORKDIR/out.tap")"
+NATIVE_XML="$(native_path "$WORKDIR/out.xml")"
+
 # Portable watchdog (no dependency on GNU coreutils' `timeout`, which isn't
 # guaranteed present on macOS/Windows CI runners): background the command,
 # race it against a sleep, kill whichever loses.
@@ -52,12 +71,12 @@ run_with_watchdog() {
 }
 
 if [ -n "$FILTER" ]; then
-  TRIAXI_VALIDATE_CHILD=1 run_with_watchdog 30 "$BIN" --text=none --json="$WORKDIR/out.json" \
-    --tap="$WORKDIR/out.tap" --junit="$WORKDIR/out.xml" --timeout=500 --isolation=on \
+  TRIAXI_VALIDATE_CHILD=1 run_with_watchdog 30 "$BIN" --text=none --json="$NATIVE_JSON" \
+    --tap="$NATIVE_TAP" --junit="$NATIVE_XML" --timeout=500 --isolation=on \
     "$FILTER" >/dev/null 2>&1 || true
 else
-  run_with_watchdog 30 "$BIN" --text=none --json="$WORKDIR/out.json" --tap="$WORKDIR/out.tap" \
-    --junit="$WORKDIR/out.xml" >/dev/null 2>&1 || true
+  run_with_watchdog 30 "$BIN" --text=none --json="$NATIVE_JSON" --tap="$NATIVE_TAP" \
+    --junit="$NATIVE_XML" >/dev/null 2>&1 || true
 fi
 
 status=0

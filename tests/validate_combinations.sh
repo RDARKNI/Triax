@@ -22,6 +22,21 @@ MULTITU_CPP="$4"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
+# Native (non-MSYS) Windows executables can't resolve Git Bash's POSIX-style
+# temp paths (e.g. /tmp/tmp.XXXX) the way bash/python can — passing one
+# straight through as a --json=/--tap=/--junit= argument leaves the .exe
+# unable to fopen() it, so the file is silently never written. cygpath -w
+# converts to the equivalent native path (e.g. C:/Users/.../Temp/tmp.XXXX)
+# for arguments the .exe itself must resolve; every subsequent read of
+# $WORKDIR below (via python/xmllint) keeps the original POSIX path.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 status=0
 check_num=0
 
@@ -89,8 +104,12 @@ for t in d['suites'][0]['tests']:
 check_map() {
   local desc="$1" actual="$2" expected="$3"
   local sorted_actual sorted_expected
-  sorted_actual="$(echo "$actual" | sort)"
-  sorted_expected="$(echo "$expected" | sort)"
+  # Strip \r unconditionally: native python3 on Windows opens stdout in text
+  # mode (\n -> \r\n), and bash's $(...) only strips the final trailing
+  # newline, not embedded \r — leaving "actual" and "expected" render
+  # identically in a log but compare byte-unequal.
+  sorted_actual="$(echo "$actual" | tr -d '\r' | sort)"
+  sorted_expected="$(echo "$expected" | tr -d '\r' | sort)"
   if [ "$sorted_actual" = "$sorted_expected" ]; then
     ok "$desc"
   else
@@ -104,7 +123,7 @@ $sorted_actual"
 # ── isolation x jobs ─────────────────────────────────────────────────────────
 # Fixed mix of pass/fail/crash, all isolated, forced into overlapping
 # concurrent batches by --jobs=4 (8 tests, 4 slots -> 2 batches).
-"$COMBO" --no-color --jobs=4 --json="$WORKDIR/isojobs.json" combo_isojobs >/dev/null 2>&1 || true
+"$COMBO" --no-color --jobs=4 --json="$(native_path "$WORKDIR/isojobs.json")" combo_isojobs >/dev/null 2>&1 || true
 check_map "isolation x jobs: all 8 concurrent isolated outcomes correct" \
   "$(json_outcomes "$WORKDIR/isojobs.json")" \
   "pass1 passed
@@ -122,7 +141,7 @@ pass4 passed"
 # its slot instead of being reaped concurrently, wall time would grow with
 # the sum (300 + 3*200 = 900ms) instead of staying near the max (~300ms).
 start_ms=$(($(date +%s%N) / 1000000))
-"$COMBO" --no-color --jobs=4 --json="$WORKDIR/timeoutjobs.json" combo_timeoutjobs \
+"$COMBO" --no-color --jobs=4 --json="$(native_path "$WORKDIR/timeoutjobs.json")" combo_timeoutjobs \
   >/dev/null 2>&1 || true
 end_ms=$(($(date +%s%N) / 1000000))
 elapsed=$((end_ms - start_ms))
@@ -142,7 +161,7 @@ fi
 # One 8-element parameterized test, run under --jobs=4 so invocations
 # execute concurrently across slots — checks each invocation's own
 # parameter/outcome isn't swapped with a concurrently-running sibling.
-"$COMBO" --no-color --jobs=4 --json="$WORKDIR/paramjobs.json" combo_paramjobs \
+"$COMBO" --no-color --jobs=4 --json="$(native_path "$WORKDIR/paramjobs.json")" combo_paramjobs \
   >/dev/null 2>&1 || true
 check_map "parameters x jobs: even indices pass, odd fail, none swapped" \
   "$(json_outcomes_by_invocation "$WORKDIR/paramjobs.json")" \
@@ -158,7 +177,7 @@ check_map "parameters x jobs: even indices pass, odd fail, none swapped" \
 # ── capture x jobs ───────────────────────────────────────────────────────────
 # Several concurrently-running tests each print a marker unique to
 # themselves — checks per-slot capture isn't shared/cross-contaminated.
-"$COMBO" --no-color --jobs=4 --json="$WORKDIR/capturejobs.json" combo_capturejobs \
+"$COMBO" --no-color --jobs=4 --json="$(native_path "$WORKDIR/capturejobs.json")" combo_capturejobs \
   >/dev/null 2>&1 || true
 check_map "capture x jobs: each test's captured output is only its own" \
   "$(json_capture "$WORKDIR/capturejobs.json")" \
@@ -171,7 +190,7 @@ out4 MARKER-OUT-4 MARKER-ERR-4"
 # Several concurrently-crashing tests (all SIGABRT — see combo_fixture.c's
 # comment on why SIGFPE/SIGSEGV aren't portable here) — checks each crashing
 # slot's own outcome isn't cross-attributed to a sibling crashing nearby.
-"$COMBO" --no-color --jobs=5 --json="$WORKDIR/crashjobs.json" combo_crashjobs \
+"$COMBO" --no-color --jobs=5 --json="$(native_path "$WORKDIR/crashjobs.json")" combo_crashjobs \
   >/dev/null 2>&1 || true
 check_map "crashes x jobs: each concurrent crash classified independently" \
   "$(json_outcomes "$WORKDIR/crashjobs.json")" \
@@ -191,7 +210,7 @@ c_fail failed"
 # code, not a fixture). Timeout's JSON "phase" field was added alongside
 # this test (previously only ERROR outcomes got one), so this also locks
 # that reporting extension in.
-"$COMBO" --no-color --json="$WORKDIR/fixcrash.json" combo_fixture_crash >/dev/null 2>&1 || true
+"$COMBO" --no-color --json="$(native_path "$WORKDIR/fixcrash.json")" combo_fixture_crash >/dev/null 2>&1 || true
 check_map "fixtures x crashes/timeouts: correctly classified, sibling still runs" \
   "$(json_phase_outcomes "$WORKDIR/fixcrash.json")" \
   "crash_in_init test_error init
@@ -206,7 +225,7 @@ timeout_in_fini timeout fini"
 # --debug's forced njobs=1 doesn't serialize them together.
 check_debug_case() {
   local name="$1" expected_outcome="$2" expected_reason="$3"
-  "$COMBO" --no-color --debug --json="$WORKDIR/debug_$name.json" "combo_debug::$name" \
+  "$COMBO" --no-color --debug --json="$(native_path "$WORKDIR/debug_$name.json")" "combo_debug::$name" \
     >/dev/null 2>&1 || true
   local result
   result="$(python3 -c "
@@ -215,7 +234,7 @@ sys.stdout.reconfigure(newline='\n')
 d = json.load(open('$WORKDIR/debug_$name.json'))
 t = d['suites'][0]['tests'][0]
 print(t['outcome'], t.get('termination', {}).get('reason', '-'))
-")"
+" | tr -d '\r')"
   local outcome="${result%% *}"
   if [ "$outcome" = "$expected_outcome" ] && {
     [ "$expected_reason" = "-" ] || [ "${result#* }" = "$expected_reason" ]
@@ -251,7 +270,7 @@ for pair in "C:$MULTITU_C:multitu" "C++:$MULTITU_CPP:multitu_cpp"; do
   rest="${pair#*:}"
   bin="${rest%%:*}"
   suite="${rest#*:}"
-  listing="$("$bin" --list | sort | tr '\n' ',')"
+  listing="$("$bin" --list | tr -d '\r' | sort | tr '\n' ',')"
   expected_listing="$(printf '%s::from_a_pass\n%s::from_b_fail\n%s::from_b_pass\n' \
     "$suite" "$suite" "$suite" | sort | tr '\n' ',')"
   if [ "$listing" = "$expected_listing" ]; then
@@ -260,7 +279,7 @@ for pair in "C:$MULTITU_C:multitu" "C++:$MULTITU_CPP:multitu_cpp"; do
     fail "multi-TU x $lang: --list" "expected '$expected_listing', got '$listing'"
   fi
 
-  "$bin" --no-color --json="$WORKDIR/multitu_$lang.json" >/dev/null 2>&1 || true
+  "$bin" --no-color --json="$(native_path "$WORKDIR/multitu_$lang.json")" >/dev/null 2>&1 || true
   check_map "multi-TU x $lang: outcomes from both TUs correct" \
     "$(json_outcomes "$WORKDIR/multitu_$lang.json")" \
     "from_a_pass passed
@@ -275,8 +294,9 @@ done
 # CORRECTNESS of each format's encoding, not just well-formedness (that's
 # validate_formats.sh's job).
 
-"$COMBO" --text=none --no-color --json="$WORKDIR/rep.json" --tap="$WORKDIR/rep.tap" \
-  --junit="$WORKDIR/rep.xml" combo_reporters >/dev/null 2>&1 || true
+"$COMBO" --text=none --no-color --json="$(native_path "$WORKDIR/rep.json")" \
+  --tap="$(native_path "$WORKDIR/rep.tap")" --junit="$(native_path "$WORKDIR/rep.xml")" \
+  combo_reporters >/dev/null 2>&1 || true
 
 check_map "reporters x outcome: JSON \"outcome\" correct for all 7" \
   "$(json_outcomes "$WORKDIR/rep.json")" \
@@ -301,7 +321,7 @@ for l in lines:
     skip = 'SKIP' in m.group(3)
     out.append(f'{m.group(2)} {status} {skip}')
 print('\n'.join(sorted(out)))
-")"
+" | tr -d '\r')"
 expected_tap="$(printf '%s\n' \
   "r_passed ok False" \
   "r_failed not_ok False" \
@@ -339,7 +359,7 @@ for tc in root.iter('testcase'):
     else:
         out.append(f'{name} none -')
 print('\n'.join(sorted(out)))
-")"
+" | tr -d '\r')"
 expected_junit="$(printf '%s\n' \
   "r_passed none -" \
   "r_failed failure failed" \
@@ -358,8 +378,9 @@ $junit_result"
 fi
 
 # uexception (C++-only) against combo_reporters_cpp, same treatment.
-"$COMBO_CPP" --text=none --no-color --json="$WORKDIR/rep_cpp.json" --tap="$WORKDIR/rep_cpp.tap" \
-  --junit="$WORKDIR/rep_cpp.xml" >/dev/null 2>&1 || true
+"$COMBO_CPP" --text=none --no-color --json="$(native_path "$WORKDIR/rep_cpp.json")" \
+  --tap="$(native_path "$WORKDIR/rep_cpp.tap")" --junit="$(native_path "$WORKDIR/rep_cpp.xml")" \
+  >/dev/null 2>&1 || true
 check_map "reporters x outcome: uexception (C++) JSON correct" \
   "$(json_outcomes "$WORKDIR/rep_cpp.json")" \
   "r_uexception uexception"
