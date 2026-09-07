@@ -3146,8 +3146,21 @@ static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
 
 #  pragma region runner_registration
 
+#  if TRIAXI_CPP
+#   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? new T[n] : NULL)
+#  else
+#   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? (T*)malloc((n) * sizeof(T)) : NULL)
+#  endif
+
 static inline void triaxi_sections_init(void) {
 #  if TRIAXI_REG_MSVC_COFF
+
+#   if TRIAXI_CPP
+#    define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? new T[n] : NULL)
+#   else
+#    define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? (T*)malloc((n) * sizeof(T)) : NULL)
+#   endif
+
   /*
    * TRIAXI_Test_a/_z (and the SuiteReg equivalents) are now pointers, not
    * objects — see TRIAXI_MAKE_TEST's comment for why. &T##_a + 1 / &T##_z
@@ -3159,6 +3172,7 @@ static inline void triaxi_sections_init(void) {
    * suiteregs as a plain contiguous C array of objects keeps working
    * unmodified, on this backend as on every other.
    */
+
 #   define TRIAXI_SECTION_INIT_MSVC(T, field)                                                      \
       do {                                                                                         \
         extern const T* const T##_a;                                                               \
@@ -3169,7 +3183,7 @@ static inline void triaxi_sections_init(void) {
         for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
           if (*p) { ++triaxi_n; }                                                                  \
         }                                                                                          \
-        T* triaxi_arr = triaxi_n ? (T*)malloc(triaxi_n * sizeof(T)) : NULL;                        \
+        T* triaxi_arr = TRIAXI_ALLOC_ARRAY(T, triaxi_n);                                           \
         if (triaxi_n && !triaxi_arr) { triaxi_fatal(); }                                           \
         size_t triaxi_i = 0;                                                                       \
         for (const T* const* p = triaxi_pbeg; p != triaxi_pend; ++p) {                             \
