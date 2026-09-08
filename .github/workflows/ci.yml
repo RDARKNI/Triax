@@ -66,19 +66,77 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
+  # Compiler-policy testing (does our source satisfy our warning policy?)
+  # deliberately lives here, not in the native matrix above: native answers
+  # "does Triax work on each platform", this answers "is each compiler
+  # family we maintain a warning set for (GNU_COMMON/GCC_EXTRA/CLANG_EXTRA/
+  # MSVC in CMakeLists.txt) actually clean under -Werror/-WX". GCC and Clang
+  # share a build/test shape on the same OS, so they're one matrix; MSVC
+  # needs Windows-specific config/build syntax, so it's the separate
+  # strict-warnings-msvc job below instead of forcing it into this matrix.
   strict-warnings:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { cc: gcc, cxx: g++ }
+          - { cc: clang, cxx: clang++ }
     env:
-      CC: gcc
-      CXX: g++
+      CC: ${{ matrix.compiler.cc }}
+      CXX: ${{ matrix.compiler.cxx }}
     steps:
       - uses: actions/checkout@v4
-      - name: Configure (GCC, warnings-as-errors)
+      - name: Install Clang
+        if: matrix.compiler.cc == 'clang'
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Configure (warnings-as-errors)
         run: cmake -S . -B build -DTRIAX_WARNINGS_AS_ERRORS=ON -DBUILD_TESTING=ON
       - name: Build
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  # MSVC side of strict-warnings above: /WX has never actually been enforced
+  # in CI before this job existed, so — like msvc-sanitizers below — this is
+  # untested territory the first time it runs, hence the same crash-dump
+  # safety net as the other Windows jobs even though a -Werror-style failure
+  # here is expected to just be a clean compile error, not a crash.
+  strict-warnings-msvc:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (MSVC, warnings-as-errors)
+        run: cmake -S . -B build -DTRIAX_WARNINGS_AS_ERRORS=ON -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config RelWithDebInfo
+      - name: Test
+        id: test
+        continue-on-error: true
+        run: ctest --test-dir build -C RelWithDebInfo --output-on-failure
+      - name: Upload crash dumps
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: strict-warnings-msvc-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if tests failed
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        run: exit 1
 
   clang-sanitizers:
     runs-on: ubuntu-latest
@@ -103,11 +161,10 @@ jobs:
 
   # MSVC only implements AddressSanitizer (no UBSan/TSan/MSan, unlike the
   # Clang job above) — see TRIAX_ENABLE_SANITIZERS's MSVC branch in
-  # CMakeLists.txt. Untested territory the first time this runs: Triax
-  # deliberately exercises crashes, process isolation, and longjmp, none of
-  # which MSVC ASan has been checked against here before, so this carries
-  # the same crash-dump safety net as the native Windows job in case
-  # something unexpected turns up.
+  # CMakeLists.txt. Not adding GCC ASan+UBSan or TSan/MSan anywhere: Clang
+  # already gives solid Linux runtime coverage, GCC is independently
+  # exercised by strict-warnings, and TSan/MSan don't target Triax's actual
+  # risk profile (isolation is process-based, not shared-memory threading).
   msvc-sanitizers:
     runs-on: windows-latest
     env:
@@ -146,22 +203,18 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
-  # Regression guard for the Release-optimization-sensitive section-walk bug
-  # fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer walked past a
-  # single object's declared bounds miscompiled under MSVC /Ob2 (full
-  # inlining) but not /Ob1, producing a deterministic SegFault reading
-  # exactly at the end of the module's own mapped image. The ordinary
-  # `native` job runs RelWithDebInfo (/Ob1, for PDBs) and would never have
-  # caught this; this job builds actual Release instead, keeping /Zi +
-  # /DEBUG (via plain CMAKE_*_FLAGS, not a permanent CMakeLists.txt change)
-  # so a regression here is still fully diagnosable, and repeats
-  # triax-cpp/triax-cpp-parallel many times in case a future regression is
-  # as intermittent as this one briefly appeared to be. Runs on every push:
-  # this is a public repo (GitHub-hosted Windows runners are free here,
-  # unlike the paid-minutes multiplier that applies to private repos), and
-  # the ~1-2 extra minutes is worth it as standing insurance in exactly the
-  # area that produced a multi-session debugging effort once already.
-  windows-release-stress:
+  # Always-on regression coverage for the Release-optimization-sensitive
+  # section-walk bug fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer
+  # walked past a single object's declared bounds miscompiled under MSVC
+  # /Ob2 (full inlining) but not /Ob1, producing a deterministic SegFault
+  # reading exactly at the end of the module's own mapped image. The
+  # ordinary `native` job runs RelWithDebInfo (/Ob1, for PDBs) and would
+  # never have caught this; this job builds actual Release instead, keeping
+  # /Zi + /DEBUG (via plain CMAKE_*_FLAGS, not a permanent CMakeLists.txt
+  # change) so a regression here is still fully diagnosable. Runs the
+  # affected tests once per push — see windows-release-stress below for the
+  # manual, higher-confidence 30x version of this same configuration.
+  windows-release:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -176,7 +229,7 @@ jobs:
           New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
           New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
       - name: Configure (Release, kept symbols)
-        # -DCMAKE_CXX_FLAGS="/Zi" (a previous version of this step) replaces
+        # -DCMAKE_CXX_FLAGS="/Zi" (an earlier version of this step) replaces
         # CMake's entire default general-flags string on the command line
         # rather than appending to it — and for MSVC that default is where
         # /EHsc lives (seeded via Windows-MSVC.cmake's CMAKE_CXX_FLAGS_INIT),
@@ -194,14 +247,56 @@ jobs:
             -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/INCREMENTAL:NO /DEBUG"
       - name: Build
         run: cmake --build build --config Release
+      - name: Test
+        id: test
+        continue-on-error: true
+        run: ctest --test-dir build -C Release -R "triax-cpp$|triax-cpp-parallel$" --output-on-failure
+      - name: Upload crash dumps
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if tests failed
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        run: exit 1
+
+  # Manual-only, higher-confidence version of windows-release above: the
+  # crash this configuration exists to catch was intermittent (didn't
+  # reproduce every run) before it was root-caused and fixed, so this
+  # repeats the affected tests many times rather than once. Not run on
+  # every push: 30 repeats of the C++ suite is standing insurance worth
+  # paying for occasionally, not on every commit, when windows-release
+  # above already provides permanent single-pass coverage of the same
+  # configuration.
+  windows-release-stress:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (Release, kept symbols)
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON `
+            -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" `
+            -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /Zi" `
+            -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/INCREMENTAL:NO /DEBUG"
+      - name: Build
+        run: cmake --build build --config Release
       - name: Stress C++ Release
-        # Full stress loop restored: the cheap single --list check (a
-        # temporary substitution while testing the integer-address-walk
-        # hypothesis in TRIAXI_SECTION_INIT_MSVC) passed cleanly on the same
-        # build configuration that crashed deterministically on iteration 1
-        # every previous run with the old pointer-based walk — strong
-        # evidence the hypothesis is correct. This repeats the full suite
-        # many times to build confidence before treating it as settled.
         id: stress
         continue-on-error: true
         shell: pwsh
