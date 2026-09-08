@@ -5041,7 +5041,20 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 #  else
   volatile int fault = 0;
 #  endif
+#  if !TRIAXI_GNU_COMPAT
+#   pragma warning(push)
+// C4611 (setjmp/C++ object destruction interaction is non-portable): MSVC
+// flags any setjmp call in a function compiled under /EHsc, since a later
+// longjmp would skip destructors for any live C++ locals. This function has
+// none (fixtures[]/t0/res/fault are all POD) — the warning is inherent to
+// combining setjmp/longjmp-based crash recovery with C++ exception support,
+// which is exactly what this line does by design.
+#   pragma warning(disable : 4611)
+#  endif
   switch (setjmp(TRIAXI_exec.jmp)) {
+#  if !TRIAXI_GNU_COMPAT
+#   pragma warning(pop)
+#  endif
   default: triaxi_unreachable();
   case TRIAXI_EXEC_RETURNED:
     triaxi_win_try {
