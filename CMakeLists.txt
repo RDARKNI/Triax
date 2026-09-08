@@ -159,6 +159,14 @@ if(BUILD_TESTING)
                 # compound literal is never evaluated at runtime; MSVC's
                 # diagnostics pass just doesn't seem to know that yet.
                 /wd4189
+                # C4324 (structure padded due to alignment specifier): fires
+                # on TRIAXI_ExecState because it embeds a jmp_buf, which on
+                # Windows x64 carries its own platform-mandated alignment (to
+                # save XMM register state for SEH-aware setjmp/longjmp) —
+                # the compiler padding the struct to satisfy that is correct,
+                # expected behavior, not a defect. GCC/Clang have no
+                # equivalent warning for this.
+                /wd4324
         )
         target_compile_definitions(triax-warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
     else()
