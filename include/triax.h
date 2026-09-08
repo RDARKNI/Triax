@@ -8,7 +8,6 @@
 /// timeouts, parallel execution, output capture, parameterization, and CI-friendly
 /// text, JSON, TAP, and JUnit reporting.
 ///
-/// @attention Windows support is experimental until covered by runtime CI.
 /// @attention On Linux, include this header before system headers or compile
 /// with `_DEFAULT_SOURCE` or `_GNU_SOURCE` enabled so required libc extensions
 /// are visible.

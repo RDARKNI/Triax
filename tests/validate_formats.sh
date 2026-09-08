@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Validates that a triax-based binary's JSON, TAP, and JUnit XML output are
-# well-formed, by feeding each through a real parser for that format rather
-# than hand-rolling one. A nonzero exit from the binary under test is
-# expected and ignored — only output *shape* is checked here, not outcome
-# counts (triaxi_validate, in triax_selfverify.h, is what checks outcomes).
+# well-formed. JSON and XML are fed through real parsers, while TAP is
+# structurally validated against the subset emitted by Triax. A nonzero exit
+# from the binary under test is expected and ignored — only output shape is
+# checked here, not outcome correctness.
 #
 # Since every test here is wrapped in triaxi_validate, a normal (outer) run
 # reports almost entirely "passed" outcomes at the top level — not much
@@ -102,14 +102,87 @@ echo "== TAP =="
 # anywhere), with the "N..M" plan line either leading or trailing (triax
 # emits it trailing).
 if ! awk '
-  /^#/ || /^[[:space:]]*$/ { next }
-  /^[0-9]+\.\.[0-9]+$/ { plan++; next }
-  /^(not )?ok[ \t]/ { tests++; next }
-  { print "malformed TAP line " NR ": " $0; bad=1 }
+  BEGIN {
+    plan_count = 0
+    tests = 0
+    expected_num = 1
+    plan_start = -1
+    plan_end = -1
+  }
+
+  /^[[:space:]]*$/ { next }
+  /^#/ { next }
+
+  /^[0-9]+\.\.[0-9]+([[:space:]]*#.*)?$/ {
+    if (++plan_count > 1) {
+      print "multiple TAP plan lines"
+      bad = 1
+      next
+    }
+
+    line = $0
+    sub(/[[:space:]]*#.*/, "", line)
+    split(line, p, /\.\./)
+
+    plan_start = p[1] + 0
+    plan_end   = p[2] + 0
+
+    if (plan_start != 1) {
+      print "plan must start at 1, got " plan_start
+      bad = 1
+    }
+
+    if (plan_end < plan_start) {
+      print "invalid TAP plan: " plan_start ".." plan_end
+      bad = 1
+    }
+
+    next
+  }
+
+  /^(not )?ok[[:space:]]+[0-9]+[[:space:]]+-[[:space:]].+$/ {
+    line = $0
+    sub(/^(not )?ok[[:space:]]+/, "", line)
+
+    split(line, f, /[[:space:]]+/)
+    num = f[1] + 0
+
+    if (num != expected_num) {
+      print "expected test number " expected_num ", got " num
+      bad = 1
+    }
+
+    expected_num++
+    tests++
+    next
+  }
+
+  {
+    print "malformed TAP line " NR ": " $0
+    bad = 1
+  }
+
   END {
-    if (bad) exit 1
-    if (plan != 1) { print "expected exactly one plan line, found " plan+0; exit 1 }
-    if (tests < 1) { print "no ok/not ok lines found"; exit 1 }
+    if (plan_count != 1) {
+      print "expected exactly one plan line, found " plan_count
+      bad = 1
+    }
+
+    if (tests < 1) {
+      print "no ok/not ok lines found"
+      bad = 1
+    }
+
+    if (plan_count == 1) {
+      expected_tests = plan_end - plan_start + 1
+      if (tests != expected_tests) {
+        print "plan says " expected_tests " tests, but found " tests
+        bad = 1
+      }
+    }
+
+    if (bad)
+      exit 1
   }
 ' "$WORKDIR/out.tap"; then
   echo "FAIL: $WORKDIR/out.tap is not valid TAP" >&2
