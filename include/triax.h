@@ -1472,6 +1472,15 @@ typedef struct TRIAXI_Shared {
 TRIAXI_EXTERN_C_BEG
 
 TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
+# if !TRIAXI_GNU_COMPAT
+#  pragma warning(push)
+// C4324 (structure padded due to alignment specifier): TRIAXI_ExecState
+// embeds a jmp_buf, which on Windows x64 carries its own platform-mandated
+// alignment (to save XMM register state for SEH-aware setjmp/longjmp) — the
+// compiler padding the struct to satisfy that is correct, expected
+// behavior, not a defect. GCC/Clang have no equivalent warning for this.
+#  pragma warning(disable : 4324)
+# endif
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState {       // per-test execution state
   TRIAXI_File             log, out, err; // files where logs, stdout, stderr are written to
   bool                    isolated, in_test, debug_break;
@@ -1487,6 +1496,9 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState {       // per-test execution stat
     char             storage[65536L];
   };
 } TRIAXI_exec;
+# if !TRIAXI_GNU_COMPAT
+#  pragma warning(pop)
+# endif
 
 TRIAXI_EXTERN_C_END
 # if TRIAXI_GNU_COMPAT

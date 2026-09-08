@@ -60,12 +60,18 @@ if(BUILD_TESTING)
         -Wconversion
         -Wsign-conversion
         -Wnull-dereference
-        # -Wdouble-promotion excluded: triax.h's own internals rely on
-        # idiomatic implicit float->double promotion (e.g. its long
-        # double-based floating-point assertion comparisons) that this
-        # warning flags on principle, not because anything is actually
-        # wrong — unlike every other warning here, it doesn't distinguish
-        # deliberate promotion from an accidental one.
+        # -Wdouble-promotion excluded: every triax_expect_eq/assert_eq-style
+        # comparison of plain float values (the single most ordinary thing a
+        # test can do — e.g. "triax_expect_eq(1.0f, 2.0f)") dispatches
+        # through triax.h's generic long-double-based comparison
+        # implementation, implicitly promoting the float arguments at the
+        # call site. That's inherent to the dispatch design, not a handful
+        # of internal lines — it fires throughout the test suite (any file
+        # comparing floats via Triax's own API), and would fire in any
+        # downstream consumer's tests the same way, so there's no local
+        # suppression boundary to draw. Confirmed by actually re-enabling
+        # this flag: 27 errors across tests/c/assertions.c and
+        # tests/cpp/fmt.cpp alone, none of them inside triax.h itself.
         -Wformat=2
         -Wimplicit-fallthrough
         -Wswitch-enum
@@ -159,14 +165,6 @@ if(BUILD_TESTING)
                 # compound literal is never evaluated at runtime; MSVC's
                 # diagnostics pass just doesn't seem to know that yet.
                 /wd4189
-                # C4324 (structure padded due to alignment specifier): fires
-                # on TRIAXI_ExecState because it embeds a jmp_buf, which on
-                # Windows x64 carries its own platform-mandated alignment (to
-                # save XMM register state for SEH-aware setjmp/longjmp) —
-                # the compiler padding the struct to satisfy that is correct,
-                # expected behavior, not a defect. GCC/Clang have no
-                # equivalent warning for this.
-                /wd4324
         )
         target_compile_definitions(triax-warnings INTERFACE _CRT_SECURE_NO_WARNINGS)
     else()
