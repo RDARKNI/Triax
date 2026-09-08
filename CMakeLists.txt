@@ -43,21 +43,12 @@ if(BUILD_TESTING)
     # Strict warning flags are applied only to Triax's own test/fixture
     # executables. They are deliberately not part of Triax::Triax's public
     # interface, so consumers do not inherit the project's warning policy.
+    # include/ is deliberately left on the ordinary (non-SYSTEM) include path
+    # here — triax.h's own internals go through the exact same strict
+    # warnings as the test code that includes it, since a warning inside the
+    # library itself is exactly the kind of thing strict-warnings CI exists
+    # to catch, not something to exempt.
     add_library(triax-warnings INTERFACE)
-
-    # Anything linking triax-warnings also links Triax::Triax, which already
-    # puts include/ on its (non-SYSTEM) interface include path. Re-declaring
-    # it here as SYSTEM, specifically for these strict-warnings consumers,
-    # makes the compiler treat triax.h's own internals as a system header for
-    # warning purposes — so strict-warning CI measures the test code actually
-    # being written against Triax, not triax.h's own implementation details
-    # (e.g. its internal float-promotion patterns tripping -Wdouble-promotion).
-    # Consumers that don't link triax-warnings are unaffected.
-    target_include_directories(
-        triax-warnings
-        SYSTEM INTERFACE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
 
     set(TRIAX_STRICT_WARNINGS_GNU_COMMON
         -Wall
@@ -69,7 +60,12 @@ if(BUILD_TESTING)
         -Wconversion
         -Wsign-conversion
         -Wnull-dereference
-        -Wdouble-promotion
+        # -Wdouble-promotion excluded: triax.h's own internals rely on
+        # idiomatic implicit float->double promotion (e.g. its long
+        # double-based floating-point assertion comparisons) that this
+        # warning flags on principle, not because anything is actually
+        # wrong — unlike every other warning here, it doesn't distinguish
+        # deliberate promotion from an accidental one.
         -Wformat=2
         -Wimplicit-fallthrough
         -Wswitch-enum

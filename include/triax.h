@@ -883,7 +883,7 @@ static inline void triaxi_flush_all(void) {
 static inline int64_t triaxi_now_ms(void) {
 # ifndef _WIN32
   struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts)) { triaxi_fatal(); };
+  if (clock_gettime(CLOCK_MONOTONIC, &ts)) { triaxi_fatal(); }
   return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 # else
   static LARGE_INTEGER freq;
@@ -1542,7 +1542,7 @@ static inline void triaxi_file_write(TRIAXI_File f, const void* buf, size_t len)
 
 static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
   size_t len = triaxi_file_size(f);
-  if (!len) { return TRIAXI_T(Triax_Str){"", 0}; };
+  if (!len) { return TRIAXI_T(Triax_Str){"", 0}; }
   char* str = (char*)triaxi_allocate(len);
   triaxi_file_read_into(f, str, len);
   return TRIAXI_T(Triax_Str){str, len};
@@ -2962,7 +2962,7 @@ static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
   s += triaxi_catstr(s, tmp.str, tmp.len);
   s += triaxi_catlit(s, "XXXXXX"), *s = '\0';
   if ((res = mkstemp(buf)) < 0) { triaxi_fatal(); }
-  if (fcntl(res, F_SETFD, FD_CLOEXEC) == -1) { triaxi_fatal(); };
+  if (fcntl(res, F_SETFD, FD_CLOEXEC) == -1) { triaxi_fatal(); }
   if (unlink(buf)) { triaxi_fatal(); }
   return res;
 #  else
@@ -2994,9 +2994,9 @@ static inline void triaxi_tmpfiles_create(size_t njobs) {
 
 static inline Triax_Str triaxi_file_read_buf(TRIAXI_File f, TRIAXI_DynBuf* buf) {
   size_t len = triaxi_file_size(f);
-  if (!len) { return TRIAXI_T(Triax_Str){TRIAXI_ZINIT}; };
+  if (!len) { return TRIAXI_T(Triax_Str){TRIAXI_ZINIT}; }
   if (len > buf->cap) {
-    if (!(buf->str = (char*)realloc(buf->str, buf->cap = len))) { triaxi_fatal(); };
+    if (!(buf->str = (char*)realloc(buf->str, buf->cap = len))) { triaxi_fatal(); }
   }
   triaxi_file_read_into(f, buf->str, len);
   return TRIAXI_T(Triax_Str){buf->str, len};
@@ -4777,7 +4777,7 @@ static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  conf
     } else if (path == TRIAX_OUTPATH_STDOUT) {
       if (++nstdout > 1) {
         triaxi_config_error_f("More than one output stream set to stdout. %s", TRIAX_HELP);
-      };
+      }
       *outfiles[i] = saved->out.file;
     } else {
       if (!(triaxi_mkdirp(path), *outfiles[i] = fopen(path, "w"))) {
@@ -4951,7 +4951,7 @@ static inline void triaxi_config_validate(const Triax_RunConfig* config) {
 static inline void          triaxi_windows_childentry(const Triax_RunConfig* config);
 static inline TRIAXI_RunCtx triaxi_runner_init(const Triax_RunConfig* config) {
   TRIAXI_exec.debug_break = config->debug_break || config->debug;
-  if (!TRIAXI_global.tests.beg) { triaxi_sections_init(); };
+  if (!TRIAXI_global.tests.beg) { triaxi_sections_init(); }
   triaxi_windows_childentry(config);
   triaxi_config_validate(config);
   if (!triaxi_global_initialised()) {
