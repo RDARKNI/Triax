@@ -26,7 +26,7 @@ jobs:
           New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
           New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
       - name: Configure
-        run: cmake -S . -B build -DTRIAX_BUILD_EXAMPLES=ON
+        run: cmake -S . -B build -DTRIAX_BUILD_EXAMPLES=ON -DBUILD_TESTING=ON
       - name: Build
         # RelWithDebInfo instead of Release: on multi-config generators (MSVC
         # on windows-latest) this produces real PDBs without materially
@@ -79,6 +79,72 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  clang-sanitizers:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+      - name: Configure (Clang, ASan+UBSan)
+        # -O1 -g (not the default no-optimization build): sanitizer overhead
+        # at -O0 was enough to make timing-sensitive tests (e.g. combo_fixture's
+        # concurrency checks) flaky, since TRIAX_ENABLE_SANITIZERS sets no
+        # optimization level and this project never sets CMAKE_BUILD_TYPE.
+        run: cmake -S . -B build -DTRIAX_ENABLE_SANITIZERS=ON -DBUILD_TESTING=ON -DCMAKE_C_FLAGS="-O1 -g" -DCMAKE_CXX_FLAGS="-O1 -g"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  # MSVC only implements AddressSanitizer (no UBSan/TSan/MSan, unlike the
+  # Clang job above) — see TRIAX_ENABLE_SANITIZERS's MSVC branch in
+  # CMakeLists.txt. Untested territory the first time this runs: Triax
+  # deliberately exercises crashes, process isolation, and longjmp, none of
+  # which MSVC ASan has been checked against here before, so this carries
+  # the same crash-dump safety net as the native Windows job in case
+  # something unexpected turns up.
+  msvc-sanitizers:
+    runs-on: windows-latest
+    env:
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (MSVC, ASan)
+        run: cmake -S . -B build -DTRIAX_ENABLE_SANITIZERS=ON -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config RelWithDebInfo
+      - name: Test
+        id: test
+        continue-on-error: true
+        run: ctest --test-dir build -C RelWithDebInfo --output-on-failure
+      - name: Upload crash dumps
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-sanitizers-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if tests failed
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        run: exit 1
 
   # Manual-only regression guard for the Release-optimization-sensitive
   # section-walk bug fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer
@@ -160,24 +226,3 @@ jobs:
       - name: Fail if stress run failed
         if: ${{ always() && steps.stress.outcome == 'failure' }}
         run: exit 1
-
-  clang-sanitizers:
-    runs-on: ubuntu-latest
-    env:
-      CC: clang
-      CXX: clang++
-      ASAN_OPTIONS: detect_leaks=0
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Clang
-        run: sudo apt-get update && sudo apt-get install -y clang
-      - name: Configure (Clang, sanitizers)
-        # -O1 -g (not the default no-optimization build): sanitizer overhead
-        # at -O0 was enough to make timing-sensitive tests (e.g. combo_fixture's
-        # concurrency checks) flaky, since TRIAX_ENABLE_SANITIZERS sets no
-        # optimization level and this project never sets CMAKE_BUILD_TYPE.
-        run: cmake -S . -B build -DTRIAX_ENABLE_SANITIZERS=ON -DBUILD_TESTING=ON -DCMAKE_C_FLAGS="-O1 -g" -DCMAKE_CXX_FLAGS="-O1 -g"
-      - name: Build
-        run: cmake --build build
-      - name: Test
-        run: ctest --test-dir build --output-on-failure

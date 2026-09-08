@@ -8,14 +8,6 @@ project(
     LANGUAGES C CXX
 )
 
-# PROJECT_IS_TOP_LEVEL was only added in CMake 3.21. Keep compatibility with
-# the declared CMake 3.16 minimum.
-if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
-    set(TRIAX_IS_TOP_LEVEL ON)
-else()
-    set(TRIAX_IS_TOP_LEVEL OFF)
-endif()
-
 add_library(triax INTERFACE)
 add_library(Triax::Triax ALIAS triax)
 
@@ -33,11 +25,12 @@ target_compile_features(
         cxx_std_11
 )
 
-if(TRIAX_IS_TOP_LEVEL)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     option(TRIAX_BUILD_EXAMPLES "Build Triax examples" ON)
 else()
     option(TRIAX_BUILD_EXAMPLES "Build Triax examples" OFF)
 endif()
+
 
 if(TRIAX_BUILD_EXAMPLES)
     add_executable(triax-example-c examples/basic.c)
@@ -45,7 +38,6 @@ if(TRIAX_BUILD_EXAMPLES)
 endif()
 
 include(CTest)
-
 if(BUILD_TESTING)
 
     # Strict warning flags are applied only to Triax's own test/fixture
@@ -67,7 +59,7 @@ if(BUILD_TESTING)
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
 
-    set(TRIAX_STRICT_WARNINGS_COMMON
+    set(TRIAX_STRICT_WARNINGS_GNU_COMMON
         -Wall
         -Wextra
         -Wpedantic
@@ -84,27 +76,34 @@ if(BUILD_TESTING)
         -Wundef
     )
 
-    set(TRIAX_STRICT_WARNINGS_C
-        ${TRIAX_STRICT_WARNINGS_COMMON}
+    set(TRIAX_STRICT_WARNINGS_GNU_C
+        ${TRIAX_STRICT_WARNINGS_GNU_COMMON}
         -Wstrict-prototypes
         -Wmissing-prototypes
     )
 
-    set(TRIAX_STRICT_WARNINGS_CXX
-        ${TRIAX_STRICT_WARNINGS_COMMON}
+    set(TRIAX_STRICT_WARNINGS_GNU_CXX
+        ${TRIAX_STRICT_WARNINGS_GNU_COMMON}
         -Wmissing-declarations
         -Wnon-virtual-dtor
         -Woverloaded-virtual
     )
-
-    # GCC-only diagnostics. These either use GCC-specific spellings/levels or
-    # are intentionally kept out of the common GCC/Clang set.
-    set(TRIAX_STRICT_WARNINGS_GCC
+    set(TRIAX_STRICT_WARNINGS_GCC_EXTRA
         -Wcast-align=strict
         -Warray-bounds=2
         -Wformat-overflow=2
         -Wformat-truncation=2
         -Wstringop-overflow=4
+    )
+    # -Wcomma deliberately excluded: this codebase uses the comma operator
+    # pervasively as a sequencing idiom (e.g. "errno = e, triaxi_fatal();",
+    # throughout triax.h and these tests) — -Wcomma can't distinguish that
+    # from accidental misuse and would fire on essentially every such call
+    # site, which is the established style here, not a bug.
+    set(TRIAX_STRICT_WARNINGS_CLANG_EXTRA
+        -Wextra-semi
+        -Wextra-semi-stmt
+        -Wnewline-eof
     )
 
     # MSVC warning set based on the commonly used cppbestpractices list.
@@ -170,15 +169,15 @@ if(BUILD_TESTING)
         target_compile_options(
             triax-warnings
             INTERFACE
-                $<$<COMPILE_LANGUAGE:C>:${TRIAX_STRICT_WARNINGS_C}>
-                $<$<COMPILE_LANGUAGE:CXX>:${TRIAX_STRICT_WARNINGS_CXX}>
+                $<$<COMPILE_LANGUAGE:C>:${TRIAX_STRICT_WARNINGS_GNU_C}>
+                $<$<COMPILE_LANGUAGE:CXX>:${TRIAX_STRICT_WARNINGS_GNU_CXX}>
         )
 
         if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
             target_compile_options(
                 triax-warnings
                 INTERFACE
-                    $<$<COMPILE_LANGUAGE:C>:${TRIAX_STRICT_WARNINGS_GCC}>
+                    $<$<COMPILE_LANGUAGE:C>:${TRIAX_STRICT_WARNINGS_GCC_EXTRA}>
             )
         endif()
 
@@ -186,7 +185,23 @@ if(BUILD_TESTING)
             target_compile_options(
                 triax-warnings
                 INTERFACE
-                    $<$<COMPILE_LANGUAGE:CXX>:${TRIAX_STRICT_WARNINGS_GCC}>
+                    $<$<COMPILE_LANGUAGE:CXX>:${TRIAX_STRICT_WARNINGS_GCC_EXTRA}>
+            )
+        endif()
+
+        if(CMAKE_C_COMPILER_ID MATCHES "^(Clang|AppleClang)$")
+            target_compile_options(
+                triax-warnings
+                INTERFACE
+                    $<$<COMPILE_LANGUAGE:C>:${TRIAX_STRICT_WARNINGS_CLANG_EXTRA}>
+            )
+        endif()
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "^(Clang|AppleClang)$")
+            target_compile_options(
+                triax-warnings
+                INTERFACE
+                    $<$<COMPILE_LANGUAGE:CXX>:${TRIAX_STRICT_WARNINGS_CLANG_EXTRA}>
             )
         endif()
     endif()
@@ -217,11 +232,16 @@ if(BUILD_TESTING)
 
     if(TRIAX_ENABLE_SANITIZERS)
         if(MSVC)
-            message(
-                WARNING
-                "TRIAX_ENABLE_SANITIZERS is not configured for the MSVC-style "
-                "compiler frontend; ignoring it"
-            )
+            # /fsanitize=address is well supported by MSVC, including at
+            # optimized levels; UBSan/TSan/MSan are not implemented on MSVC
+            # as of this writing (Microsoft documents them as possible future
+            # work, not available today), so only ASan is enabled here.
+            # -fno-omit-frame-pointer and a separate link-time sanitize flag
+            # are GCC/Clang-specific: MSVC needs neither — the ASan runtime is
+            # linked automatically once the compile option is set.
+            add_library(triax-sanitizers INTERFACE)
+
+            target_compile_options(triax-sanitizers INTERFACE /fsanitize=address)
         elseif(
             CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$"
             AND CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$"
@@ -243,8 +263,8 @@ if(BUILD_TESTING)
         else()
             message(
                 WARNING
-                "TRIAX_ENABLE_SANITIZERS is only configured for GCC/Clang-style "
-                "compiler frontends; ignoring it"
+                "TRIAX_ENABLE_SANITIZERS is only configured for MSVC or "
+                "GCC/Clang-style compiler frontends; ignoring it"
             )
         endif()
     endif()
@@ -361,7 +381,6 @@ if(BUILD_TESTING)
     #
     # Skipped entirely if the required tools aren't found, rather than
     # failing the whole test suite over missing development tooling.
-
     find_program(TRIAX_BASH_EXECUTABLE bash)
     find_program(TRIAX_XMLLINT_EXECUTABLE xmllint)
     find_program(TRIAX_PYTHON3_EXECUTABLE python3)
