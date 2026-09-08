@@ -146,21 +146,22 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
-  # Manual-only regression guard for the Release-optimization-sensitive
-  # section-walk bug fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer
-  # walked past a single object's declared bounds miscompiled under MSVC
-  # /Ob2 (full inlining) but not /Ob1, producing a deterministic SegFault
-  # reading exactly at the end of the module's own mapped image. The
-  # ordinary `native` job runs RelWithDebInfo (/Ob1, for PDBs) and would
-  # never have caught this; this job builds actual Release instead, keeping
-  # /Zi + /DEBUG (via plain CMAKE_*_FLAGS, not a permanent CMakeLists.txt
-  # change) so a regression here is still fully diagnosable, and repeats
+  # Regression guard for the Release-optimization-sensitive section-walk bug
+  # fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer walked past a
+  # single object's declared bounds miscompiled under MSVC /Ob2 (full
+  # inlining) but not /Ob1, producing a deterministic SegFault reading
+  # exactly at the end of the module's own mapped image. The ordinary
+  # `native` job runs RelWithDebInfo (/Ob1, for PDBs) and would never have
+  # caught this; this job builds actual Release instead, keeping /Zi +
+  # /DEBUG (via plain CMAKE_*_FLAGS, not a permanent CMakeLists.txt change)
+  # so a regression here is still fully diagnosable, and repeats
   # triax-cpp/triax-cpp-parallel many times in case a future regression is
-  # as intermittent as this one briefly appeared to be. Not run on every
-  # push: 30 repeats of the C++ suite is too expensive to pay on every
-  # commit for what is now just insurance, not an active investigation.
+  # as intermittent as this one briefly appeared to be. Runs on every push:
+  # this is a public repo (GitHub-hosted Windows runners are free here,
+  # unlike the paid-minutes multiplier that applies to private repos), and
+  # the ~1-2 extra minutes is worth it as standing insurance in exactly the
+  # area that produced a multi-session debugging effort once already.
   windows-release-stress:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
