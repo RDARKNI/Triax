@@ -180,6 +180,14 @@ jobs:
       ASAN_OPTIONS: detect_leaks=0
     steps:
       - uses: actions/checkout@v4
+      # MSVC's /fsanitize=address binaries dynamically link against
+      # clang_rt.asan_dynamic-x86_64.dll, which lives in the VC toolset's own
+      # bin directory. cmake's Visual Studio generator finds cl.exe/link.exe
+      # for the Build step without this, but the plain shell running Test
+      # afterwards has no reason to have that directory on PATH, so the built
+      # test binaries fail to even start. This sets up the full dev-cmd
+      # environment (PATH included) for every later step in this job.
+      - uses: ilammy/msvc-dev-cmd@v1
       - name: Configure crash dump collection
         shell: pwsh
         run: |
