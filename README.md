@@ -117,14 +117,11 @@ For multi-translation-unit test projects, define `TRIAX_MULTI_TU` in all test tr
 
 The implementation contains dedicated paths for POSIX and Win32 and registration support for GNU/Clang, Apple/Mach-O, and MSVC-style toolchains.
 
-Current release confidence:
+Current release confidence, all covered by CI (native builds, warnings-as-errors, and sanitizers where noted):
 
-- Linux + GCC: tested locally;
-- Linux + Clang: tested locally;
-- C11 and C++17: tested locally;
-- AddressSanitizer + UndefinedBehaviorSanitizer: tested locally;
-- macOS + AppleClang: tested locally (arm64);
-- Windows: implementation is present, but remains **experimental until runtime CI has completed successfully**.
+- Linux (x86_64 and ARM64) + GCC and Clang, including AddressSanitizer + UndefinedBehaviorSanitizer;
+- macOS (Apple Silicon and Intel) + AppleClang;
+- Windows (x86_64) + MSVC, including AddressSanitizer and dedicated Release-configuration coverage.
 
 ## Design trade-offs
 
