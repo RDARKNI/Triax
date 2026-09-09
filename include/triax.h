@@ -1116,9 +1116,6 @@ private:
 
 struct TRIAXI_TestConfigBuilder : TRIAXI_AttributeBuilderBase<TRIAXI_TestConfigBuilder> {
   constexpr TRIAXI_TestConfigBuilder() {}
-  constexpr TRIAXI_TestConfigBuilder make(Triax_Attributes a) const {
-    return TRIAXI_TestConfigBuilder{a, params};
-  }
   template <typename T, size_t N>
   constexpr TRIAXI_TestConfigBuilder parameterize(const T (&arr)[N]) const {
     return TRIAXI_TestConfigBuilder{_, {sizeof(T), N, arr}};
@@ -1129,7 +1126,11 @@ struct TRIAXI_TestConfigBuilder : TRIAXI_AttributeBuilderBase<TRIAXI_TestConfigB
   }
 
 private:
-  TRIAXI_Params params{};
+  friend struct TRIAXI_AttributeBuilderBase<TRIAXI_TestConfigBuilder>;
+  TRIAXI_Params                      params{};
+  constexpr TRIAXI_TestConfigBuilder make(Triax_Attributes a) const {
+    return TRIAXI_TestConfigBuilder{a, params};
+  }
   constexpr TRIAXI_TestConfigBuilder(Triax_Attributes a, TRIAXI_Params p)
       : TRIAXI_AttributeBuilderBase{a}, params{p} {}
 };
