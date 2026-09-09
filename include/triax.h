@@ -1066,54 +1066,51 @@ typedef struct TRIAXI_SuiteReg {
 #  define TRIAXI_Suite_attrs_init(...) {0, __VA_ARGS__}
 #  define TRIAXI_as_params(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
 #   else
-#  define TRIAXI_Test_attrs_init(...) TRIAXI_TestConfigBuilder{TRIAXI_TestConfigBuilder{} __VA_ARGS__}
+#  define TRIAXI_Test_attrs_init(...) TRIAXI_TestConfigBuilder{} __VA_ARGS__
 #  define TRIAXI_Suite_attrs_init(...) TRIAXI_AttributeBuilder{} __VA_ARGS__
 #  define TRIAXI_as_params(arr) arr /* clang-format on */
 template <typename D>
 struct TRIAXI_AttributeBuilderBase {
   constexpr D skip(bool v = true) const {
-    return static_cast<const D*>(this)->make(
-        {0, v, _.verbosity, _.isolation, _.timeout_ms, _.tags, _.init, _.fini});
+    return make({0, v, _.verbosity, _.isolation, _.timeout_ms, _.tags, _.init, _.fini});
   }
   constexpr D verbosity(Triax_Verbosity v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, v, _.isolation, _.timeout_ms, _.tags, _.init, _.fini});
+    return make({0, _.skip, v, _.isolation, _.timeout_ms, _.tags, _.init, _.fini});
   }
   constexpr D isolation(Triax_Isolation v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, _.verbosity, v, _.timeout_ms, _.tags, _.init, _.fini});
+    return make({0, _.skip, _.verbosity, v, _.timeout_ms, _.tags, _.init, _.fini});
   }
   constexpr D timeout_ms(uint32_t v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, _.verbosity, _.isolation, v, _.tags, _.init, _.fini});
+    return make({0, _.skip, _.verbosity, _.isolation, v, _.tags, _.init, _.fini});
   }
   constexpr D tags(const char* v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, _.verbosity, _.isolation, _.timeout_ms, v, _.init, _.fini});
+    return make({0, _.skip, _.verbosity, _.isolation, _.timeout_ms, v, _.init, _.fini});
   }
   constexpr D init(Triax_Fixture v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, _.verbosity, _.isolation, _.timeout_ms, _.tags, v, _.fini});
+    return make({0, _.skip, _.verbosity, _.isolation, _.timeout_ms, _.tags, v, _.fini});
   }
   constexpr D fini(Triax_Fixture v) const {
-    return static_cast<const D*>(this)->make(
-        {0, _.skip, _.verbosity, _.isolation, _.timeout_ms, _.tags, _.init, v});
+    return make({0, _.skip, _.verbosity, _.isolation, _.timeout_ms, _.tags, _.init, v});
   }
 
 protected:
   Triax_Attributes _{};
   constexpr TRIAXI_AttributeBuilderBase() {}
   constexpr TRIAXI_AttributeBuilderBase(Triax_Attributes a) : _{a} {}
+
+private:
+  constexpr D make(Triax_Attributes a) const { return static_cast<const D*>(this)->make(a); }
 };
 
 struct TRIAXI_AttributeBuilder : TRIAXI_AttributeBuilderBase<TRIAXI_AttributeBuilder> {
   constexpr TRIAXI_AttributeBuilder() {}
-  constexpr TRIAXI_AttributeBuilder make(Triax_Attributes a) const {
-    return TRIAXI_AttributeBuilder{a};
-  }
   constexpr operator Triax_Attributes() const { return _; }
 
 private:
+  friend struct TRIAXI_AttributeBuilderBase<TRIAXI_AttributeBuilder>;
+  constexpr TRIAXI_AttributeBuilder make(Triax_Attributes a) const {
+    return TRIAXI_AttributeBuilder{a};
+  }
   constexpr TRIAXI_AttributeBuilder(Triax_Attributes a) : TRIAXI_AttributeBuilderBase{a} {}
 };
 
@@ -1481,8 +1478,8 @@ TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
 // behavior, not a defect. GCC/Clang have no equivalent warning for this.
 #  pragma warning(disable : 4324)
 # endif
-TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState {       // per-test execution state
-  TRIAXI_File             log, out, err; // files where logs, stdout, stderr are written to
+TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
+  TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
   bool                    isolated, in_test, debug_break;
   const void*             param;
   jmp_buf                 jmp;
