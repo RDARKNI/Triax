@@ -120,7 +120,7 @@ The implementation contains dedicated paths for POSIX and Win32 and registration
 Current release confidence, all covered by CI (native builds, warnings-as-errors, and sanitizers where noted):
 
 - Linux (x86_64 and ARM64) + GCC and Clang, including AddressSanitizer + UndefinedBehaviorSanitizer;
-- macOS (Apple Silicon and Intel) + AppleClang;
+- macOS (Apple Silicon) + AppleClang;
 - Windows (x86_64) + MSVC, including AddressSanitizer and dedicated Release-configuration coverage.
 
 ## Design trade-offs

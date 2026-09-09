@@ -6,9 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ubuntu-24.04-arm and macos-13 add architecture coverage (ARM64 Linux,
-  # Intel macOS — macos-latest is Apple Silicon) on top of the three OS
+  # ubuntu-24.04-arm adds ARM64 Linux coverage on top of the three OS
   # families, using only GitHub-hosted runners; no self-hosted machinery.
+  # macos-13 (Intel macOS) was tried too but dropped: GitHub's Intel-macOS
+  # runner pool is short enough on capacity that the job sat queued with no
+  # runner assigned for 5+ hours across multiple pushes — macos-latest
+  # (Apple Silicon) already covers macOS.
   # Not currently expanded further: musl/Alpine would need a container-based
   # job (a different shape from this matrix, since it's not a runs-on
   # label), and FreeBSD/other BSDs have no GitHub-hosted runners at all
@@ -19,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-13, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
