@@ -364,9 +364,22 @@ static inline void triaxi_validate_run_ex(const char* filter, TRIAXI_ValidateOut
   remove(json_path);
   triax_assert_nonnull(json);
 
-  triax_expect_true(triaxi_validate_json_has_outcome(json, outcome));
+  int has_outcome = triaxi_validate_json_has_outcome(json, outcome);
+  if (!has_outcome) {
+    fprintf(stderr,
+            "triaxi_validate_run(\"%s\"): expected outcome \"%s\" not found in child JSON:\n%s\n",
+            filter, outcome, json);
+  }
+  triax_expect_true(has_outcome);
+
   if (expected_reason) {
-    triax_expect_true(triaxi_validate_json_has_reason(json, expected_reason));
+    int has_reason = triaxi_validate_json_has_reason(json, expected_reason);
+    if (!has_reason) {
+      fprintf(stderr,
+              "triaxi_validate_run(\"%s\"): expected reason \"%s\" not found in child JSON:\n%s\n",
+              filter, expected_reason, json);
+    }
+    triax_expect_true(has_reason);
   }
 
   free(json);
