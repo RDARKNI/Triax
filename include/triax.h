@@ -3607,20 +3607,21 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
     if (res->val == TRIAXI_AR_FAIL1) {
       r.meta  = TRIAXI_PRINT_META_INDEX;
       r.index = triaxi_print_unpack_cstr(&beg, end);
-    } /* fallthrough */
-  case TRIAXI_AT_exit          : break;
-  case TRIAXI_AT_fault         : break;
-  case TRIAXI_AT_true          : break;
-  case TRIAXI_AT_null          : break;
-  case TRIAXI_AT_eq            : break;
-  case TRIAXI_AT_gt            : break;
-  case TRIAXI_AT_lt            : break;
-  case TRIAXI_AT_floateq_abstol: break;
-  case TRIAXI_AT_floateq_reltol: break;
-  case TRIAXI_AT_streq         : break;
-  case TRIAXI_AT_str_startswith: break;
-  case TRIAXI_AT_str_endswith  : break;
-  case TRIAXI_AT_str_contains  : break;
+    }
+    break;
+  case TRIAXI_AT_exit          :
+  case TRIAXI_AT_fault         :
+  case TRIAXI_AT_true          :
+  case TRIAXI_AT_null          :
+  case TRIAXI_AT_eq            :
+  case TRIAXI_AT_gt            :
+  case TRIAXI_AT_lt            :
+  case TRIAXI_AT_floateq_abstol:
+  case TRIAXI_AT_floateq_reltol:
+  case TRIAXI_AT_streq         :
+  case TRIAXI_AT_str_startswith:
+  case TRIAXI_AT_str_endswith  :
+  case TRIAXI_AT_str_contains  :
   case TRIAXI_AT_check         : break;
   }
   switch (res->code & TRIAXI_ENCODING_MASK) {
