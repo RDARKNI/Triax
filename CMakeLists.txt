@@ -7,7 +7,7 @@ project(
     VERSION 1.0.0
     LANGUAGES C CXX
 )
-
+set(CMAKE_C_STANDARD 23)
 add_library(triax INTERFACE)
 add_library(Triax::Triax ALIAS triax)
 

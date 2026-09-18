@@ -1,0 +1,77 @@
+---
+Standard: Latest
+
+AllowShortRecordOnASingleLine: Always
+ColumnLimit: 100
+BreakBeforeBinaryOperators: All
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always # makes it harder to re
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: true # makes it harder to rewrite
+
+SpaceBeforeParens: Custom
+SpaceBeforeParensOptions:
+  AfterControlStatements: true
+  AfterForeachMacros: true
+  AfterFunctionDeclarationName: false
+  AfterFunctionDefinitionName: false
+  AfterIfMacros: true
+  AfterNot: false
+  AfterOverloadedOperator: false
+  AfterPlacementOperator: false
+  AfterRequiresInClause: true
+  AfterRequiresInExpression: true
+  BeforeNonEmptyParentheses: false
+
+AlignOperands: AlignAfterOperator
+
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+  AlignCaseColons: true
+
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: false
+  AlignCompound: true
+  PadOperators: true
+
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: true
+  AlignFunctionDeclarations: true
+  AlignFunctionPointers: true
+  AcrossComments: true
+
+
+AlignConsecutiveMacros: AcrossEmptyLinesAndComments
+
+InsertBraces: true
+AlignEscapedNewlines: Right
+InsertNewlineAtEOF: true
+IndentPPDirectives: AfterHash
+PPIndentWidth: 1
+DerivePointerAlignment: false
+PointerAlignment: Left
+IndentWidth: 2
+IndentCaseLabels: false
+IndentCaseBlocks: false
+IndentExternBlock: true
+IndentGotoLabels: false
+IndentWrappedFunctionNames: true
+MaxEmptyLinesToKeep: 1
+
+TypenameMacros:
+  - Vec
+  - Dict
+
+AlignAfterOpenBracket: Align
+AlignTrailingComments: Always
+RemoveEmptyLinesInUnwrappedLines: true
+BreakBeforeTernaryOperators: true
+AllowShortEnumsOnASingleLine: true
+BreakTemplateDeclarations: Yes

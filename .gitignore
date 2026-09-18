@@ -3,5 +3,6 @@
 *.obj
 *.exe
 *.out
+internal.c
 .DS_Store
 .vscode/
