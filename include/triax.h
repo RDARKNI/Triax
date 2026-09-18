@@ -3647,7 +3647,7 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
   }
 }
 
-static inline const Triax_Str triaxi_error_name(TRIAXI_Error error) {
+static inline Triax_Str triaxi_error_name(TRIAXI_Error error) {
   switch (error) {
   case TRIAXI_ERROR_NONE                     : return TRIAXI_STRLIT("none");
   case TRIAXI_ERROR_TIMEOUT_WITHOUT_ISOLATION: return TRIAXI_STRLIT("timeout_without_isolation");
