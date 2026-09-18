@@ -61,9 +61,9 @@
 # define TRIAXI_GNU_COMPAT 0L
 #endif
 
-// Registration backend is independent of the runtime platform.
-// clang-cl defines _MSC_VER and uses the MSVC/COFF registration path;
-// MinGW GCC/Clang use GNU section attributes even though _WIN32 is defined.
+// Registration backend is independent of the runtime platform. clang-cl defines _MSC_VER and uses
+// the MSVC/COFF registration path; MinGW GCC/Clang use GNU section attributes even though _WIN32 is
+// defined.
 #if defined(_WIN32) && defined(_MSC_VER)
 # define TRIAXI_REG_MSVC_COFF 1L
 #else
@@ -325,11 +325,11 @@ static inline int triax_run(Triax_RunConfig config);
    "  --list, -l           List registered tests and exit\n"                                       \
    "  --help, -h           Show this help and exit\n"
 
-/// @brief Parses command-line arguments into an @ref Triax_RunConfig. Use the
-/// `--help` flag for a summary of usage or view @ref TRIAX_HELP.
-/// @note
-/// `--help` and `--list` print output and terminate the process with code `0`.
-/// Unrecognised flags print help output and exit the process with code `2`.
+/// @brief Parses command-line arguments into an @ref Triax_RunConfig. Use the `--help` flag for a
+/// summary of usage or view @ref TRIAX_HELP.
+///
+/// @note `--help` and `--list` print output and terminate the process with code `0`. Unrecognised
+/// flags print help output and exit the process with code `2`.
 ///
 /// Usage:
 /// ```c
@@ -341,10 +341,9 @@ static inline int triax_run(Triax_RunConfig config);
 /// ```
 static inline Triax_RunConfig triax_parse_argv(int argc, char* argv[], Triax_RunConfig defaults);
 
-/// @brief Null-terminated help string listing all recognised CLI flags.
-/// Printed by `--help`; may also be embedded in a host program's own usage
-/// output.
-
+/// @brief Null-terminated help string listing all recognised CLI flags. Printed by `--help`; may
+/// also be embedded in a host program's own usage output.
+///
 /// @brief Parses @p argv then immediately runs all matching tests.
 /// Convenience wrapper equivalent to `triax_run(triax_parse_argv(argc, argv,
 /// defaults))`.
@@ -354,10 +353,38 @@ static inline Triax_RunConfig triax_parse_argv(int argc, char* argv[], Triax_Run
 /// @return Same exit codes as @ref triax_run.
 static inline int             triax_run_argv(int argc, char* argv[], Triax_RunConfig defaults);
 
+/// @brief Defines a default `main()` function for a Triax test executable.
+///
+/// Expands to a complete `main()` definition that creates a zero-initialised @ref Triax_RunConfig
+/// and runs all registered tests through @ref triax_run_argv.
+///
+/// Use this macro when no custom runner configuration or application startup logic is required.
+/// Define it exactly once in the test executable.
+///
+/// Usage:
+/// `c
+/// #include "triax.h"
+///
+/// triax_test(math, addition, .skip = false) {
+///     triax_assert_eq(2 + 2, 4);
+/// }
+///
+/// TRIAX_MAIN()
+/// `
+///
+/// For custom runner configuration, define `main()` manually and call @ref triax_run_argv directly
+/// instead.
+# define TRIAX_MAIN()                                                                              \
+   int main(int argc, char** argv) {                                                               \
+     Triax_RunConfig config = {0};                                                                 \
+     return triax_run_argv(argc, argv, config);                                                    \
+   }
+
 #else
 # define triax_run(...)        TRIAXI_WRONGMODULE_ERR(triax_run)
 # define triax_parse_argv(...) TRIAXI_WRONGMODULE_ERR(triax_parse_argv)
 # define triax_run_argv(...)   TRIAXI_WRONGMODULE_ERR(triax_run_argv)
+# define TRIAX_MAIN()          TRIAXI_WRONGMODULE_ERR(TRIAX_MAIN)
 #endif
 
 /// @} // triax_runner
@@ -2227,7 +2254,6 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
     for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
       while (bufs[i].len) {
         size_t to_copy = TRIAXI_MIN(bufs[i].len, (size_t)(end - cur));
-
         memcpy(cur, bufs[i].str, to_copy), cur += to_copy;
         bufs[i].str += to_copy, bufs[i].len -= to_copy;
         if (cur == end) {
@@ -3876,10 +3902,10 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
   char             prebuf[512], postbuf[512];
   char             obuf[512];
   prebuf[0] = '\0', postbuf[0] = '\0';
-  char *                 pre = prebuf, *post = postbuf;
-  Triax_Str              exp = {TRIAXI_ZINIT}, got = {TRIAXI_ZINIT};
-  const char *           op = "", *q1 = "", *q2 = "";
-  static const Triax_Str nullstr = TRIAXI_STRLIT("NULL");
+  char *          pre = prebuf, *post = postbuf;
+  Triax_Str       exp = {TRIAXI_ZINIT}, got = {TRIAXI_ZINIT};
+  const char *    op = "", *q1 = "", *q2 = "";
+  const Triax_Str nullstr = TRIAXI_STRLIT("NULL");
   if ((res->code & TRIAXI_ENCODING_MASK) == TRIAXI_ENCODING_STRING) {
     if (res->code & TRIAXI_ENCODING_NULL_ARG1) {
       pa.args[0] = nullstr;
