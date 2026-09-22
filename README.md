@@ -44,6 +44,30 @@ That is the complete integration.
 
 No CMake configuration, generated files, external runner, or additional library is required.
 
+## Example output
+
+Each invocation reports its suite and test name, outcome, assertion count, and duration. Unexpected crashes and timeouts are contained and reported alongside ordinary failures. For example, a run with color disabled may look like this:
+
+```text
+math::addition
+> PASS: 1/1 assertions passed (0ms)
+
+math::wrong_sum
+> FAIL: 0/1 assertions passed (0ms)
+
+process::unexpected_abort
+> UCRASH: 0/0 assertions passed; crash: Aborted (1ms)
+
+process::hang
+> TIMEOUT: 0/0 assertions passed; exceeded 100ms (101ms)
+
+== FAILED ========================================
+1 Passed | 1 failed | 1 ucrashed | 1 timed out
+Tests: 4 selected / 4 total
+Suites run: 2
+Invocations: 4 run / 4 selected / 4 total
+```
+
 ## Why Triax?
 
 Minimal C test frameworks are easy to embed, but often stop at assertions and test registration. More capable test runners provide isolation, scheduling, crash handling, and machine-readable reports, but usually require additional build dependencies.
@@ -64,6 +88,19 @@ Triax aims to provide those runner features while remaining a single file:
 * text, JSON, TAP, and JUnit XML output.
 
 The name comes from **triaxial testing**: a specimen is placed under controlled conditions, stressed, and its failure behavior is observed. Triax applies the same idea to code.
+
+## How it works
+
+Triax combines a lightweight public API with a process-aware runner:
+
+* **Automatic registration:** Test and suite descriptors are placed in linker sections and discovered by the runner at startup, avoiding a manually maintained test list.
+* **Process isolation:** Isolated tests run in child processes so an unexpected crash, call to `exit()`, or hang does not terminate the complete test run.
+* **Structured result transport:** Child processes return assertion records, execution state, and termination information to the parent, which classifies normal failures, unexpected exits, crashes, exceptions, and timeouts.
+* **Output capture:** Test `stdout` and `stderr` are redirected and retained per invocation, allowing both assertions on captured output and readable failure reports.
+* **Parallel scheduling:** The runner maintains up to `--jobs=N` isolated tests concurrently while preserving complete per-test results and deterministic reporting.
+* **Native platform backends:** POSIX systems use processes, signals, memory mapping, and ELF or Mach-O registration facilities; Windows uses Win32 processes, structured exceptions, shared memory, and COFF registration.
+
+These mechanisms remain internal to `triax.h`; users interact with the same test API on every supported platform.
 
 ## C++ usage
 
