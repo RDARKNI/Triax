@@ -1,5 +1,7 @@
 # Triax
 
+[![CI](https://github.com/RDARKNI/Triax/actions/workflows/ci.yml/badge.svg)](https://github.com/RDARKNI/Triax/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/github/license/RDARKNI/Triax)](LICENSE)
+
 **Triax** is a single-header C/C++ test framework for systems code.
 
 Copy `triax.h` into your project, include it, and compile normally. There is no library to build, no package to install, and no test runner to link separately.

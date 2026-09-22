@@ -505,8 +505,7 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 
 // ── Generic
 // ───────────────────────────────────────────────────────────────────
-/// @brief Passes if @p cond is true; optional printf-style @p ... message on
-/// failure.
+/// @brief Passes if @p cond is true; optional printf-style @p ... message on failure.
 // "" __VA_ARGS__ relies on adjacent string-literal concatenation (not token pasting) so a
 // message-less call still supplies TRIAXI_AT_check's required fmt argument, instead of leaving a
 // dangling trailing comma when the documented-optional message is omitted.
@@ -576,8 +575,7 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 #define triax_assert_leq(a, b) triaxi_A1(gt, 1, #a ", " #b, a, b)
 
 // ── Floating-point
-// ──────────────────────────────────────────────────────────── Absolute
-// tolerance: |exp - act| <= tol
+// ────────────────────────────────────────────────────────── Absolute tolerance: |exp - act| <= tol
 #define triax_expect_floateq_abstol(exp, act, tol)                                                 \
   triaxi_E1(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
 #define triax_assert_floateq_abstol(exp, act, tol)                                                 \
@@ -1877,8 +1875,8 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
       {e2.str, e2_len},
       {zeros, pad},
   };
-  char *const beg = (char*)TRIAXI_exec.storage, *const end = beg + sizeof(TRIAXI_exec.storage),
-              *cur = beg + sizeof(TRIAXI_exec.pkg);
+  char *const beg = (char*)TRIAXI_exec.storage, *const end = beg + sizeof(TRIAXI_exec.storage);
+  char* cur = beg + sizeof(TRIAXI_exec.pkg);
 
   for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
     while (bufs[i].len) {
@@ -1899,9 +1897,6 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
 #endif
 }
 
-/// @brief Marks a function as printf-like so the compiler validates format
-/// strings against variadic arguments at every call site (1-indexed,
-/// counting from the start of the parameter list).
 #if TRIAXI_GNU_COMPAT
 __attribute__((format(printf, 3, 4)))
 #endif
@@ -2187,7 +2182,7 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
   int  index_n = snprintf(index_buf, sizeof(index_buf), "%zu", index);
   if (index_n < 0 || (size_t)index_n >= sizeof(index_buf)) { triaxi_fatal(); }
 
-  /* Include the terminating NUL in the wire representation. */
+  // Include the terminating NUL in the wire representation.
   const size_t index_len = (size_t)index_n + 1;
   const size_t metadata  = index_len + sizeof(size_t);
   const size_t max_data  = (size_t)UINT32_MAX - metadata;
@@ -2717,7 +2712,7 @@ typedef enum TRIAXI_Outcome {
   TRIAXI_OUTCOME_UEXIT,   // unexpected exit while result was expected
   TRIAXI_OUTCOME_UEXCEPT, // unexpected exception while result was expected
   TRIAXI_OUTCOME_TIMEOUT, // timeout
-  TRIAXI_OUTCOME_ERROR,   // framework-detected user/test error
+  TRIAXI_OUTCOME_ERROR    // framework-detected user/test error
 } TRIAXI_Outcome;
 enum { TRIAXI_OUTCOME_COUNT = TRIAXI_OUTCOME_ERROR + 1 };
 
@@ -2805,6 +2800,7 @@ typedef struct TRIAXI_TestSlot {
 # ifdef _WIN32
   WCHAR* environment;
 # endif
+
   // Current invocation state.
 # ifndef _WIN32
   pid_t process;
@@ -2977,16 +2973,15 @@ static inline void triaxi_file_clear_fd(int fd) {
   if (triaxi_lseek(fd, 0, SEEK_SET) < 0) { triaxi_fatal(); }
   if (triaxi_ftruncate(fd, 0)) { triaxi_fatal(); }
 }
-
-# ifndef _WIN32
-#  define triaxi_file_clear triaxi_file_clear_fd
-# else
+# ifdef _WIN32
 static inline void triaxi_file_clear_handle(HANDLE handle) {
   LARGE_INTEGER liDistance = {TRIAXI_ZINIT};
   if (!SetFilePointerEx(handle, liDistance, NULL, FILE_BEGIN)) { triaxi_fatal(); }
   if (!SetEndOfFile(handle)) { triaxi_fatal(); }
 }
 #  define triaxi_file_clear triaxi_file_clear_handle
+# else
+#  define triaxi_file_clear triaxi_file_clear_fd
 # endif
 
 static inline TRIAXI_StdBackup triaxi_stdfds_backup_create(void) {
@@ -3211,8 +3206,6 @@ static inline void triaxi_register_suites(void) {
 
 # pragma region runner_process_control
 
-/* POSIX signal/process-control state exists only on POSIX. All Windows
- * compilers (MSVC, clang-cl, MinGW GCC/Clang) use the Win32 process path. */
 # ifndef _WIN32
 
 static struct {
@@ -3254,20 +3247,17 @@ static inline void triaxi_sighandler_termination(int sig) {
   }
   sigaction(sig, &TRIAXI_signals.sas.dfl, NULL);
   kill(getpid(), sig);
-  // only problem with this: children forked during non-isolated test runs
-  // remain
+  // only problem with this: children forked during non-isolated test runs remain
 }
 static volatile sig_atomic_t TRIAXI_crash_signal;
 
 static inline void           triaxi_sighandler_crash(int sig) {
   TRIAXI_crash_signal = sig;
-  // exceptions out of a signal handler are UB
-  longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED); /*sig must be in TRIAXI_signals_crashes*/
+  longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED); // sig must be in TRIAXI_signals_crashes
 }
 
 # else
-/* Isolation child: makes abort() exit with a detectable crash code
-   on all compilers, including MinGW and pre-2015 MSVC. */
+// Isolation child: makes abort() exit with a detectable crash code on all compilers
 static inline void triaxi_sighandler_abort(int sig) {
   (void)sig, RaiseException(TRIAX_FAULT_ABORT, EXCEPTION_NONCONTINUABLE, 0, NULL);
 }
@@ -3345,12 +3335,9 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
   WCHAR shm_var[64];
   int   n = swprintf(shm_var, triaxi_countof(shm_var), L"TRIAX_SHM=%llu",
                      (unsigned long long)(uintptr_t)TRIAXI_global.shared_mapping);
-
   if (n < 0 || (size_t)n >= triaxi_countof(shm_var)) { triaxi_fatal(); }
 
-  const size_t shm_len = (size_t)n + 1;
-
-  for (size_t i = 0; i < njobs; ++i) {
+  for (size_t shm_len = (size_t)n + 1, i = 0; i < njobs; ++i) {
     WCHAR slot_var[64];
 
     n = swprintf(slot_var, triaxi_countof(slot_var), L"TRIAX_SLOT=%llu", (unsigned long long)i);
@@ -3374,13 +3361,11 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
     memcpy(out, base, shm_at * sizeof(*out)), out     += shm_at;
     memcpy(out, shm_var, shm_len * sizeof(*out)), out += shm_len;
 
-    /* Between TRIAX_SHM and TRIAX_SLOT. */
-    size_t middle = slot_at - shm_at;
+    size_t middle = slot_at - shm_at; // Between TRIAX_SHM and TRIAX_SLOT
     memcpy(out, base + shm_at, middle * sizeof(*out)), out += middle;
     memcpy(out, slot_var, slot_len * sizeof(*out)), out    += slot_len;
 
-    /* After TRIAX_SLOT. */
-    size_t tail = parent_chars - slot_at;
+    size_t tail = parent_chars - slot_at; // After TRIAX_SLOT
     memcpy(out, base + slot_at, tail * sizeof(*out)), out += tail;
     *out                               = L'\0';
     TRIAXI_global.slots[i].environment = env;
@@ -3808,7 +3793,7 @@ static inline bool triaxi_xml_valid(const char* str, size_t len) {
     if (!n) { return false; }
     unsigned char c = s[i];
     if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') { return false; }
-    /* U+FFFE / U+FFFF are not XML 1.0 characters. */
+    // U+FFFE / U+FFFF are not XML 1.0 characters
     if (n == 3 && c == 0xEF && s[i + 1] == 0xBF && (s[i + 2] == 0xBE || s[i + 2] == 0xBF)) {
       return false;
     }
@@ -4080,6 +4065,7 @@ static inline const char* triaxi_state_phase_phrase(TRIAXI_State state) {
   case TRIAXI_STATE_SKIPPED  : return triaxi_state_phase_name(state); // "setup"/"cleanup"/NULL
   }
 }
+
 static inline void triaxi_print_test_beg_text(const TRIAXI_RunCtx*         run,
                                               const TRIAXI_TestInvocation* inv) {
   if (!run->out.streams.text) { return; }
@@ -4397,12 +4383,12 @@ static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
     case TRIAXI_EXIT_NONE   : triaxi_unreachable();
     case TRIAXI_EXIT_TIMEOUT: triaxi_fputlit("\"timeout\"", out); break;
     case TRIAXI_EXIT_EXIT   : fprintf(out, "\"exit\", \"code\": %u", r->exit.code); break;
-    case TRIAXI_EXIT_FAULT  : {
+    case TRIAXI_EXIT_FAULT:
       triaxi_fputlit("\"fault\", \"reason\": \"", out);
       triaxi_print_json_escape(out, triaxi_fault_tostr(r->exit.reason));
       putc('"', out);
       break;
-    }
+
     case TRIAXI_EXIT_EXCEPTION: triaxi_fputlit("\"exception\"", out); break;
     case TRIAXI_EXIT_ERROR    : {
       triaxi_fputlit("\"user_error\", \"reason\": \"", out);
@@ -5095,12 +5081,11 @@ static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run
   r.state             = h->shared->state;
   r.duration_ms       = h->shared->duration_ms;
   if (r.state == TRIAXI_STATE_SKIPPED) { return r; }
-  r.outcome                        = TRIAXI_OUTCOME_PASSED;
-  Triax_Str log                    = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
-  r.capt.out                       = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out),
-  r.capt.err                       = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
-  const TRIAXI_TestInvocation* inv = &h->invocation;
-  const TRIAXI_AssertHdr*      hdr = NULL;
+  r.outcome                   = TRIAXI_OUTCOME_PASSED;
+  Triax_Str log               = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
+  r.capt.out                  = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out),
+  r.capt.err                  = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
+  const TRIAXI_AssertHdr* hdr = NULL;
   if (!log.str) { goto state_hdr; }
   for (const char *b = log.str, *e = b + log.len;;) {
     if ((size_t)(e - b) < sizeof(*hdr)) { goto state_hdr; }
@@ -5115,7 +5100,7 @@ static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run
       if ((size_t)(e - b) < args_padded) { goto state_res; }
       b += args_padded;
     }
-    triaxi_print_assert(run, inv, &r, hdr, res);
+    triaxi_print_assert(run, &h->invocation, &r, hdr, res);
     if (res) { ++r.nfails, r.outcome = TRIAXI_OUTCOME_FAIL; }
   }
 state_hdr:
@@ -5205,7 +5190,7 @@ state_res: // expected res
   case TRIAXI_STATE_INIT :
   case TRIAXI_STATE_FINI :
   case TRIAXI_STATE_CLEANUP:
-    triaxi_print_assert(run, inv, &r, hdr, NULL); // Last assertion passed.
+    triaxi_print_assert(run, &h->invocation, &r, hdr, NULL); // Last assertion passed.
     goto state_hdr;
   case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
   case TRIAXI_STATE_IN_ASSERT: break;
@@ -5248,7 +5233,7 @@ state_res: // expected res
     break;
   case TRIAXI_EXIT_EXCEPTION: d->val = TRIAXI_AR_UEXCEPT, r.outcome = TRIAXI_OUTCOME_UEXCEPT; break;
   }
-  triaxi_print_assert(run, inv, &r, hdr, d);
+  triaxi_print_assert(run, &h->invocation, &r, hdr, d);
   if (d) { ++r.nfails; }
   return r;
 }
@@ -5302,14 +5287,10 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
     triaxi_fatal();
   }
   const TRIAXI_Test* const t           = TRIAXI_global.tests.beg + launch->test_idx;
-
   Triax_Attributes         suite_attrs = {TRIAXI_ZINIT};
-
   if (launch->suite_idx != TRIAXI_INDEX_NONE) {
     const TRIAXI_SuiteReg *beg = TRIAXI_global.suiteregs.beg, *end = TRIAXI_global.suiteregs.end;
-
     if (launch->suite_idx >= (uint32_t)(end - beg)) { triaxi_fatal(); }
-
     const TRIAXI_SuiteReg* sr = beg + launch->suite_idx;
     if (!sr->name || strcmp(sr->name, t->suitename)) { triaxi_fatal(); }
 
@@ -5612,10 +5593,8 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
       if (WaitForSingleObject(expired->process, INFINITE) != WAIT_OBJECT_0) { triaxi_fatal(); }
       triaxi_fix_testres_timeout(expired, elapsed);
 
-      /*
-       * Release the root and wait until all job descendants are gone before
-       * interpreting the capture files.
-       */
+      // Release the root and wait until all job descendants are gone before interpreting the
+      // capture files.
       triaxi_windows_slot_process_finish(expired, true);
       return triaxi_collect_active_at(run, rres, active, inflight, expired_i, nreported);
     }
