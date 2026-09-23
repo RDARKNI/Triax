@@ -1871,7 +1871,14 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
     TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
     return 1;
   }
-  /* Slow path: batch buffers into storage and write in chunks. */
+  /*
+   * Slow path: batch buffers into storage and write in chunks. The packet
+   * header lives in TRIAXI_exec.pkg's fixed fields, not the chunked args
+   * storage below, so it needs its own write before the payload —
+   * triaxi_test_interpret's reader expects every result record to start
+   * with these header bytes.
+   */
+  triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg));
   Triax_Str bufs[] = {
       {(const char*)&e1_len, sizeof(e1_len)},
       {e1.str, e1_len},
@@ -2241,6 +2248,13 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
     memcpy(p, zeros, pad), p              += pad;
     triaxi_log_write(&TRIAXI_exec.pkg, (size_t)(p - (char*)&TRIAXI_exec.pkg));
   } else {
+    /*
+     * Slow path: the packet header lives in TRIAXI_exec.pkg's fixed fields,
+     * not the chunked args storage below, so it needs its own write before
+     * the payload — triaxi_test_interpret's reader expects every result
+     * record to start with these header bytes.
+     */
+    triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg));
     Triax_Str bufs[] = {{index_buf, index_len},
                         {(const char*)&e1_len, sizeof(e1_len)},
                         {e1.str, e1_len},

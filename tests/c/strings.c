@@ -93,3 +93,31 @@ triaxi_validate(strings, nendswith_pass, TRIAXI_VALIDATE_PASSED) {
 triaxi_validate(strings, nendswith_fail, TRIAXI_VALIDATE_FAILED) {
   triax_expect_str_nendswith(triax_str("hello world", 11), triax_str("world", 5));
 }
+
+// Regression coverage for a bug where the Windows-only "doesn't fit inline,
+// batch through TRIAXI_exec.storage" slow path in
+// triaxi_strn_compare_impl_send/triaxi_AF_arreq_SS never sent the
+// TRIAXI_AssertRes header, corrupting the log stream triaxi_test_interpret
+// reads back. Triggered once the two compared strings' combined length
+// doesn't fit in TRIAXI_exec.pkg.args inline (~64KB) — 80000 bytes each
+// clears that with margin. No-op on POSIX, which sends arbitrarily large
+// data via writev() without ever going through this path; exercised for
+// real on Windows CI.
+triaxi_validate(strings, streq_fail_huge, TRIAXI_VALIDATE_FAILED) {
+  static char a[80000], b[80000];
+  memset(a, 'a', sizeof(a) - 1), a[sizeof(a) - 1] = '\0';
+  memset(b, 'b', sizeof(b) - 1), b[sizeof(b) - 1] = '\0';
+  triax_expect_streq(a, b);
+}
+triaxi_validate(strings, arreq_fail_huge, TRIAXI_VALIDATE_FAILED) {
+  // A 1-element array of (huge) C strings, not a huge array of char: element
+  // type const char* is what makes triax_expect_arreq dispatch element
+  // comparisons to triaxi_AF_arreq_SS (via triaxi_AF_arreq_ss) instead of
+  // comparing 80000 individual char elements.
+  static char        a[80000], b[80000];
+  memset(a, 'a', sizeof(a) - 1), a[sizeof(a) - 1] = '\0';
+  memset(b, 'b', sizeof(b) - 1), b[sizeof(b) - 1] = '\0';
+  const char* arr1[1] = {a};
+  const char* arr2[1] = {b};
+  triax_expect_arreq(arr1, arr2);
+}
