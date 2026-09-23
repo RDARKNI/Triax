@@ -1518,7 +1518,7 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   union {
     TRIAXI_AssertRes pkg;
     struct {
-      char co[sizeof(TRIAXI_AssertRes)];
+      char pkg_space[sizeof(TRIAXI_AssertRes)];
       char storage[65536L - sizeof(TRIAXI_AssertRes)];
     };
   };
