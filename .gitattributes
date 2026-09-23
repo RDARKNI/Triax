@@ -1,0 +1,33 @@
+# Automatically distinguish text files from binary files.
+* text=auto
+
+# C and C++ sources
+*.c     text eol=lf
+*.h     text eol=lf
+*.cpp   text eol=lf
+*.hpp   text eol=lf
+
+# Build and configuration files
+CMakeLists.txt text eol=lf
+*.cmake        text eol=lf
+*.yml          text eol=lf
+*.yaml         text eol=lf
+*.json         text eol=lf
+
+# Scripts
+*.sh    text eol=lf
+
+# Documentation and miscellaneous text
+*.md    text eol=lf
+*.txt   text eol=lf
+
+# Binary files
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.pdf   binary
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
