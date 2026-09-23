@@ -1517,7 +1517,10 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   } allocations;
   union {
     TRIAXI_AssertRes pkg;
-    char             storage[65536L];
+    struct {
+      char co[sizeof(TRIAXI_AssertRes)];
+      char storage[65536L - sizeof(TRIAXI_AssertRes)];
+    };
   };
 } TRIAXI_exec;
 #if !TRIAXI_GNU_COMPAT
@@ -1858,7 +1861,7 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
   TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
   return 1;
 #else
-  if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage) - sizeof(TRIAXI_exec.pkg)) {
+  if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage)) {
     char* p = TRIAXI_exec.pkg.args;
     memcpy(p, &e1_len, sizeof(e1_len)), p += sizeof(e1_len);
     memcpy(p, e1.str, e1_len), p          += e1_len;
@@ -1875,8 +1878,7 @@ static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Tria
       {e2.str, e2_len},
       {zeros, pad},
   };
-  char *const beg = (char*)TRIAXI_exec.storage, *const end = beg + sizeof(TRIAXI_exec.storage);
-  char* cur = beg + sizeof(TRIAXI_exec.pkg);
+  char *beg = (char*)TRIAXI_exec.storage, *end = beg + sizeof(TRIAXI_exec.storage), *cur = beg;
 
   for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
     while (bufs[i].len) {
@@ -1906,7 +1908,7 @@ static inline bool triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
 
   va_list ap;
   va_start(ap, fmt);
-  size_t cap = sizeof(TRIAXI_exec.storage) - sizeof(TRIAXI_exec.pkg) - 7;
+  size_t cap = sizeof(TRIAXI_exec.storage) - 7;
   int    n   = vsnprintf(TRIAXI_exec.pkg.args, cap, fmt, ap);
   va_end(ap);
   if (n < 0) {
@@ -2230,7 +2232,7 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
     }
   }
 #else
-  if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage) - sizeof(TRIAXI_exec.pkg)) {
+  if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage)) {
     char* p = TRIAXI_exec.pkg.args;
     memcpy(p, index_buf, index_len), p    += index_len;
     memcpy(p, &e1_len, sizeof(e1_len)), p += sizeof(e1_len);
@@ -2239,13 +2241,12 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
     memcpy(p, zeros, pad), p              += pad;
     triaxi_log_write(&TRIAXI_exec.pkg, (size_t)(p - (char*)&TRIAXI_exec.pkg));
   } else {
-    Triax_Str   bufs[] = {{index_buf, index_len},
-                          {(const char*)&e1_len, sizeof(e1_len)},
-                          {e1.str, e1_len},
-                          {e2.str, e2_len},
-                          {zeros, pad}};
-    char *const beg = TRIAXI_exec.storage, *end = beg + sizeof(TRIAXI_exec.storage);
-    char*       cur = beg + sizeof(TRIAXI_exec.pkg);
+    Triax_Str bufs[] = {{index_buf, index_len},
+                        {(const char*)&e1_len, sizeof(e1_len)},
+                        {e1.str, e1_len},
+                        {e2.str, e2_len},
+                        {zeros, pad}};
+    char *    beg = TRIAXI_exec.storage, *end = beg + sizeof(TRIAXI_exec.storage), *cur = beg;
     for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
       while (bufs[i].len) {
         size_t to_copy = TRIAXI_MIN(bufs[i].len, (size_t)(end - cur));
@@ -2572,7 +2573,7 @@ private:
     friend TRIAXI_TestStream;
 
   protected:
-    static constexpr size_t cap{sizeof(TRIAXI_exec.storage) - sizeof(TRIAXI_exec.pkg) - 7};
+    static constexpr size_t cap{sizeof(TRIAXI_exec.storage) - 7};
     size_t                  len{0};
     bool                    trunc{false};
     virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
