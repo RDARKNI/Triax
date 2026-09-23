@@ -1504,6 +1504,7 @@ TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
 // compiler padding the struct to satisfy that is correct, expected
 // behavior, not a defect. GCC/Clang have no equivalent warning for this.
 # pragma warning(disable : 4324)
+# pragma warning(disable : 4201)
 #endif
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
