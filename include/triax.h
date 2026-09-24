@@ -384,7 +384,7 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 # define triax_run(...)        TRIAXI_WRONGMODULE_ERR(triax_run)
 # define triax_parse_argv(...) TRIAXI_WRONGMODULE_ERR(triax_parse_argv)
 # define triax_run_argv(...)   TRIAXI_WRONGMODULE_ERR(triax_run_argv)
-# define TRIAX_MAIN()          TRIAXI_WRONGMODULE_ERR(TRIAX_MAIN)
+# define TRIAX_MAIN()          TRIAXI_WRONGMODULE_ERR(TRIAX_MAIN);
 #endif
 
 /// @} // triax_runner
@@ -1504,6 +1504,11 @@ TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
 // compiler padding the struct to satisfy that is correct, expected
 // behavior, not a defect. GCC/Clang have no equivalent warning for this.
 # pragma warning(disable : 4324)
+// C4201 (nonstandard extension used: nameless struct/union): the anonymous
+// struct nested in the pkg/storage union below (aliasing TRIAXI_AssertRes's
+// header size so TRIAXI_exec.storage lines up exactly with pkg's flexible
+// array member) is standard C11 (6.7.2.1p13), not an extension — MSVC still
+// flags it regardless of conformance mode. GCC/Clang don't warn on this.
 # pragma warning(disable : 4201)
 #endif
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
