@@ -82,8 +82,16 @@ triaxi_validate_opts(exits, timeout_timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
   triaxi_test_sleep_ms(10000);
 }
 
+// A plain `for (;;) {}` has no observable side effects, which let MSVC infer
+// its callers (timeout_in_assert/timeout_before_assert/etc.) as noreturn and
+// unreachable past the call — confirmed by disassembling a real CI build:
+// those bodies compiled down to a bare `int3` instead of looping, which is
+// what the intermittent "ucrashed"/breakpoint failures actually were (not a
+// timeout-classification race). The volatile read below is a genuine side
+// effect, so the loop can no longer be assumed to do nothing.
 static inline int spin_forever(void) {
-  for (;;) {}
+  volatile int keep_going = 1;
+  while (keep_going) {}
   return 0;
 }
 triax_suite(timeout, .isolation = TRIAX_ISOLATION_ON);
