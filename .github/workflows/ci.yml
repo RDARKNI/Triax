@@ -223,6 +223,75 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
+  # Manual-only diagnostic for the intermittent timeout::timeout_before_assert
+  # (and sibling) failures seen in msvc-sanitizers: that job occasionally
+  # reports those tests as "ucrashed"/breakpoint-fault instead of "timeout".
+  # Root cause isn't established yet — this collects evidence rather than
+  # changing the test, which would only hide the failure without explaining
+  # it. Deliberately identical setup to msvc-sanitizers (same ASan config,
+  # same RelWithDebInfo build, same unmodified 10ms timeout/empty-loop test)
+  # so a reproduction here is directly comparable to a real CI failure.
+  msvc-sanitizers-timeout-repro:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    env:
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (MSVC, ASan)
+        run: cmake -S . -B build -DTRIAX_ENABLE_SANITIZERS=ON -DBUILD_TESTING=ON
+      - name: Build
+        run: cmake --build build --config RelWithDebInfo
+      # Assembly listing for exits.c alone (not the whole binary), using the
+      # same include paths/defines the real target gets, so we can check
+      # whether MSVC compiled timeout_before_assert's spin_forever() as a
+      # genuine infinite loop rather than something that could trap.
+      - name: Disassemble exits.c
+        run: |
+          cl.exe /nologo /c /std:c11 /MD /fsanitize=address /Zi `
+            /I include /I tests `
+            /FAs /Fa"exits.asm" /Fo"exits.obj" `
+            tests/c/exits.c
+      - name: Repeat triax-c until failure
+        id: test
+        continue-on-error: true
+        run: |
+          ctest --test-dir build -C RelWithDebInfo -R "^triax-c$" `
+            --repeat until-fail:30 --output-on-failure
+      - name: Upload assembly listing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-sanitizers-timeout-repro-asm
+          path: exits.asm
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Upload crash dumps, binaries, and symbols
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-sanitizers-timeout-repro-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+            build/**/*.exe
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if reproduced
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        run: exit 1
+
   # Always-on regression coverage for the Release-optimization-sensitive
   # section-walk bug fixed in TRIAXI_SECTION_INIT_MSVC (triax.h): a pointer
   # walked past a single object's declared bounds miscompiled under MSVC
