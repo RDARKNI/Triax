@@ -2906,7 +2906,7 @@ typedef struct TRIAXI_TestSlot {
   TRIAXI_Shared* shared;
   TRIAXI_File    log, out, err;
 # if TRIAXI_PLATFORM_WINDOWS
-  WCHAR* environment;
+  WCHAR* environment; // todo
 # endif
 
   // Current invocation state.
@@ -5091,15 +5091,15 @@ static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
 }
 static PVOID TRIAXI_veh_handle;
 #   define triaxi_crash_handlers_impl(_h)                                                          \
-    do {                                                                                           \
-      if (TRIAXI_veh_handle) {                                                                     \
-        RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                         \
-        TRIAXI_veh_handle = NULL;                                                                  \
-      } else {                                                                                     \
-        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                      \
-        if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                                \
-      }                                                                                            \
-    } while (0)
+     do {                                                                                          \
+       if (TRIAXI_veh_handle) {                                                                    \
+         RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                        \
+         TRIAXI_veh_handle = NULL;                                                                 \
+       } else {                                                                                    \
+         TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                     \
+         if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                               \
+       }                                                                                           \
+     } while (0)
 #   define triaxi_win_try
 #   define triaxi_win_except(...) if (0)
 #  endif
@@ -5132,6 +5132,11 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   TRIAXI_exec.shared->exit.code   = 0;
   int64_t                     t0  = triaxi_now_ms();
   volatile TRIAXI_ExecOutcome res = TRIAXI_EXEC_RETURNED;
+  // Not a platform dispatch (hence not POSIX-first like the genuine
+  // three-way splits elsewhere in this file): MSVC specifically needs a
+  // DWORD because GetExceptionCode() returns one. POSIX, MinGW, and bare
+  // metal all just need a plain int, so this is a narrow special case
+  // against a shared default, not three branches worth naming individually.
 # if TRIAXI_PLATFORM_WINDOWS && TRIAXI_MSVC_COMPAT
   volatile DWORD fault = 0;
 # else
