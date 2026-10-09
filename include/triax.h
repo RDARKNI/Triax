@@ -1531,7 +1531,7 @@ typedef struct TRIAXI_Exit {
   };
 } TRIAXI_Exit;
 
-#ifdef _WIN32
+#if TRIAXI_PLATFORM_WINDOWS
 # define TRIAXI_INDEX_NONE UINT32_MAX
 typedef struct TRIAXI_WinLaunch {
   TRIAXI_File true_stderr, log, out, err;
@@ -1543,7 +1543,7 @@ typedef struct TRIAXI_Shared {
   triaxi_alignas(64) TRIAXI_State state;
   uint32_t    duration_ms;
   TRIAXI_Exit exit;
-#ifdef _WIN32
+#if TRIAXI_PLATFORM_WINDOWS
   TRIAXI_WinLaunch launch;
 #endif
 } TRIAXI_Shared;
@@ -2895,7 +2895,7 @@ typedef struct TRIAXI_TestSlot {
   // Persistent slot resources.
   TRIAXI_Shared* shared;
   TRIAXI_File    log, out, err;
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
   WCHAR* environment;
 # endif
 
@@ -2930,7 +2930,7 @@ static struct {
   TRIAXI_Shared*  shared;
   struct { TRIAXI_DynBuf log, out, err; } sbufs; // reusable buffers
   struct { FILE *suite_buf, *test_buf; } junit;
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
   void   (*old_sigabrt)(int);
   HANDLE shared_mapping;
   WCHAR  executable_path[32768];
@@ -3056,7 +3056,7 @@ static inline void triaxi_tmpfiles_create(size_t njobs) {
     h->log             = triaxi_tmpfile_create("triax_log");
     h->out             = triaxi_tmpfile_create("triax_out");
     h->err             = triaxi_tmpfile_create("triax_err");
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
     h->shared->launch.log = h->log;
     h->shared->launch.out = h->out;
     h->shared->launch.err = h->err;
@@ -3103,7 +3103,7 @@ static inline TRIAXI_StdBackup triaxi_stdfds_backup_create(void) {
   if (!(r.err.file = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
   TRIAXI_true_stderr = triaxi_file_from_stream(r.err.file);
   if (!TRIAXI_true_stderr) { triaxi_fatal(); }
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
   if (!SetHandleInformation(TRIAXI_true_stderr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
     triaxi_fatal();
   }
@@ -3158,7 +3158,7 @@ static inline void triaxi_stdfds_redirect(TRIAXI_TestSlot* h) {
 static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
   if (triaxi_dup2(triaxi_fileno(saved->out.file), 1) < 0) { triaxi_fatal(); }
   if (triaxi_dup2(triaxi_fileno(saved->err.file), 2) < 0) { triaxi_fatal(); }
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
   intptr_t out = _get_osfhandle(1), err = _get_osfhandle(2);
   if (out == -1 || out == -2) { triaxi_fatal(); }
   if (err == -1 || err == -2) { triaxi_fatal(); }
@@ -3395,7 +3395,7 @@ static inline void triaxi_signals_init(void) {
 # endif
 }
 
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
 
 /*
  * Environment blocks are sorted case-insensitively by variable name.
@@ -4914,7 +4914,7 @@ static inline TRIAXI_Settings triaxi_settings_resolve(const Triax_Attributes* at
 }
 static inline TRIAXI_RunCtx triaxi_run_ctx_make(const Triax_RunConfig* config) {
   const TRIAXI_StdBackup saved = triaxi_stdfds_backup_create(); // needs to be here
-# ifdef _WIN32
+# if TRIAXI_PLATFORM_WINDOWS
   for (size_t i = 0; i < TRIAXI_global.max_prev_slots; ++i) {
     TRIAXI_global.shared[i].launch.true_stderr = TRIAXI_true_stderr;
   }
