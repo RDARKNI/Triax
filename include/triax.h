@@ -86,7 +86,14 @@
 # define TRIAXI_PLATFORM_WINDOWS 0L
 #endif
 
-#if defined(__unix__) || defined(__unix) || defined(unix) || defined(__APPLE__) || defined(__linux__)
+// __CYGWIN__ listed explicitly, not left as an incidental side effect of
+// __unix__ already matching there: Cygwin's libc is a genuine, independent
+// POSIX implementation (not a wrapper over MSVCRT/UCRT), so the Windows
+// branch's MSVCRT-specific symbols (_dup, _fdopen, _fileno, _isatty,
+// _chsize_s — see triaxi_dup etc. below) don't exist under it at all. POSIX
+// is Cygwin's only option here, not a preference call.
+#if defined(__CYGWIN__) || defined(__unix__) || defined(__unix) || defined(unix)                   \
+    || defined(__APPLE__) || defined(__linux__)
 # define TRIAXI_PLATFORM_POSIX 1L
 #else
 # define TRIAXI_PLATFORM_POSIX 0L
@@ -5078,7 +5085,7 @@ static PVOID TRIAXI_veh_handle;
         RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                         \
         TRIAXI_veh_handle = NULL;                                                                  \
       } else {                                                                                     \
-        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                       \
+        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                      \
         if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                                \
       }                                                                                            \
     } while (0)
@@ -5144,7 +5151,8 @@ which is exactly what this line does by design.
   case TRIAXI_EXEC_SKIPPED  : res = TRIAXI_EXEC_SKIPPED; break;
   case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
   case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
-  case TRIAXI_EXEC_CRASHED  : res = TRIAXI_EXEC_CRASHED;
+  case TRIAXI_EXEC_CRASHED:
+    res = TRIAXI_EXEC_CRASHED;
     /*
      * Only reached via longjmp out of a signal/VEH handler — POSIX's
      * sigaction path and MinGW's AddVectoredExceptionHandler path (see
