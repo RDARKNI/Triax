@@ -78,6 +78,36 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
+  # triax.h has a dedicated registration path for MinGW specifically because
+  # it uses GNU section attributes even under _WIN32 (unlike MSVC's COFF-based
+  # registration) — but nothing before this job ever built or ran that path;
+  # the native matrix above only covers MSVC on Windows. msys2/setup-msys2
+  # gives a real, isolated MinGW-w64 GCC toolchain rather than relying on
+  # whatever (if anything) happens to already be on windows-latest's PATH.
+  mingw:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DBUILD_TESTING=ON \
+            -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   # Compiler-policy testing (does our source satisfy our warning policy?)
   # deliberately lives here, not in the native matrix above: native answers
   # "does Triax work on each platform", this answers "is each compiler
