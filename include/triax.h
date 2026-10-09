@@ -36,30 +36,12 @@
 #else
 # define TRIAXI_MSVC 0L
 #endif
-
-#if defined(__clang__)
-# define TRIAXI_CLANG (__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__)
-#else
-# define TRIAXI_CLANG 0L
-#endif
-
-#if defined(__GNUC__) && !defined(__clang__)
-# define TRIAXI_GCC (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-#else
-# define TRIAXI_GCC 0L
-#endif
-
-#ifdef _MSC_VER
-# define TRIAXI_MSVC_COMPAT 1L
-#else
-# define TRIAXI_MSVC_COMPAT 0L
-#endif
-
-#ifdef __GNUC__
-# define TRIAXI_GNU_COMPAT 1L
-#else
-# define TRIAXI_GNU_COMPAT 0L
-#endif
+// TRIAXI_CLANG/TRIAXI_GCC/TRIAXI_MSVC_COMPAT/TRIAXI_GNU_COMPAT (plain compiler-
+// family detection) and TRIAXI_REG_* (registration backend) are defined
+// further down, right before their first real use — nothing before that
+// point needs them, and keeping them out of the way here leaves the public
+// API declarations below easier to actually find. TRIAXI_MSVC itself stays
+// here because the version checks just below need it immediately.
 
 // Platform backend: exactly one of these may apply. Windows/POSIX are
 // auto-detected, as before; TRIAX_NO_OS (bare metal/freestanding) is the one
@@ -104,26 +86,6 @@
      "triax.h: exactly one of Windows, POSIX, or TRIAX_NO_OS (bare metal) must apply — unrecognised or conflicting platform signals"
 #endif
 
-// Registration backend is independent of the runtime platform. clang-cl defines _MSC_VER and uses
-// the MSVC/COFF registration path; MinGW GCC/Clang use GNU section attributes even though _WIN32 is
-// defined.
-#if defined(_WIN32) && defined(_MSC_VER)
-# define TRIAXI_REG_MSVC_COFF 1L
-#else
-# define TRIAXI_REG_MSVC_COFF 0L
-#endif
-
-#if defined(__APPLE__)
-# define TRIAXI_REG_MACHO 1L
-#else
-# define TRIAXI_REG_MACHO 0L
-#endif
-
-#if !TRIAXI_REG_MSVC_COFF && !TRIAXI_REG_MACHO && (defined(__GNUC__) || defined(__clang__))
-# define TRIAXI_REG_GNU_SECTION 1L
-#else
-# define TRIAXI_REG_GNU_SECTION 0L
-#endif
 // NOLINTBEGIN(performance-enum-size)
 
 // ── Common API ──────────────────────────────────────────────────────────────
@@ -807,6 +769,54 @@ typedef uint32_t Triax_Fault;
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+
+// Compiler-family detection (plain TRIAXI_MSVC is defined much earlier,
+// alongside the version checks that need it immediately) and registration
+// backend (independent of runtime platform — clang-cl defines _MSC_VER and
+// uses the MSVC/COFF path; MinGW GCC/Clang use GNU section attributes even
+// though _WIN32 is defined). Nothing before this point in the file needs
+// any of these.
+#if defined(__clang__)
+# define TRIAXI_CLANG (__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__)
+#else
+# define TRIAXI_CLANG 0L
+#endif
+
+#if defined(__GNUC__) && !defined(__clang__)
+# define TRIAXI_GCC (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#else
+# define TRIAXI_GCC 0L
+#endif
+
+#ifdef _MSC_VER
+# define TRIAXI_MSVC_COMPAT 1L
+#else
+# define TRIAXI_MSVC_COMPAT 0L
+#endif
+
+#ifdef __GNUC__
+# define TRIAXI_GNU_COMPAT 1L
+#else
+# define TRIAXI_GNU_COMPAT 0L
+#endif
+
+#if defined(_WIN32) && defined(_MSC_VER)
+# define TRIAXI_REG_MSVC_COFF 1L
+#else
+# define TRIAXI_REG_MSVC_COFF 0L
+#endif
+
+#if defined(__APPLE__)
+# define TRIAXI_REG_MACHO 1L
+#else
+# define TRIAXI_REG_MACHO 0L
+#endif
+
+#if !TRIAXI_REG_MSVC_COFF && !TRIAXI_REG_MACHO && (defined(__GNUC__) || defined(__clang__))
+# define TRIAXI_REG_GNU_SECTION 1L
+#else
+# define TRIAXI_REG_GNU_SECTION 0L
+#endif
 
 #define TRIAXI_DO_PRAGMA(a)     _Pragma(#a)
 #if TRIAXI_GNU_COMPAT
