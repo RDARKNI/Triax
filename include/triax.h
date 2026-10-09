@@ -1714,15 +1714,25 @@ static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t
                  (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg), (cr), (uint32_t)__LINE__, (lit))
 
 static inline void triaxi_debug_break(void) {
-#ifdef _WIN32
+#if TRIAXI_PLATFORM_WINDOWS
+  // Windows always gets the canonical Win32 API, even under clang-cl: it's
+  // the primitive Windows debuggers are built to expect, not just a raw
+  // trap instruction — unlike the other two platforms below, there's no
+  // reason to prefer a compiler intrinsic over it here.
   DebugBreak();
-#elif TRIAXI_CLANG && defined(__has_builtin)
-# if __has_builtin(__builtin_debugtrap)
+#elif TRIAXI_CLANG && defined(__has_builtin) && __has_builtin(__builtin_debugtrap)
+  // A compiler intrinsic, not an OS facility, so equally the best option on
+  // POSIX and bare metal — raise(SIGTRAP) below is only the fallback for
+  // when the intrinsic itself isn't available.
   __builtin_debugtrap();
-# else
+#elif TRIAXI_PLATFORM_POSIX
   raise(SIGTRAP);
-# endif
 #else
+  // Bare metal, no __builtin_debugtrap: best-effort only. raise(SIGTRAP)
+  // does something useful only if the target's libc/runtime actually wires
+  // SIGTRAP to a real trap — unlike the other triaxi_embedded sites in this
+  // file, there's no further porting to do here if it doesn't; --break/
+  // --debug is a developer convenience, not load-bearing correctness.
   raise(SIGTRAP);
 #endif
 }
@@ -5039,7 +5049,7 @@ static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
 # pragma endregion runner_initialisation
 
 # pragma region runner_execution
-# ifndef _WIN32
+# if TRIAXI_PLATFORM_POSIX
 #  define triaxi_crash_handlers_impl(_h)                                                           \
     do {                                                                                           \
       for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.crash); ++i) {                          \
@@ -5048,10 +5058,11 @@ static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
     } while (0)
 #  define triaxi_win_try
 #  define triaxi_win_except(...) if (0)
-# elif TRIAXI_MSVC_COMPAT
-#  define triaxi_crash_handlers_impl(_h)
-#  define triaxi_win_try         __try
-#  define triaxi_win_except(...) __except (__VA_ARGS__)
+# elif TRIAXI_PLATFORM_WINDOWS
+#  if TRIAXI_MSVC_COMPAT
+#   define triaxi_crash_handlers_impl(_h)
+#   define triaxi_win_try         __try
+#   define triaxi_win_except(...) __except (__VA_ARGS__)
 
 static inline int triaxi_windows_exception_filter(DWORD fault) {
   if (!TRIAXI_exec.isolated) { return EXCEPTION_EXECUTE_HANDLER; }
@@ -5059,7 +5070,7 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
   TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
   return EXCEPTION_CONTINUE_SEARCH;
 }
-# else
+#  else
 /*
  * MinGW does not implement MSVC's __try/__except syntax, but
  * AddVectoredExceptionHandler is a plain Win32 API — not compiler-specific
@@ -5079,7 +5090,7 @@ static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
   longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED);
 }
 static PVOID TRIAXI_veh_handle;
-#  define triaxi_crash_handlers_impl(_h)                                                           \
+#   define triaxi_crash_handlers_impl(_h)                                                          \
     do {                                                                                           \
       if (TRIAXI_veh_handle) {                                                                     \
         RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                         \
@@ -5089,6 +5100,21 @@ static PVOID TRIAXI_veh_handle;
         if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                                \
       }                                                                                            \
     } while (0)
+#   define triaxi_win_try
+#   define triaxi_win_except(...) if (0)
+#  endif
+# else
+/*
+ * Bare metal: no portable in-process crash-recovery mechanism exists at
+ * all — a real fault here is typically a vendor-specific HardFault/trap
+ * handler, not something setjmp/longjmp can safely resume from the way
+ * POSIX/Windows allow. Unlike the other triaxi_embedded sites in this
+ * file, there is nothing to port here; this is a settled "no containment
+ * on this target" decision, not a TODO. A crash in a non-isolated test is
+ * simply fatal to the whole run, same as it would be with no test
+ * framework involved at all.
+ */
+#  define triaxi_crash_handlers_impl(_h)
 #  define triaxi_win_try
 #  define triaxi_win_except(...) if (0)
 # endif
