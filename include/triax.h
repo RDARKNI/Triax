@@ -4977,7 +4977,7 @@ static PVOID TRIAXI_veh_handle;
         RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                         \
         TRIAXI_veh_handle = NULL;                                                                  \
       } else {                                                                                     \
-        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                       \
+        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                      \
         if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                                \
       }                                                                                            \
     } while (0)
@@ -5043,7 +5043,8 @@ which is exactly what this line does by design.
   case TRIAXI_EXEC_SKIPPED  : res = TRIAXI_EXEC_SKIPPED; break;
   case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
   case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
-  case TRIAXI_EXEC_CRASHED  : res = TRIAXI_EXEC_CRASHED;
+  case TRIAXI_EXEC_CRASHED:
+    res = TRIAXI_EXEC_CRASHED;
     /*
      * Only reached via longjmp out of a signal/VEH handler — POSIX's
      * sigaction path and MinGW's AddVectoredExceptionHandler path (see
@@ -5319,7 +5320,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   /* Suppress crash dialogs and WER in the child. */
   SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
   if (signal(SIGABRT, triaxi_sighandler_abort) == SIG_ERR) { triaxi_fatal(); }
-  setvbuf(stdout, NULL, _IONBF, 0), setvbuf(stderr, NULL, _IONBF, 0);
+  setvbuf(stdout, NULL, _IONBF, 0), setvbuf(stderr, NULL, _IONBF, 0); // TODO should I remove this?
 
   uintmax_t mapping_value = triaxi_parse_u(shm_val);
   if (mapping_value == (uintmax_t)-1 || mapping_value > UINTPTR_MAX) { triaxi_fatal(); }
