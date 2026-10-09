@@ -4952,11 +4952,35 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
   return EXCEPTION_CONTINUE_SEARCH;
 }
 # else
-/* MinGW does not implement MSVC's __try/__except syntax. Isolated tests still
- * get full crash detection from the child-process exit status; a hardware fault
- * in a non-isolated test may terminate the runner, which is already documented.
+/*
+ * MinGW does not implement MSVC's __try/__except syntax, but
+ * AddVectoredExceptionHandler is a plain Win32 API — not compiler-specific
+ * syntax — that lets a GCC-compiled callback intercept any SEH exception
+ * before Windows unwinds/terminates the process. That includes the one
+ * triaxi_sighandler_abort's RaiseException raises for abort() (see
+ * triaxi_process_control_init), which is otherwise unhandled on MinGW and
+ * kills the process even for a non-isolated triax_assert_fault. The callback
+ * longjmp()s straight back to TRIAXI_exec.jmp, mirroring the POSIX
+ * sigaction handler's recovery path (triaxi_sighandler_crash above) rather
+ * than MSVC's __except.
  */
-#  define triaxi_crash_handlers_impl(_h)
+static volatile sig_atomic_t TRIAXI_crash_signal;
+static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
+  if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
+  TRIAXI_crash_signal = (sig_atomic_t)ep->ExceptionRecord->ExceptionCode;
+  longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED);
+}
+static PVOID TRIAXI_veh_handle;
+#  define triaxi_crash_handlers_impl(_h)                                                           \
+    do {                                                                                           \
+      if (TRIAXI_veh_handle) {                                                                     \
+        RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                         \
+        TRIAXI_veh_handle = NULL;                                                                  \
+      } else {                                                                                     \
+        TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                       \
+        if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                                \
+      }                                                                                            \
+    } while (0)
 #  define triaxi_win_try
 #  define triaxi_win_except(...) if (0)
 # endif
@@ -5020,7 +5044,15 @@ which is exactly what this line does by design.
   case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
   case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
   case TRIAXI_EXEC_CRASHED  : res = TRIAXI_EXEC_CRASHED;
-# if !defined(_WIN32) // todo check wingw etc.
+    /*
+     * Only reached via longjmp out of a signal/VEH handler — POSIX's
+     * sigaction path and MinGW's AddVectoredExceptionHandler path (see
+     * triaxi_veh_crash) both recover this way and stash the fault code in
+     * their own TRIAXI_crash_signal. MSVC's __except handler body sets
+     * `fault` directly (via GetExceptionCode(), above) and falls through
+     * normally instead of longjmp-ing, so it never reaches this case at all.
+     */
+# if !TRIAXI_MSVC_COMPAT
     if (TRIAXI_exec.isolated) { triaxi_unreachable(); }
     fault = TRIAXI_crash_signal;
 # endif
