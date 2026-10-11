@@ -15,20 +15,20 @@
 #ifndef TRIAXI_TEST_H
 #define TRIAXI_TEST_H
 
-#ifdef __cplusplus
-# define TRIAXI_C 0L
-# ifdef _MSVC_LANG
-#  define TRIAXI_CPP _MSVC_LANG
-# else
-#  define TRIAXI_CPP __cplusplus
-# endif
+#if defined(_MSVC_LANG)
+# define TRIAXI_CPP _MSVC_LANG
+#elif defined(__cplusplus)
+# define TRIAXI_CPP __cplusplus
 #else
-# ifdef __STDC_VERSION__
-#  define TRIAXI_C __STDC_VERSION__
-# else
-#  define TRIAXI_C 199000L
-# endif
 # define TRIAXI_CPP 0L
+#endif
+
+#if defined(__cplusplus)
+# define TRIAXI_C 0L
+#elif defined(__STDC_VERSION__)
+# define TRIAXI_C __STDC_VERSION__
+#else
+# define TRIAXI_C 199000L
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__)
@@ -36,6 +36,7 @@
 #else
 # define TRIAXI_MSVC 0L
 #endif
+
 // TRIAXI_CLANG/TRIAXI_GCC/TRIAXI_MSVC_COMPAT/TRIAXI_GNU_COMPAT (plain compiler-
 // family detection) and TRIAXI_REG_* (registration backend) are defined
 // further down, right before their first real use — nothing before that
@@ -68,12 +69,6 @@
 # define TRIAXI_PLATFORM_WINDOWS 0L
 #endif
 
-// __CYGWIN__ listed explicitly, not left as an incidental side effect of
-// __unix__ already matching there: Cygwin's libc is a genuine, independent
-// POSIX implementation (not a wrapper over MSVCRT/UCRT), so the Windows
-// branch's MSVCRT-specific symbols (_dup, _fdopen, _fileno, _isatty,
-// _chsize_s — see triaxi_dup etc. below) don't exist under it at all. POSIX
-// is Cygwin's only option here, not a preference call.
 #if defined(__CYGWIN__) || defined(__unix__) || defined(__unix) || defined(unix)                   \
     || defined(__APPLE__) || defined(__linux__)
 # define TRIAXI_PLATFORM_POSIX 1L
@@ -95,13 +90,6 @@
 # endif
 # include <fcntl.h>
 # include <sys/mman.h>
-# ifdef MAP_ANONYMOUS
-#  define TRIAXI_MAP_ANON MAP_ANONYMOUS
-# elif defined(MAP_ANON)
-#  define TRIAXI_MAP_ANON MAP_ANON
-# else
-#  error "triax.h requires anonymous mmap support"
-# endif
 
 # include <sys/stat.h>
 # include <sys/uio.h>
@@ -818,7 +806,7 @@ typedef uint32_t Triax_Fault;
 # define TRIAXI_REG_GNU_SECTION 0L
 #endif
 
-#define TRIAXI_DO_PRAGMA(a)     _Pragma(#a)
+#define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wpragmas"
@@ -4895,6 +4883,16 @@ static inline void triaxi_junit_buffers_init(void) {
   if (!(TRIAXI_global.junit.suite_buf = triaxi_fdopen(su_fd, "w+b"))) { triaxi_fatal(); }
   if (!(TRIAXI_global.junit.test_buf = triaxi_fdopen(te_fd, "w+b"))) { triaxi_fatal(); }
 }
+
+#if TRIAXI_PLATFORM_POSIX
+# ifdef MAP_ANONYMOUS
+#  define TRIAXI_MAP_ANON MAP_ANONYMOUS
+# elif defined(MAP_ANON)
+#  define TRIAXI_MAP_ANON MAP_ANON
+# else
+#  error "triax.h requires anonymous mmap support"
+# endif
+#endif
 
 static inline void triaxi_shared_init(void) {
   enum { size = sizeof(TRIAXI_Shared) * TRIAXI_JOBS_MAX };
