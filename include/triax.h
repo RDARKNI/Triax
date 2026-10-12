@@ -3002,9 +3002,9 @@ static inline TRIAXI_File triaxi_file_from_stream(FILE* f) {
 static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
   TRIAXI_File res;
 # if TRIAXI_PLATFORM_POSIX
-#  if defined(__linux__) && defined(__NR_memfd_create)
-  if ((res = (int)syscall(__NR_memfd_create, base, 1)) >= 0) { return res; }
-#  endif // fallback
+  // #  if defined(__linux__) && defined(__NR_memfd_create)
+  //   if ((res = (int)syscall(__NR_memfd_create, base, 1)) >= 0) { return res; }
+  // #  endif // fallback
   char      buf[4096 + 256], *s = buf;
   Triax_Str tmp = {getenv("TMPDIR")};
   if (!tmp.str || !*tmp.str) { tmp.str = getenv("TMP"); }
