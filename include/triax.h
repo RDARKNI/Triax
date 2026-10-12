@@ -769,31 +769,6 @@ typedef uint32_t Triax_Fault;
 # error "Triax: unsupported section-placement syntax"
 #endif
 
-/* Compiler emission control. */
-#if TRIAXI_SECTION_GNU
-# define TRIAXI_REG_USED __attribute__((used))
-#else
-# define TRIAXI_REG_USED
-#endif
-
-/*
- * Linker retention.
- * These flags describe available strategies, not interchangeable syntax.
- */
-#if TRIAXI_FORMAT_ELF && TRIAXI_HAS_ATTRIBUTE(retain)
-# define TRIAXI_REG_RETAIN           __attribute__((retain))
-# define TRIAXI_RETENTION_ELF_RETAIN 1L
-#else
-# define TRIAXI_REG_RETAIN
-# define TRIAXI_RETENTION_ELF_RETAIN 0L
-#endif
-
-#if TRIAXI_FORMAT_COFF && defined(_MSC_VER)
-# define TRIAXI_RETENTION_MSVC_INCLUDE 1L
-#else
-# define TRIAXI_RETENTION_MSVC_INCLUDE 0L
-#endif
-
 #define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic push
@@ -1214,49 +1189,64 @@ private:
 };
 #endif
 
+#if TRIAXI_CPP
+# define TRIAXI_ALIGNOF(T) alignof(T)
+#else
+# define TRIAXI_ALIGNOF(T) _Alignof(T)
+#endif
+
 #if TRIAXI_CLANG
-# define TRIAXI_NOSANITIZE no_sanitize_address
+# define TRIAXI_NOSANITIZE __attribute__((no_sanitize_address))
 #else
 # define TRIAXI_NOSANITIZE
 #endif
 
+/* COFF: pointer entries and $a/$m/$z boundaries. */
 #if TRIAXI_FORMAT_COFF
 # if TRIAXI_SECTION_DECLSPEC
 #  pragma section("TRXTST$m", read)
 #  pragma section("TRXSUT$m", read)
+#  define TRIAXI_COFF_SECTION(section_name)                                                        \
+    __declspec(allocate(section_name)) __declspec(no_sanitize_address)
 #  ifdef _M_IX86
 #   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:_" TRIAXI_STRINGIFY(x)))
 #  else
 #   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:" TRIAXI_STRINGIFY(x)))
 #  endif
-#  define TRIAXI_TEST_SECTION(x)                                                                   \
-    __declspec(allocate("TRXTST$m")) __declspec(no_sanitize_address) TRIAXI_LINKER_USE(x)
-#  define TRIAXI_SUITE_SECTION(x)                                                                  \
-    __declspec(allocate("TRXSUT$m")) __declspec(no_sanitize_address) TRIAXI_LINKER_USE(x)
+
 # elif TRIAXI_SECTION_GNU
-#  define TRIAXI_TEST_SECTION(x)                                                                   \
-    __attribute__((used, section("TRXTST$m"), aligned(__alignof__(void*)), TRIAXI_NOSANITIZE))
-#  define TRIAXI_SUITE_SECTION(x)                                                                  \
-    __attribute__((used, section("TRXSUT$m"), aligned(__alignof__(void*)), TRIAXI_NOSANITIZE))
+#  define TRIAXI_COFF_SECTION(section_name)                                                        \
+    __attribute__((used, section(section_name), aligned(TRIAXI_ALIGNOF(void*)))) TRIAXI_NOSANITIZE
+#  define TRIAXI_LINKER_USE(x)
+# else
+#  error "Triax: unsupported COFF section-placement syntax"
 # endif
-#elif TRIAXI_FORMAT_MACHO
-# define TRIAXI_TEST_SECTION(x)                                                                    \
-   __attribute__((used, section("__DATA,TRXTST"), aligned(__alignof__(TRIAXI_Test)),               \
-                  TRIAXI_NOSANITIZE))
-# define TRIAXI_SUITE_SECTION(x)                                                                   \
-   __attribute__((used, section("__DATA,TRXSUT"), aligned(__alignof__(TRIAXI_SuiteReg)),           \
-                  TRIAXI_NOSANITIZE))
-#elif TRIAXI_FORMAT_ELF
-# define TRIAXI_TEST_SECTION(x)                                                                    \
-   __attribute__((used, section("TRXTST"), retain, aligned(__alignof__(TRIAXI_Test)),              \
-                  TRIAXI_NOSANITIZE))
-# define TRIAXI_SUITE_SECTION(x)                                                                   \
-   __attribute__((used, section("TRXSUT"), retain, aligned(__alignof__(TRIAXI_SuiteReg)),          \
-                  TRIAXI_NOSANITIZE))
+# define TRIAXI_TEST_SECTION(x)  TRIAXI_COFF_SECTION("TRXTST$m") TRIAXI_LINKER_USE(x)
+# define TRIAXI_SUITE_SECTION(x) TRIAXI_COFF_SECTION("TRXSUT$m") TRIAXI_LINKER_USE(x)
+
+/* Mach-O/ELF: complete descriptor objects. */
+#elif TRIAXI_FORMAT_MACHO || TRIAXI_FORMAT_ELF
+# if !TRIAXI_SECTION_GNU
+#  error "Triax: unsupported Mach-O/ELF section-placement syntax"
+# endif
+# if TRIAXI_FORMAT_MACHO
+#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
+    __attribute__((used, section(section_name), aligned(TRIAXI_ALIGNOF(T)))) TRIAXI_NOSANITIZE
+#  define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("__DATA,TRXTST", TRIAXI_Test)
+#  define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("__DATA,TRXSUT", TRIAXI_SuiteReg)
+
+# else /* ELF */
+#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
+    __attribute__((used, retain, section(section_name),                                            \
+                   aligned(TRIAXI_ALIGNOF(T)))) TRIAXI_NOSANITIZE
+#  define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("TRXTST", TRIAXI_Test)
+#  define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("TRXSUT", TRIAXI_SuiteReg)
+# endif
 #else
 # error "Triax: unsupported compiler/linker registration backend"
 #endif
 
+/* Registration definitions. */
 #if TRIAXI_FORMAT_COFF
 # define TRIAXI_MAKE_TEST(x, ...)                                                                  \
    static const TRIAXI_Test x##_obj = __VA_ARGS__;                                                 \
@@ -1275,6 +1265,7 @@ private:
    TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
 #endif
 
+/* Boundaries and section-existence placeholders. */
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 TRIAXI_EXTERN_C_BEG
 # if TRIAXI_FORMAT_COFF
@@ -1283,35 +1274,22 @@ TRIAXI_EXTERN_C_BEG
 #   pragma section("TRXTST$z", read)
 #   pragma section("TRXSUT$a", read)
 #   pragma section("TRXSUT$z", read)
-__declspec(allocate("TRXTST$a")) __declspec(no_sanitize_address)
-const TRIAXI_Test* const TRIAXI_Test_a = NULL;
-__declspec(allocate("TRXTST$z")) __declspec(no_sanitize_address)
-const TRIAXI_Test* const TRIAXI_Test_z = NULL;
-__declspec(allocate("TRXSUT$a")) __declspec(no_sanitize_address)
-const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
-__declspec(allocate("TRXSUT$z")) __declspec(no_sanitize_address)
-const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
-#  elif TRIAXI_SECTION_GNU
-__attribute__((used, section("TRXTST$a"), aligned(__alignof__(void*)),
-               TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_a
-    = NULL;
-__attribute__((used, section("TRXTST$z"), aligned(__alignof__(void*)),
-               TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_z
-    = NULL;
-__attribute__((
-    used, section("TRXSUT$a"), aligned(__alignof__(void*)),
-    TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a
-    = NULL;
-__attribute__((
-    used, section("TRXSUT$z"), aligned(__alignof__(void*)),
-    TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z
-    = NULL;
 #  endif
+TRIAXI_COFF_SECTION("TRXTST$a")
+TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_a = NULL;
+TRIAXI_COFF_SECTION("TRXTST$z")
+TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_z = NULL;
+TRIAXI_COFF_SECTION("TRXSUT$a")
+TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
+TRIAXI_COFF_SECTION("TRXSUT$z")
+TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
+
 # elif TRIAXI_FORMAT_ELF
 TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel, {TRIAXI_ZINIT});
 TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
 extern const TRIAXI_Test     __start_TRXTST, __stop_TRXTST;
 extern const TRIAXI_SuiteReg __start_TRXSUT, __stop_TRXSUT;
+
 # endif
 TRIAXI_EXTERN_C_END
 #endif
