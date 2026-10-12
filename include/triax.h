@@ -15,161 +15,52 @@
 #ifndef TRIAXI_TEST_H
 #define TRIAXI_TEST_H
 
-#if defined(_MSVC_LANG)
+#if defined(__linux__) && !defined(_DEFAULT_SOURCE) && !defined(_GNU_SOURCE)
+# define _DEFAULT_SOURCE
+#endif
+
+#ifdef TRIAX_NO_OS
+# define TRIAXI_PLATFORM_POSIX   0L
+# define TRIAXI_PLATFORM_WINDOWS 0L
+#elif defined(__CYGWIN__) || defined(__unix__) || defined(__unix) || defined(unix)                 \
+    || defined(__APPLE__) || defined(__linux__)
+# define TRIAXI_PLATFORM_POSIX   1L
+# define TRIAXI_PLATFORM_WINDOWS 0L
+#elif defined(_WIN32)
+# define TRIAXI_PLATFORM_POSIX   0L
+# define TRIAXI_PLATFORM_WINDOWS 1L
+#endif
+
+#ifdef _MSVC_LANG
+# define TRIAXI_C   0L
 # define TRIAXI_CPP _MSVC_LANG
 #elif defined(__cplusplus)
+# define TRIAXI_C   0L
 # define TRIAXI_CPP __cplusplus
 #else
 # define TRIAXI_CPP 0L
-#endif
-
-#if defined(__cplusplus)
-# define TRIAXI_C 0L
-#elif defined(__STDC_VERSION__)
-# define TRIAXI_C __STDC_VERSION__
-#else
-# define TRIAXI_C 199000L
-#endif
-
-#if defined(_MSC_VER) && !defined(__clang__)
-# define TRIAXI_MSVC _MSC_VER
-#else
-# define TRIAXI_MSVC 0L
-#endif
-
-// TRIAXI_CLANG/TRIAXI_GCC/TRIAXI_MSVC_COMPAT/TRIAXI_GNU_COMPAT (plain compiler-
-// family detection) and TRIAXI_REG_* (registration backend) are defined
-// further down, right before their first real use — nothing before that
-// point needs them, and keeping them out of the way here leaves the public
-// API declarations below easier to actually find. TRIAXI_MSVC itself stays
-// here because the version checks just below need it immediately.
-
-// Platform backend: exactly one of these may apply. Windows/POSIX are
-// auto-detected, as before; TRIAX_NO_OS (bare metal/freestanding) is the one
-// exception requiring explicit opt-in — there's no reliable, universal
-// "this is embedded" macro to detect it automatically. The sum check below
-// means an unrecognised platform (none of the three) or a misconfigured one
-// (e.g. TRIAX_NO_OS defined alongside a target that also looks like Windows
-// or POSIX) fails loudly here instead of silently compiling whichever
-// branch happened to come first at each triaxi_embedded-marked site
-// throughout the file. Two sites (triaxi_debug_break's Windows/Clang-
-// builtin/raise(SIGTRAP) chain, and the crash-handler dispatch's POSIX/
-// MSVC/MinGW three-way) are genuine three-way splits by *compiler*
-// capability, not just OS, and are deliberately left unmarked here — they
-// need individual review, not this same mechanical two-way treatment.
-#ifdef TRIAX_NO_OS
-# define TRIAXI_PLATFORM_BARE_METAL 1L
-#else
-# define TRIAXI_PLATFORM_BARE_METAL 0L
-#endif
-
-#ifdef _WIN32
-# define TRIAXI_PLATFORM_WINDOWS 1L
-#else
-# define TRIAXI_PLATFORM_WINDOWS 0L
-#endif
-
-#if defined(__CYGWIN__) || defined(__unix__) || defined(__unix) || defined(unix)                   \
-    || defined(__APPLE__) || defined(__linux__)
-# define TRIAXI_PLATFORM_POSIX 1L
-#else
-# define TRIAXI_PLATFORM_POSIX 0L
-#endif
-
-#if (TRIAXI_PLATFORM_WINDOWS + TRIAXI_PLATFORM_POSIX + TRIAXI_PLATFORM_BARE_METAL) != 1
-# error                                                                                            \
-     "triax.h: exactly one of Windows, POSIX, or TRIAX_NO_OS (bare metal) must apply — unrecognised or conflicting platform signals"
-#endif
-
-// NOLINTBEGIN(performance-enum-size)
-
-// ── Common API ──────────────────────────────────────────────────────────────
-#if TRIAXI_PLATFORM_POSIX
-# if defined(__linux__) && !defined(_DEFAULT_SOURCE) && !defined(_GNU_SOURCE)
-#  define _DEFAULT_SOURCE
+# if defined(__STDC_VERSION__)
+#  define TRIAXI_C __STDC_VERSION__
+# else
+#  define TRIAXI_C 199000L
 # endif
-# include <fcntl.h>
-# include <sys/mman.h>
-
-# include <sys/stat.h>
-# include <sys/uio.h>
-# include <unistd.h>
-
-#elif TRIAXI_PLATFORM_WINDOWS
-# if TRIAXI_MSVC && TRIAXI_C && TRIAXI_MSVC < 1928
-#  error "triax.h in C mode on MSVC requires MSVC 19.28+"
-# endif
-# if TRIAXI_MSVC && TRIAXI_C && TRIAXI_C < 201112L
-#  error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
-# endif
-# include <fcntl.h>
-# include <malloc.h> /* _resetstkoflw */
-# include <wchar.h>
-# include <windows.h>
-#else /* triaxi_embedded */
-# error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <math.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-
 #if TRIAXI_CPP
-# include <array>
-# include <iostream>
-# include <sstream>
 # include <string>
-# include <type_traits>
-# include <utility>
-// __has_include(<header>) only answers "does this file exist on disk" — on
-// MSVC's STL specifically, the header exists as soon as any C++ mode is
-// selected, but its *contents* hard-error (STL4038) if the active language
-// standard predates what the header requires. Gating on the language
-// version too (not just presence) avoids ever attempting the #include in a
-// mode where it's certain to fail, e.g. this project's own advertised
-// cxx_std_11 baseline.
 # if TRIAXI_CPP >= 201703L && defined(__has_include)
 #  if __has_include(<string_view>)
 #   include <string_view>
 #  endif
 # endif
-# if TRIAXI_CPP >= 202002L && defined(__has_include)
-#  if __has_include(<format>)
-#   include <format>
-#  endif
-# endif
 #else
 # include <stdbool.h>
 #endif
+// NOLINTBEGIN(performance-enum-size)
 
-#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
-# if TRIAXI_PLATFORM_POSIX
-#  include <sys/wait.h>
-#  ifdef __linux__
-#   include <sys/syscall.h>
-#  elif defined(__APPLE__)
-#   include <mach-o/getsect.h>
-#   include <mach-o/ldsyms.h>
-#  endif
-# elif TRIAXI_PLATFORM_WINDOWS
-#  include <io.h>
-
-# else /* triaxi_embedded */
-#  error "TRIAX_NO_OS: not yet implemented for this region"
-# endif
-#endif
-
+// ── Common API ──────────────────────────────────────────────────────────────
 /// @defgroup triax_test_commons Common Test API
 /// Shared configuration and fixtures for tests, suites, and runs.
 /// @{
@@ -622,7 +513,7 @@ typedef struct Triax_Str {
 #if TRIAXI_CPP
   Triax_Str() : str{nullptr}, len{0} {}
   Triax_Str(const char* s, size_t l) : str{s}, len{l} {}
-  Triax_Str(const char* s) : str{s}, len{s ? strlen(s) : 0} {}
+  Triax_Str(const char* s) : str{s}, len{s ? std::char_traits<char>::length(s) : 0} {}
   Triax_Str(const std::string& s) : str{s.empty() ? "" : s.data()}, len{s.size()} {}
 # ifdef __cpp_lib_string_view
   Triax_Str(std::string_view s) : str{s.empty() ? "" : s.data()}, len{s.size()} {}
@@ -758,12 +649,69 @@ typedef uint32_t Triax_Fault;
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-// Compiler-family detection (plain TRIAXI_MSVC is defined much earlier,
-// alongside the version checks that need it immediately) and registration
-// backend (independent of runtime platform — clang-cl defines _MSC_VER and
-// uses the MSVC/COFF path; MinGW GCC/Clang use GNU section attributes even
-// though _WIN32 is defined). Nothing before this point in the file needs
-// any of these.
+#include <assert.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#if TRIAXI_CPP
+# include <array>
+# include <iostream>
+# include <sstream>
+# include <type_traits>
+# include <utility>
+# if TRIAXI_CPP >= 202002L && defined(__has_include)
+#  if __has_include(<format>)
+#   include <format>
+#  endif
+# endif
+#endif
+
+#if TRIAXI_PLATFORM_POSIX
+# include <fcntl.h>
+# include <sys/mman.h>
+# include <sys/stat.h>
+# include <sys/uio.h>
+# include <unistd.h>
+#elif TRIAXI_PLATFORM_WINDOWS
+# if defined(_MSC_VER) && !defined(__clang__) && TRIAXI_C
+#  if _MSC_VER < 1928
+#   error "triax.h in C mode on MSVC requires MSVC 19.28+"
+#  endif
+#  if TRIAXI_C < 201112L
+#   error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
+#  endif
+# endif
+# include <fcntl.h>
+# include <malloc.h> /* _resetstkoflw */
+# include <wchar.h>
+# include <windows.h>
+#endif
+
+#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
+# if TRIAXI_PLATFORM_POSIX
+#  include <sys/wait.h>
+#  ifdef __linux__
+#   include <sys/syscall.h>
+#  endif
+# elif TRIAXI_PLATFORM_WINDOWS
+#  include <io.h>
+# endif
+#endif
+
+#if defined(_MSC_VER) && !defined(__clang__)
+# define TRIAXI_MSVC _MSC_VER
+#else
+# define TRIAXI_MSVC 0L
+#endif
+
 #if defined(__clang__)
 # define TRIAXI_CLANG (__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__)
 #else
@@ -781,29 +729,69 @@ typedef uint32_t Triax_Fault;
 #else
 # define TRIAXI_MSVC_COMPAT 0L
 #endif
-
 #ifdef __GNUC__
 # define TRIAXI_GNU_COMPAT 1L
 #else
 # define TRIAXI_GNU_COMPAT 0L
 #endif
 
-#if defined(_WIN32) && defined(_MSC_VER)
-# define TRIAXI_REG_MSVC_COFF 1L
+#ifndef __has_attribute
+# define TRIAXI_HAS_ATTRIBUTE(x) 0
 #else
-# define TRIAXI_REG_MSVC_COFF 0L
+# define TRIAXI_HAS_ATTRIBUTE(x) __has_attribute(x)
 #endif
 
+// object format
 #if defined(__APPLE__)
-# define TRIAXI_REG_MACHO 1L
+# define TRIAXI_FORMAT_MACHO 1L
+# define TRIAXI_FORMAT_COFF  0L
+# define TRIAXI_FORMAT_ELF   0L
+#elif defined(_WIN32) || defined(__CYGWIN__)
+# define TRIAXI_FORMAT_MACHO 0L
+# define TRIAXI_FORMAT_COFF  1L
+# define TRIAXI_FORMAT_ELF   0L
+#elif defined(__ELF__)
+# define TRIAXI_FORMAT_MACHO 0L
+# define TRIAXI_FORMAT_COFF  0L
+# define TRIAXI_FORMAT_ELF   1L
 #else
-# define TRIAXI_REG_MACHO 0L
+# error "Triax: unsupported object format"
 #endif
 
-#if !TRIAXI_REG_MSVC_COFF && !TRIAXI_REG_MACHO && (defined(__GNUC__) || defined(__clang__))
-# define TRIAXI_REG_GNU_SECTION 1L
+// object placement syntax
+#if defined(__GNUC__) || defined(__clang__)
+# define TRIAXI_SECTION_GNU      1L
+# define TRIAXI_SECTION_DECLSPEC 0L
+#elif defined(_MSC_VER)
+# define TRIAXI_SECTION_GNU      0L
+# define TRIAXI_SECTION_DECLSPEC 1L
 #else
-# define TRIAXI_REG_GNU_SECTION 0L
+# error "Triax: unsupported section-placement syntax"
+#endif
+
+/* Compiler emission control. */
+#if TRIAXI_SECTION_GNU
+# define TRIAXI_REG_USED __attribute__((used))
+#else
+# define TRIAXI_REG_USED
+#endif
+
+/*
+ * Linker retention.
+ * These flags describe available strategies, not interchangeable syntax.
+ */
+#if TRIAXI_FORMAT_ELF && TRIAXI_HAS_ATTRIBUTE(retain)
+# define TRIAXI_REG_RETAIN           __attribute__((retain))
+# define TRIAXI_RETENTION_ELF_RETAIN 1L
+#else
+# define TRIAXI_REG_RETAIN
+# define TRIAXI_RETENTION_ELF_RETAIN 0L
+#endif
+
+#if TRIAXI_FORMAT_COFF && defined(_MSC_VER)
+# define TRIAXI_RETENTION_MSVC_INCLUDE 1L
+#else
+# define TRIAXI_RETENTION_MSVC_INCLUDE 0L
 #endif
 
 #define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
@@ -1225,117 +1213,106 @@ private:
       : TRIAXI_AttributeBuilderBase{a}, params{p} {}
 };
 #endif
-// no_sanitize_address prevents ASan from inserting 32-byte redzones between
-// entries in the section — without it, getsectiondata / __start_/__stop_
-// iteration reads into the redzones and triggers global-buffer-overflow.
 
-// Keep PE/COFF section names short so GNU/MinGW and MSVC linkers can both
-// represent them without relying on long-name extensions.
-#if TRIAXI_REG_MSVC_COFF
-# pragma section("TRXTST$m", read)
-# pragma section("TRXSUT$m", read)
-# ifdef _M_IX86
-#  define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:_" TRIAXI_STRINGIFY(x)))
-# else
-#  define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:" TRIAXI_STRINGIFY(x)))
+#if TRIAXI_CLANG
+# define TRIAXI_NOSANITIZE no_sanitize_address
+#else
+# define TRIAXI_NOSANITIZE
+#endif
+
+#if TRIAXI_FORMAT_COFF
+# if TRIAXI_SECTION_DECLSPEC
+#  pragma section("TRXTST$m", read)
+#  pragma section("TRXSUT$m", read)
+#  ifdef _M_IX86
+#   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:_" TRIAXI_STRINGIFY(x)))
+#  else
+#   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:" TRIAXI_STRINGIFY(x)))
+#  endif
+#  define TRIAXI_TEST_SECTION(x)                                                                   \
+    __declspec(allocate("TRXTST$m")) __declspec(no_sanitize_address) TRIAXI_LINKER_USE(x)
+#  define TRIAXI_SUITE_SECTION(x)                                                                  \
+    __declspec(allocate("TRXSUT$m")) __declspec(no_sanitize_address) TRIAXI_LINKER_USE(x)
+# elif TRIAXI_SECTION_GNU
+#  define TRIAXI_TEST_SECTION(x)                                                                   \
+    __attribute__((used, section("TRXTST$m"), aligned(__alignof__(void*)), TRIAXI_NOSANITIZE))
+#  define TRIAXI_SUITE_SECTION(x)                                                                  \
+    __attribute__((used, section("TRXSUT$m"), aligned(__alignof__(void*)), TRIAXI_NOSANITIZE))
 # endif
-# define TRIAXI_TEST_SECTION  __declspec(allocate("TRXTST$m")) __declspec(no_sanitize_address)
-# define TRIAXI_SUITE_SECTION __declspec(allocate("TRXSUT$m")) __declspec(no_sanitize_address)
-#elif TRIAXI_REG_MACHO || TRIAXI_REG_GNU_SECTION
-# define TRIAXI_LINKER_USE(x)
-# if TRIAXI_CLANG
-#  define TRIAXI_NOSANITIZE no_sanitize_address
-# else
-#  define TRIAXI_NOSANITIZE
-# endif
-# if TRIAXI_REG_MACHO
-#  define TRIAXI_TEST_SECTION                                                                      \
-    __attribute__((used, section("__DATA,TRXTST"), aligned(__alignof__(TRIAXI_Test)),              \
-                   TRIAXI_NOSANITIZE))
-#  define TRIAXI_SUITE_SECTION                                                                     \
-    __attribute__((used, section("__DATA,TRXSUT"), aligned(__alignof__(TRIAXI_SuiteReg)),          \
-                   TRIAXI_NOSANITIZE))
-# elif defined(_WIN32)
-// GNU PE/COFF: omit `retain` because that attribute is ELF-oriented and is not
-// consistently supported by MinGW toolchains. References to __start/__stop
-// keep the merged registration sections reachable from the executable.
-#  define TRIAXI_TEST_SECTION                                                                      \
-    __attribute__((used, section("TRXTST"), aligned(__alignof__(TRIAXI_Test)), TRIAXI_NOSANITIZE))
-#  define TRIAXI_SUITE_SECTION                                                                     \
-    __attribute__((used, section("TRXSUT"), aligned(__alignof__(TRIAXI_SuiteReg)),                 \
-                   TRIAXI_NOSANITIZE))
-# else
-#  define TRIAXI_TEST_SECTION                                                                      \
-    __attribute__((used, section("TRXTST"), retain, aligned(__alignof__(TRIAXI_Test)),             \
-                   TRIAXI_NOSANITIZE))
-#  define TRIAXI_SUITE_SECTION                                                                     \
-    __attribute__((used, section("TRXSUT"), retain, aligned(__alignof__(TRIAXI_SuiteReg)),         \
-                   TRIAXI_NOSANITIZE))
-# endif
+#elif TRIAXI_FORMAT_MACHO
+# define TRIAXI_TEST_SECTION(x)                                                                    \
+   __attribute__((used, section("__DATA,TRXTST"), aligned(__alignof__(TRIAXI_Test)),               \
+                  TRIAXI_NOSANITIZE))
+# define TRIAXI_SUITE_SECTION(x)                                                                   \
+   __attribute__((used, section("__DATA,TRXSUT"), aligned(__alignof__(TRIAXI_SuiteReg)),           \
+                  TRIAXI_NOSANITIZE))
+#elif TRIAXI_FORMAT_ELF
+# define TRIAXI_TEST_SECTION(x)                                                                    \
+   __attribute__((used, section("TRXTST"), retain, aligned(__alignof__(TRIAXI_Test)),              \
+                  TRIAXI_NOSANITIZE))
+# define TRIAXI_SUITE_SECTION(x)                                                                   \
+   __attribute__((used, section("TRXSUT"), retain, aligned(__alignof__(TRIAXI_SuiteReg)),          \
+                  TRIAXI_NOSANITIZE))
 #else
 # error "Triax: unsupported compiler/linker registration backend"
 #endif
 
-#if TRIAXI_REG_MSVC_COFF
-// MSVC COFF $a/$m/$z subsections are concatenated in that order, but nothing
-// guarantees tight packing of an arbitrary struct's size/alignment across
-// that concatenation the way triaxi_sections_init()'s sentinel-plus-one
-// pointer arithmetic would need — a linker that aligns the next subsection's
-// contribution more strongly than TRIAXI_Test's own alignment could leave
-// that arithmetic landing in padding rather than the first real entry, with
-// every field after that misread. Registering a *pointer* to each object
-// instead of the object itself avoids this: every section entry is then a
-// plain pointer — same size and natural alignment as every other entry, so
-// there's no padding for the arithmetic to land in — matching the standard
-// .CRT$XCU-style registration idiom. The actual test/suite data lives in an
-// ordinary internal-linkage object declared alongside it; only its address
-// goes in the section.
+#if TRIAXI_FORMAT_COFF
 # define TRIAXI_MAKE_TEST(x, ...)                                                                  \
-   static const TRIAXI_Test                         x##_obj = __VA_ARGS__;                         \
-   TRIAXI_TEST_SECTION                              TRIAXI_LINKER_USE(x)                           \
+   static const TRIAXI_Test x##_obj = __VA_ARGS__;                                                 \
+   TRIAXI_TEST_SECTION(x)                                                                          \
    TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const x = &x##_obj
 # define TRIAXI_MAKE_SUITEREG(x, ...)                                                              \
-   static const TRIAXI_SuiteReg                         x##_obj = __VA_ARGS__;                     \
-   TRIAXI_SUITE_SECTION                                 TRIAXI_LINKER_USE(x)                       \
+   static const TRIAXI_SuiteReg x##_obj = __VA_ARGS__;                                             \
+   TRIAXI_SUITE_SECTION(x)                                                                         \
    TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const x = &x##_obj
 #else
 # define TRIAXI_MAKE_TEST(x, ...)                                                                  \
-   TRIAXI_TEST_SECTION                       TRIAXI_LINKER_USE(x)                                  \
+   TRIAXI_TEST_SECTION(x)                                                                          \
    TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x = __VA_ARGS__
 # define TRIAXI_MAKE_SUITEREG(x, ...)                                                              \
-   TRIAXI_SUITE_SECTION                          TRIAXI_LINKER_USE(x)                              \
+   TRIAXI_SUITE_SECTION(x)                                                                         \
    TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
 #endif
 
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
-# if TRIAXI_REG_MSVC_COFF
-#  pragma section("TRXTST$a", read)
-#  pragma section("TRXTST$z", read)
-#  pragma section("TRXSUT$a", read)
-#  pragma section("TRXSUT$z", read)
-// Bounds sentinels: plain null pointers, not object values — see the TRIAXI_MAKE_TEST comment above
-// for why pointers are what makes the $a/$m/$z concatenation safe to walk.
-__declspec(allocate("TRXTST$a")) const TRIAXI_Test* const     TRIAXI_Test_a     = NULL;
-__declspec(allocate("TRXTST$z")) const TRIAXI_Test* const     TRIAXI_Test_z     = NULL;
-__declspec(allocate("TRXSUT$a")) const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
-__declspec(allocate("TRXSUT$z")) const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
-# elif TRIAXI_REG_GNU_SECTION
-// __start_SECNAME/__stop_SECNAME are only auto-defined by the linker if the named section actually
-// exists in the link; a program with no triax_test (or no triax_suite) would otherwise leave them
-// undefined and fail to link. Force both sections to always exist.
-// triaxi_register_tests/triaxi_register_suites already skip zero-initialised (name == NULL)
-// entries.
 TRIAXI_EXTERN_C_BEG
+# if TRIAXI_FORMAT_COFF
+#  if TRIAXI_SECTION_DECLSPEC
+#   pragma section("TRXTST$a", read)
+#   pragma section("TRXTST$z", read)
+#   pragma section("TRXSUT$a", read)
+#   pragma section("TRXSUT$z", read)
+__declspec(allocate("TRXTST$a")) __declspec(no_sanitize_address)
+const TRIAXI_Test* const TRIAXI_Test_a = NULL;
+__declspec(allocate("TRXTST$z")) __declspec(no_sanitize_address)
+const TRIAXI_Test* const TRIAXI_Test_z = NULL;
+__declspec(allocate("TRXSUT$a")) __declspec(no_sanitize_address)
+const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
+__declspec(allocate("TRXSUT$z")) __declspec(no_sanitize_address)
+const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
+#  elif TRIAXI_SECTION_GNU
+__attribute__((used, section("TRXTST$a"), aligned(__alignof__(void*)),
+               TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_a
+    = NULL;
+__attribute__((used, section("TRXTST$z"), aligned(__alignof__(void*)),
+               TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_z
+    = NULL;
+__attribute__((
+    used, section("TRXSUT$a"), aligned(__alignof__(void*)),
+    TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a
+    = NULL;
+__attribute__((
+    used, section("TRXSUT$z"), aligned(__alignof__(void*)),
+    TRIAXI_NOSANITIZE)) TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z
+    = NULL;
+#  endif
+# elif TRIAXI_FORMAT_ELF
 TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel, {TRIAXI_ZINIT});
 TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
-TRIAXI_EXTERN_C_END
-# endif
-#endif
-
-#if (defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)) && TRIAXI_REG_GNU_SECTION
-TRIAXI_EXTERN_C_BEG
 extern const TRIAXI_Test     __start_TRXTST, __stop_TRXTST;
 extern const TRIAXI_SuiteReg __start_TRXSUT, __stop_TRXSUT;
+# endif
 TRIAXI_EXTERN_C_END
 #endif
 
@@ -3180,8 +3157,7 @@ static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
 # pragma region runner_registration
 
 static inline void triaxi_sections_init(void) {
-# if TRIAXI_REG_MSVC_COFF
-
+# if TRIAXI_FORMAT_COFF
 #  if TRIAXI_CPP
 #   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? new T[n] : NULL)
 #  else
@@ -3244,23 +3220,16 @@ static inline void triaxi_sections_init(void) {
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_Test, TRIAXI_global.tests);
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_SuiteReg, TRIAXI_global.suiteregs);
 #  undef TRIAXI_SECTION_INIT_MSVC
-# elif TRIAXI_REG_MACHO
-  unsigned long triaxi_test_section_size = 0, triaxi_suite_section_size = 0;
-  TRIAXI_global.tests.beg = (const TRIAXI_Test*)(const void*)getsectiondata(
-      &_mh_execute_header, "__DATA", "TRXTST", &triaxi_test_section_size);
-  TRIAXI_global.tests.end
-      = TRIAXI_global.tests.beg
-          ? (const TRIAXI_Test*)(const void*)((const char*)TRIAXI_global.tests.beg
-                                              + triaxi_test_section_size)
-          : (const TRIAXI_Test*)0;
-  TRIAXI_global.suiteregs.beg = (const TRIAXI_SuiteReg*)(const void*)getsectiondata(
-      &_mh_execute_header, "__DATA", "TRXSUT", &triaxi_suite_section_size);
-  TRIAXI_global.suiteregs.end
-      = TRIAXI_global.suiteregs.beg
-          ? (const TRIAXI_SuiteReg*)(const void*)((const char*)TRIAXI_global.suiteregs.beg
-                                                  + triaxi_suite_section_size)
-          : (const TRIAXI_SuiteReg*)0;
-# elif TRIAXI_REG_GNU_SECTION
+# elif TRIAXI_FORMAT_MACHO
+  extern const TRIAXI_Test     tests_begin[] __asm__("section$start$__DATA$TRXTST");
+  extern const TRIAXI_Test     tests_end[] __asm__("section$end$__DATA$TRXTST");
+  extern const TRIAXI_SuiteReg suites_begin[] __asm__("section$start$__DATA$TRXSUT");
+  extern const TRIAXI_SuiteReg suites_end[] __asm__("section$end$__DATA$TRXSUT");
+  TRIAXI_global.tests.beg     = tests_begin;
+  TRIAXI_global.tests.end     = tests_end;
+  TRIAXI_global.suiteregs.beg = suites_begin;
+  TRIAXI_global.suiteregs.end = suites_end;
+# elif TRIAXI_FORMAT_ELF
   TRIAXI_global.tests.beg     = &__start_TRXTST;
   TRIAXI_global.tests.end     = &__stop_TRXTST;
   TRIAXI_global.suiteregs.beg = &__start_TRXSUT;
@@ -4884,24 +4853,22 @@ static inline void triaxi_junit_buffers_init(void) {
   if (!(TRIAXI_global.junit.test_buf = triaxi_fdopen(te_fd, "w+b"))) { triaxi_fatal(); }
 }
 
-#if TRIAXI_PLATFORM_POSIX
-# ifdef MAP_ANONYMOUS
-#  define TRIAXI_MAP_ANON MAP_ANONYMOUS
-# elif defined(MAP_ANON)
-#  define TRIAXI_MAP_ANON MAP_ANON
-# else
-#  error "triax.h requires anonymous mmap support"
-# endif
-#endif
-
 static inline void triaxi_shared_init(void) {
   enum { size = sizeof(TRIAXI_Shared) * TRIAXI_JOBS_MAX };
 # if TRIAXI_PLATFORM_POSIX
+#  ifdef MAP_ANONYMOUS
+#   define TRIAXI_MAP_ANON MAP_ANONYMOUS
+#  elif defined(MAP_ANON)
+#   define TRIAXI_MAP_ANON MAP_ANON
+#  else
+#   error "triax.h requires anonymous mmap support"
+#  endif
   if ((TRIAXI_global.shared = (TRIAXI_Shared*)mmap(NULL, size, PROT_READ | PROT_WRITE,
                                                    MAP_SHARED | TRIAXI_MAP_ANON, -1, 0))
       == MAP_FAILED) {
     triaxi_fatal();
   }
+#  undef TRIAXI_MAP_ANON
 # elif TRIAXI_PLATFORM_WINDOWS
   SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
   if (!(TRIAXI_global.shared_mapping
