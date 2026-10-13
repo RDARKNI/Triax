@@ -113,7 +113,7 @@ typedef void (*Triax_Fixture)(void) triax_noexcept;
 /// - `tags`       — category labels on a test/suite; a tag filter on the run
 /// - `init/fini`  — additive fixtures at every level
 typedef struct Triax_Attributes {
-  char            TRIAXI_dummy; ///< Prevents empty designated-initialiser list
+  char            triaxi_dummy; ///< Prevents empty designated-initialiser list
   bool            skip;         ///< Skip this test/suite; no-op at run level
   Triax_Verbosity verbosity;    ///< Text output verbosity (see @ref Triax_Verbosity)
   Triax_Isolation isolation;    ///< If fork per test (see @ref Triax_Isolation)
@@ -1056,7 +1056,7 @@ typedef struct TRIAXI_Params {
 } TRIAXI_Params;
 
 typedef struct TRIAXI_TestConfig {
-  char            TRIAXI_dummy;
+  char            triaxi_dummy;
   bool            skip;
   Triax_Verbosity verbosity;
   Triax_Isolation isolation;
@@ -1093,7 +1093,7 @@ typedef struct TRIAXI_Test {
   constexpr TRIAXI_Test(const char* suitename_, const char* name_, const char* file_,
                         void (*func_)(void), TRIAXI_TestConfig config_) noexcept
       : suitename{suitename_}, name{name_}, file{file_}, func{func_},
-        attrs{config_.TRIAXI_dummy, config_.skip, config_.verbosity, config_.isolation,
+        attrs{config_.triaxi_dummy, config_.skip, config_.verbosity, config_.isolation,
               config_.timeout_ms,   config_.tags, config_.init,      config_.fini},
         params{config_.params} {}
   constexpr TRIAXI_Test() noexcept : suitename{}, name{}, file{}, func{}, attrs{}, params{} {}
@@ -1196,50 +1196,55 @@ private:
 #endif
 
 #if TRIAXI_CLANG
-# define TRIAXI_NOSANITIZE __attribute__((no_sanitize_address))
+# define TRIAXI_NOSANITIZE , no_sanitize("address")
 #else
 # define TRIAXI_NOSANITIZE
 #endif
 
 #if TRIAXI_FORMAT_COFF
+# if !TRIAXI_SECTION_DECLSPEC && !TRIAXI_SECTION_GNU
+#  error "Triax: unsupported COFF section-placement syntax"
+# endif
 # if TRIAXI_SECTION_DECLSPEC
 #  pragma section("TRXTST$m", read)
 #  pragma section("TRXSUT$m", read)
-#  define TRIAXI_COFF_SECTION(section_name)                                                        \
-    __declspec(allocate(section_name)) __declspec(no_sanitize_address)
 #  ifdef _M_IX86
 #   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:_" TRIAXI_STRINGIFY(x)))
 #  else
 #   define TRIAXI_LINKER_USE(x) __pragma(comment(linker, "/include:" TRIAXI_STRINGIFY(x)))
 #  endif
+#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
+    __declspec(allocate(section_name)) __declspec(no_sanitize_address)
 
 # elif TRIAXI_SECTION_GNU
-#  define TRIAXI_COFF_SECTION(section_name)                                                        \
-    __attribute__((used, section(section_name), aligned(TRIAXI_ALIGNOF(void*)))) TRIAXI_NOSANITIZE
 #  define TRIAXI_LINKER_USE(x)
-# else
-#  error "Triax: unsupported COFF section-placement syntax"
-# endif
-# define TRIAXI_TEST_SECTION(x)  TRIAXI_COFF_SECTION("TRXTST$m") TRIAXI_LINKER_USE(x)
-# define TRIAXI_SUITE_SECTION(x) TRIAXI_COFF_SECTION("TRXSUT$m") TRIAXI_LINKER_USE(x)
+#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
+    __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used TRIAXI_NOSANITIZE))
 
-#elif TRIAXI_FORMAT_MACHO || TRIAXI_FORMAT_ELF
+# endif
+
+# define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("TRXTST$m", void*) TRIAXI_LINKER_USE(x)
+# define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("TRXSUT$m", void*) TRIAXI_LINKER_USE(x)
+
+#elif TRIAXI_FORMAT_MACHO
 # if !TRIAXI_SECTION_GNU
-#  error "Triax: unsupported Mach-O/ELF section-placement syntax"
+#  error "Triax: unsupported Mach-O section-placement syntax"
 # endif
-# if TRIAXI_FORMAT_MACHO
-#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
-    __attribute__((used, section(section_name), aligned(TRIAXI_ALIGNOF(T)))) TRIAXI_NOSANITIZE
-#  define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("__DATA,TRXTST", TRIAXI_Test)
-#  define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("__DATA,TRXSUT", TRIAXI_SuiteReg)
+# define TRIAXI_OBJECT_SECTION(section_name, T)                                                    \
+   __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used TRIAXI_NOSANITIZE))
+# define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("__DATA,TRXTST", TRIAXI_Test)
+# define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("__DATA,TRXSUT", TRIAXI_SuiteReg)
 
-# else /* ELF */
-#  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
-    __attribute__((used, retain, section(section_name),                                            \
-                   aligned(TRIAXI_ALIGNOF(T)))) TRIAXI_NOSANITIZE
-#  define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("TRXTST", TRIAXI_Test)
-#  define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("TRXSUT", TRIAXI_SuiteReg)
+#elif TRIAXI_FORMAT_ELF
+# if !TRIAXI_SECTION_GNU
+#  error "Triax: unsupported ELF section-placement syntax"
 # endif
+# define TRIAXI_OBJECT_SECTION(section_name, T)                                                    \
+   __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used,                         \
+                  retain TRIAXI_NOSANITIZE))
+# define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("TRXTST", TRIAXI_Test)
+# define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("TRXSUT", TRIAXI_SuiteReg)
+
 #else
 # error "Triax: unsupported compiler/linker registration backend"
 #endif
@@ -1252,7 +1257,7 @@ private:
 #else
 # define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
    SECTION(x)                                                                                      \
-   TRIAXI_EXTERN_FOR_CONST const T x = __VA_ARGS__
+   static const T x = __VA_ARGS__
 #endif
 
 #define TRIAXI_MAKE_TEST(x, ...)                                                                   \
@@ -1271,13 +1276,13 @@ TRIAXI_EXTERN_C_BEG
 #   pragma section("TRXSUT$a", read)
 #   pragma section("TRXSUT$z", read)
 #  endif
-TRIAXI_COFF_SECTION("TRXTST$a")
+TRIAXI_OBJECT_SECTION("TRXTST$a", void*)
 static const TRIAXI_Test* const TRIAXI_Test_a = NULL;
-TRIAXI_COFF_SECTION("TRXTST$z")
+TRIAXI_OBJECT_SECTION("TRXTST$z", void*)
 static const TRIAXI_Test* const TRIAXI_Test_z = NULL;
-TRIAXI_COFF_SECTION("TRXSUT$a")
+TRIAXI_OBJECT_SECTION("TRXSUT$a", void*)
 static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
-TRIAXI_COFF_SECTION("TRXSUT$z")
+TRIAXI_OBJECT_SECTION("TRXSUT$z", void*)
 static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
 
 # elif TRIAXI_FORMAT_ELF
@@ -1301,7 +1306,7 @@ TRIAXI_EXTERN_C_END
 # define triaxi_suite(name, ...)                                                                   \
    TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                          \
    TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});        \
-   TRIAXI_IGNWARN_GNU_END typedef char TRIAXI_DUMMY
+   TRIAXI_IGNWARN_GNU_END typedef char triaxi_dummy
 
 #else
 # define triaxi_test(suitename, name, ...)                                                         \
@@ -1330,7 +1335,7 @@ TRIAXI_EXTERN_C_END
      TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});      \
      TRIAXI_IGNWARN_GNU_END                                                                        \
    }                                                                                               \
-   typedef char TRIAXI_DUMMY
+   typedef char triaxi_dummy
 
 #endif
 
@@ -3189,6 +3194,7 @@ static inline void triaxi_sections_init(void) {
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_Test, TRIAXI_global.tests);
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_SuiteReg, TRIAXI_global.suiteregs);
 #  undef TRIAXI_SECTION_INIT_MSVC
+#  undef TRIAXI_ALLOC_ARRAY
 # elif TRIAXI_FORMAT_MACHO
   extern const TRIAXI_Test     tests_begin[] __asm__("section$start$__DATA$TRXTST");
   extern const TRIAXI_Test     tests_end[] __asm__("section$end$__DATA$TRXTST");
@@ -3756,38 +3762,24 @@ static inline Triax_Str triaxi_syserror_tostr(uint32_t syserr) {
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
-
 static inline size_t triaxi_utf8_seq_len(const unsigned char* s, size_t len) {
   if (!len) { return 0; }
   unsigned char c = s[0];
   if (c < 0x80) { return 1; }
-  if (c >= 0xC2 && c <= 0xDF) { return len >= 2 && (s[1] & 0xC0) == 0x80 ? 2 : 0; }
-  if (c == 0xE0) {
-    return len >= 3 && s[1] >= 0xA0 && s[1] <= 0xBF && (s[2] & 0xC0) == 0x80 ? 3 : 0;
+  if (c < 0xC2 || c > 0xF4 || len < 2) { return 0; }
+  unsigned char b = s[1];
+  if ((b & 0xC0) != 0x80) { return 0; }
+  if (c <= 0xDF) { return 2; }
+  if (len < 3 || (s[2] & 0xC0) != 0x80) { return 0; }
+  if (c <= 0xEF) {
+    if (c == 0xE0 && b < 0xA0) { return 0; } /* overlong */
+    if (c == 0xED && b > 0x9F) { return 0; } /* surrogate */
+    return 3;
   }
-  if ((c >= 0xE1 && c <= 0xEC) || (c >= 0xEE && c <= 0xEF)) {
-    return len >= 3 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80 ? 3 : 0;
-  }
-  if (c == 0xED) {
-    return len >= 3 && s[1] >= 0x80 && s[1] <= 0x9F && (s[2] & 0xC0) == 0x80 ? 3 : 0;
-  }
-  if (c == 0xF0) {
-    return len >= 4 && s[1] >= 0x90 && s[1] <= 0xBF && (s[2] & 0xC0) == 0x80
-                && (s[3] & 0xC0) == 0x80
-             ? 4
-             : 0;
-  }
-  if (c >= 0xF1 && c <= 0xF3) {
-    return len >= 4 && (s[1] & 0xC0) == 0x80 && (s[2] & 0xC0) == 0x80 && (s[3] & 0xC0) == 0x80 ? 4
-                                                                                               : 0;
-  }
-  if (c == 0xF4) {
-    return len >= 4 && s[1] >= 0x80 && s[1] <= 0x8F && (s[2] & 0xC0) == 0x80
-                && (s[3] & 0xC0) == 0x80
-             ? 4
-             : 0;
-  }
-  return 0;
+  if (len < 4 || (s[3] & 0xC0) != 0x80) { return 0; }
+  if (c == 0xF0 && b < 0x90) { return 0; } /* overlong */
+  if (c == 0xF4 && b > 0x8F) { return 0; } /* above U+10FFFF */
+  return 4;
 }
 
 static inline bool triaxi_utf8_valid(const unsigned char* str, size_t len) {
