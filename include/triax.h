@@ -1201,7 +1201,6 @@ private:
 # define TRIAXI_NOSANITIZE
 #endif
 
-/* COFF: pointer entries and $a/$m/$z boundaries. */
 #if TRIAXI_FORMAT_COFF
 # if TRIAXI_SECTION_DECLSPEC
 #  pragma section("TRXTST$m", read)
@@ -1224,7 +1223,6 @@ private:
 # define TRIAXI_TEST_SECTION(x)  TRIAXI_COFF_SECTION("TRXTST$m") TRIAXI_LINKER_USE(x)
 # define TRIAXI_SUITE_SECTION(x) TRIAXI_COFF_SECTION("TRXSUT$m") TRIAXI_LINKER_USE(x)
 
-/* Mach-O/ELF: complete descriptor objects. */
 #elif TRIAXI_FORMAT_MACHO || TRIAXI_FORMAT_ELF
 # if !TRIAXI_SECTION_GNU
 #  error "Triax: unsupported Mach-O/ELF section-placement syntax"
@@ -1246,24 +1244,22 @@ private:
 # error "Triax: unsupported compiler/linker registration backend"
 #endif
 
-/* Registration definitions. */
 #if TRIAXI_FORMAT_COFF
-# define TRIAXI_MAKE_TEST(x, ...)                                                                  \
-   static const TRIAXI_Test x##_obj = __VA_ARGS__;                                                 \
-   TRIAXI_TEST_SECTION(x)                                                                          \
-   TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const x = &x##_obj
-# define TRIAXI_MAKE_SUITEREG(x, ...)                                                              \
-   static const TRIAXI_SuiteReg x##_obj = __VA_ARGS__;                                             \
-   TRIAXI_SUITE_SECTION(x)                                                                         \
-   TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const x = &x##_obj
+# define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
+   static const T x##_obj = __VA_ARGS__;                                                           \
+   SECTION(x)                                                                                      \
+   TRIAXI_EXTERN_FOR_CONST const T* const x = &x##_obj
 #else
-# define TRIAXI_MAKE_TEST(x, ...)                                                                  \
-   TRIAXI_TEST_SECTION(x)                                                                          \
-   TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test x = __VA_ARGS__
-# define TRIAXI_MAKE_SUITEREG(x, ...)                                                              \
-   TRIAXI_SUITE_SECTION(x)                                                                         \
-   TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg x = __VA_ARGS__
+# define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
+   SECTION(x)                                                                                      \
+   TRIAXI_EXTERN_FOR_CONST const T x = __VA_ARGS__
 #endif
+
+#define TRIAXI_MAKE_TEST(x, ...)                                                                   \
+  TRIAXI_MAKE_RECORD(TRIAXI_Test, TRIAXI_TEST_SECTION, x, __VA_ARGS__)
+
+#define TRIAXI_MAKE_SUITEREG(x, ...)                                                               \
+  TRIAXI_MAKE_RECORD(TRIAXI_SuiteReg, TRIAXI_SUITE_SECTION, x, __VA_ARGS__)
 
 /* Boundaries and section-existence placeholders. */
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
@@ -1276,19 +1272,17 @@ TRIAXI_EXTERN_C_BEG
 #   pragma section("TRXSUT$z", read)
 #  endif
 TRIAXI_COFF_SECTION("TRXTST$a")
-TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_a = NULL;
+static const TRIAXI_Test* const TRIAXI_Test_a = NULL;
 TRIAXI_COFF_SECTION("TRXTST$z")
-TRIAXI_EXTERN_FOR_CONST const TRIAXI_Test* const TRIAXI_Test_z = NULL;
+static const TRIAXI_Test* const TRIAXI_Test_z = NULL;
 TRIAXI_COFF_SECTION("TRXSUT$a")
-TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
+static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
 TRIAXI_COFF_SECTION("TRXSUT$z")
-TRIAXI_EXTERN_FOR_CONST const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
+static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
 
 # elif TRIAXI_FORMAT_ELF
 TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel, {TRIAXI_ZINIT});
 TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
-extern const TRIAXI_Test     __start_TRXTST, __stop_TRXTST;
-extern const TRIAXI_SuiteReg __start_TRXSUT, __stop_TRXSUT;
 
 # endif
 TRIAXI_EXTERN_C_END
@@ -2600,7 +2594,6 @@ private:
 
     const size_t written = (size_t)(res.out - dst);
     if ((size_t)res.size > avail - 1) {
-      /* res.size is how many characters formatting wanted to produce. */
       streambuf.trunc = true;
       streambuf.len   = streambuf.cap;
       return;
@@ -3174,11 +3167,9 @@ static inline void triaxi_sections_init(void) {
    */
 #  define TRIAXI_SECTION_INIT_MSVC(T, field)                                                       \
     do {                                                                                           \
-      extern const T* const T##_a;                                                                 \
-      extern const T* const T##_z;                                                                 \
-      uintptr_t             triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);          \
-      uintptr_t             triaxi_pend = (uintptr_t)(const void*)&T##_z;                          \
-      size_t                triaxi_n    = 0;                                                       \
+      uintptr_t triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);                      \
+      uintptr_t triaxi_pend = (uintptr_t)(const void*)&T##_z;                                      \
+      size_t    triaxi_n    = 0;                                                                   \
       for (uintptr_t p = triaxi_pbeg; p < triaxi_pend; p += sizeof(void*)) {                       \
         const T* triaxi_entry = NULL;                                                              \
         memcpy(&triaxi_entry, (const void*)p, sizeof(triaxi_entry));                               \
@@ -3208,6 +3199,8 @@ static inline void triaxi_sections_init(void) {
   TRIAXI_global.suiteregs.beg = suites_begin;
   TRIAXI_global.suiteregs.end = suites_end;
 # elif TRIAXI_FORMAT_ELF
+  extern const TRIAXI_Test     __start_TRXTST, __stop_TRXTST;
+  extern const TRIAXI_SuiteReg __start_TRXSUT, __stop_TRXSUT;
   TRIAXI_global.tests.beg     = &__start_TRXTST;
   TRIAXI_global.tests.end     = &__stop_TRXTST;
   TRIAXI_global.suiteregs.beg = &__start_TRXSUT;
