@@ -384,6 +384,83 @@ jobs:
         if: ${{ always() && steps.test.outcome == 'failure' }}
         run: exit 1
 
+  # Manual-only: windows-release above covers /O2 /Ob2 full inlining (the
+  # regression it was built for), but not whole-program optimization (/GL
+  # + /LTCG, MSVC's form of LTO) or explicit linker dead-code/identical-data
+  # elimination (/OPT:REF, /OPT:ICF) — /DEBUG alone (which windows-release
+  # sets, for PDBs) makes the linker default to keeping everything
+  # unreferenced, so nothing in the existing matrix actually exercises
+  # /OPT:REF or /OPT:ICF at all today. /OPT:ICF specifically is a concrete,
+  # not just generic, risk for this registration scheme: the COFF boundary
+  # sentinels (TRIAXI_Test_a/_z) are both just a null pointer — byte-
+  # identical — so if the linker ever folded them into the same storage,
+  # &TRIAXI_Test_a == &TRIAXI_Test_z and every registered test would
+  # silently vanish, while the sentinel walk itself (see the
+  # TRIAXI_SECTION_INIT_MSVC comment) is already hardened against the
+  # unrelated /Ob2-inlining miscompilation. Checks the real, specific
+  # failure mode directly — exact expected test counts, not just "ctest
+  # exited 0" (which would stay green even if some tests silently
+  # disappeared and the rest still passed).
+  windows-release-lto-gc:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure crash dump collection
+        shell: pwsh
+        run: |
+          $dumpDir = Join-Path $env:RUNNER_TEMP "triax-dumps"
+          New-Item -ItemType Directory -Force -Path $dumpDir | Out-Null
+          $key = "HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps"
+          New-Item -Path $key -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpFolder -PropertyType ExpandString -Value $dumpDir -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpType -PropertyType DWord -Value 1 -Force | Out-Null
+          New-ItemProperty -Path $key -Name DumpCount -PropertyType DWord -Value 10 -Force | Out-Null
+      - name: Configure (Release, /GL+/LTCG, explicit /OPT:REF /OPT:ICF)
+        # Reconstructing the full CMAKE_*_FLAGS_RELEASE default (/O2 /Ob2
+        # /DNDEBUG) and adding /GL to it, not just setting "/GL" alone —
+        # see windows-release's own comment just above: CMake's per-config
+        # flags variables replace the whole string on the command line
+        # rather than appending, so naively overriding would silently drop
+        # optimization/NDEBUG entirely and invalidate this job's own point.
+        run: |
+          cmake -S . -B build -DBUILD_TESTING=ON `
+            -DCMAKE_C_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /GL" `
+            -DCMAKE_CXX_FLAGS_RELEASE="/O2 /Ob2 /DNDEBUG /GL" `
+            -DCMAKE_EXE_LINKER_FLAGS_RELEASE="/DEBUG /LTCG /OPT:REF /OPT:ICF"
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Verify every test is still discovered (not silently dropped by LTCG/REF/ICF)
+        id: test
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $c = & .\build\Release\triax-selftest-c.exe --no-color
+          $c | Write-Host
+          if (($c | Select-String "Tests: 164 selected / 164 total").Count -eq 0) {
+            Write-Host "FAIL: expected 164/164 C tests registered; some appear to have been eliminated"
+            exit 1
+          }
+          $cpp = & .\build\Release\triax-selftest-cpp.exe --no-color
+          $cpp | Write-Host
+          if (($cpp | Select-String "Tests: 36 selected / 36 total").Count -eq 0) {
+            Write-Host "FAIL: expected 36/36 C++ tests registered; some appear to have been eliminated"
+            exit 1
+          }
+      - name: Upload crash dumps
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-lto-gc-crash-dumps
+          path: |
+            ${{ runner.temp }}/triax-dumps/*.dmp
+            build/**/*.pdb
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Fail if tests failed
+        if: ${{ always() && steps.test.outcome == 'failure' }}
+        run: exit 1
+
   # Manual-only, higher-confidence version of windows-release above: the
   # crash this configuration exists to catch was intermittent (didn't
   # reproduce every run) before it was root-caused and fixed, so this
