@@ -145,6 +145,16 @@ triax_test(combo_reporters, r_ucrashed, 0) { raise(SIGABRT); }
 triax_test(combo_reporters, r_uexited, 0) { exit(3); }
 triax_test(combo_reporters, r_test_error, 0) { (void)triax_param(int); /* not parameterized */ }
 
+// Exercises TRIAX_EXPR_MAX's byte-count truncation of a logged expression containing multi-byte
+// UTF-8 content: stringifying this call's "xx" prefix plus enough euro signs to exceed the cap
+// (at a byte offset chosen so a naive cut lands mid-character) must still produce well-formed
+// JUnit XML instead of a truncation that splits a character (see triaxi_utf8_safe_trunc_len in
+// triax.h, and triaxi_print_xml_bytes's hex fallback as a second line of defense).
+triax_suite(combo_utf8, .isolation = TRIAX_ISOLATION_ON);
+triax_test(combo_utf8, truncated_expr, 0) {
+  triax_assert_streq("xx", "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€");
+}
+
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
   return triax_run_argv(argc, argv, cfg);

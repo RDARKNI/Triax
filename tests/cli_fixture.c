@@ -36,6 +36,20 @@ triax_test(fx_c, malformed_params, .params = {0, 3, fx_c_malformed_params_arr}) 
   triax_assert_true(1); // unreached
 }
 
+// fx_d: each test fails via one of the streamed string/array result paths
+// (triaxi_strn_compare_impl_send, triaxi_AF_arreq_SS) rather than the plain
+// triaxi_log_res fx_b::first uses. Those two paths used to build and send
+// their failure record without ever calling triaxi_debug_break, so --break
+// silently did nothing for a failing streq/arreq — used below to prove it
+// now reports the same "ucrashed" outcome as a plain assertion does.
+triax_suite(fx_d, 0);
+triax_test(fx_d, streq_fail, 0) { triax_assert_streq("a", "b"); }
+triax_test(fx_d, arreq_fail, 0) {
+  const char* a[1] = {"a"};
+  const char* b[1] = {"b"};
+  triax_assert_arreq(a, b);
+}
+
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
   return triax_run_argv(argc, argv, cfg);

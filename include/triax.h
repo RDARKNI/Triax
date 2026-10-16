@@ -94,15 +94,14 @@ typedef uint8_t Triax_Isolation;
 
 /// @brief Run/suite/test fixture function.
 /// @note Assertion and test-control APIs must not be called from fixtures.
-/// @note Run, suite, and test fixtures execute for every concrete test
-/// invocation, including each parameterized invocation. Initialisation is
-/// cumulative (run -> suite -> test) and finalisation runs in reverse order.
+/// @note Run, suite, and test fixtures execute for every concrete test invocation, including each
+/// parameterized invocation. Initialisation is cumulative (run -> suite -> test) and finalisation
+/// runs in reverse order.
 typedef void (*Triax_Fixture)(void) triax_noexcept;
 
 /// @brief Shared attributes for tests, suites, and runs.
 ///
-/// Cascading fields (`verbosity`, `isolation`, `timeout_ms`)
-/// resolve in this order:
+/// Cascading fields (`verbosity`, `isolation`, `timeout_ms`) resolve in this order:
 ///
 ///     Test -> Suite -> Run -> Default
 ///
@@ -129,9 +128,8 @@ typedef struct Triax_Attributes {
 // ── Runner API ───────────────────────────────────────────────────────────────
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 /// @defgroup triax_runner Runner API
-/// Types and functions for the test runner (the translation unit containing
-/// `main`). Use these to configure output formats, parse CLI arguments, and
-/// launch the test run.
+/// Types and functions for the test runner (the translation unit containing `main`). Use these to
+/// configure output formats, parse CLI arguments, and launch the test run.
 /// @{
 
 /// @brief Top-level configuration passed to @ref triax_run.
@@ -158,22 +156,20 @@ typedef struct Triax_RunConfig {
 # define TRIAX_OUTPATH_STDOUT  ((const char*)2) ///< Write this output to stdout.
 # define TRIAX_OUTPATH_DEFAULT ((const char*)0) ///< stdout for text, else none
 
-/// @brief Runs all registered tests using the provided run configuration.
-/// Initialises the framework, runs each matching test in registration order,
-/// prints results to the configured outputs, then restores stdout/stderr.
+/// @brief Runs all registered tests using the provided run configuration. Initialises the
+/// framework, runs each matching test in registration order, prints results to the configured
+/// outputs, then restores stdout/stderr.
 ///
-/// @note On POSIX, process isolation uses `fork()`. The process calling
-/// `triax_run()` must be single-threaded while the run is active. Isolated
-/// tests may create threads after their child process has started.
-/// @note In non-isolated mode, assertion and test-control APIs must only be
-/// called from the thread executing the test function. Threads created by a
-/// test must be joined before the test returns.
-/// @note A crash or timeout in a non-isolated test may terminate or corrupt the
-/// runner process. Process isolation is recommended for tests that may fault
-/// or hang.
+/// @note On POSIX, process isolation uses `fork()`. The process calling `triax_run()` must be
+/// single-threaded while the run is active. Isolated tests may create threads after their child
+/// process has started.
+/// @note In non-isolated mode, assertion and test-control APIs must only be called from the thread
+/// executing the test function. Threads created by a test must be joined before the test returns.
+/// @note A crash or timeout in a non-isolated test may terminate or corrupt the runner process.
+/// Process isolation is recommended for tests that may fault or hang.
 ///
-/// @param config  Run configuration produced by @ref triax_parse_argv or
-///                assembled manually
+/// @param config  Run configuration produced by @ref triax_parse_argv or assembled manually
+///
 /// @return Exit code:
 ///
 /// - `0` success (all tests passed or skipped)
@@ -233,8 +229,8 @@ static inline Triax_RunConfig triax_parse_argv(int argc, char* argv[], Triax_Run
 /// also be embedded in a host program's own usage output.
 ///
 /// @brief Parses @p argv then immediately runs all matching tests.
-/// Convenience wrapper equivalent to `triax_run(triax_parse_argv(argc, argv,
-/// defaults))`.
+/// Convenience wrapper equivalent to `triax_run(triax_parse_argv(argc, argv, defaults))`.
+///
 /// @param argc      Argument count from `main`.
 /// @param argv      Argument vector from `main`.
 /// @param defaults  Base @ref Triax_RunConfig; overridden by any parsed flags.
@@ -263,8 +259,8 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 /// For custom runner configuration, define `main()` manually and call @ref triax_run_argv directly
 /// instead.
 # define TRIAX_MAIN()                                                                              \
-   int main(int argc, char** argv) {                                                               \
-     Triax_RunConfig config = {0};                                                                 \
+   int main(int argc, char* argv[]) {                                                              \
+     Triax_RunConfig config = {TRIAXI_ZINIT};                                                      \
      return triax_run_argv(argc, argv, config);                                                    \
    }
 
@@ -365,18 +361,26 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 /// @defgroup triax_assertions Assertions and Expectations
 /// @ingroup triax_test_module
 ///
-/// Every check (except @ref triax_assert_fault and @ref triax_assert_exit)
-/// comes in two flavours:
-///   - `triax_assert_*` — records failure and immediately aborts the test
-///   (longjmp).
-///   - `triax_expect_*` — records failure and continues, reporting multiple
-///   failures.
+/// Assertion macros come in two flavours:
+/// - `triax_assert_*` records a failure and stops the current test.
+/// - `triax_expect_*` records a failure and continues the current test.
 ///
-/// Both record the source location, the stringified expression, and actual
-/// values.
+/// Both record the source location and expression, with operand values or a
+/// message when the check fails. Ordinary assertion failures still run fixture
+/// teardown. In C++, stopping a test this way unwinds test-local objects.
+///
+/// Use assertion macros and @ref triax_skip only in the test body, on the thread
+/// executing the test. Calling them from fixtures is a test API error.
+///
+/// Fault and exit checks have the same variants, but actual process termination
+/// ends the invocation: code after the check and fixture teardown do not run.
+/// Their code blocks execute in the test's process, without a separate process
+/// being created for each check. See @ref triax_assert_fault and
+/// @ref triax_assert_exit.
 /// @{
 
-/// @brief Maximum Length of a stringified assertion
+/// @brief Maximum number of bytes recorded for a stringified assertion expression.
+/// Longer expressions are truncated in diagnostics; evaluation is unaffected.
 #if TRIAXI_PLATFORM_POSIX
 # define TRIAX_EXPR_MAX UINT8_MAX
 #elif TRIAXI_PLATFORM_WINDOWS
@@ -385,131 +389,280 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
-/// @brief Skips the current test immediately (recorded as skipped, not failed). Typically guarded
-/// by a condition: `if (!feature_available()) triax_skip();`
-/// @brief Still performs cleanup
-#define triax_skip()                                                                               \
-  (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST                                                  \
-       ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_SKIPPED)                                                    \
-       : triaxi_user_error(TRIAXI_ERROR_SKIP_IN_FIXTURE))
+/// @brief Stops the current test and records it as skipped.
+/// Fixture teardown still runs. In C++, test-local objects are unwound.
+/// Call only from the test body; calling from a fixture is a test API error.
+/// @code{.c}
+/// if (!feature_available()) { triax_skip(); }
+/// @endcode
+#define triax_skip()                  TRIAXI_SKIP()
 
-// ── Generic
-// ───────────────────────────────────────────────────────────────────
-/// @brief Passes if @p cond is true; optional printf-style @p ... message on failure.
-// "" __VA_ARGS__ relies on adjacent string-literal concatenation (not token pasting) so a
-// message-less call still supplies TRIAXI_AT_check's required fmt argument, instead of leaving a
-// dangling trailing comma when the documented-optional message is omitted.
-#define triax_expect(cond, ...)       triaxi_E1(check, 0, #cond, !(cond), "" __VA_ARGS__)
-#define triax_assert(cond, ...)       triaxi_A1(check, 0, #cond, !(cond), "" __VA_ARGS__)
+// ── Generic checks ────────────────────────────────────────────────────────────
 
-// ── Booleans / Pointers
-// ───────────────────────────────────────────────────────
-/// @brief Test whether a predicate is truthy, using implicit bool conversions
+/// @brief Passes if @p cond is truthy, with an optional message on failure.
+/// @param cond Condition to check.
+/// @param ... Optional printf-style format string literal and its arguments.
+///
+/// The message is formatted only on failure, but its argument expressions are
+/// evaluated even when the condition passes. Omit the message for a plain check.
+/// @code{.c}
+/// triax_expect(count > 0);
+/// triax_expect(count > 0, "count was %d", count);
+/// @endcode
+#define triax_expect(cond, ...)       triaxi_E1(check, 0, #cond, !(cond), " " __VA_ARGS__)
+/// @copydoc triax_expect
+#define triax_assert(cond, ...)       triaxi_A1(check, 0, #cond, !(cond), " " __VA_ARGS__)
+
+// ── Booleans and pointers ─────────────────────────────────────────────────────
+
+/// @brief Passes if @p expr converts to true.
+/// @param expr Value implicitly convertible to bool.
+/// Unlike the generic condition check, no custom failure message is accepted.
+/// In C++, a type with only an explicit bool conversion can be tested with
+/// @ref triax_expect or an explicit cast to bool.
 #define triax_expect_true(expr)       triaxi_E1(true, 0, #expr, expr)
+/// @copydoc triax_expect_true
 #define triax_assert_true(expr)       triaxi_A1(true, 0, #expr, expr)
+/// @brief Passes if @p expr converts to false.
+/// @copydetails triax_expect_true
 #define triax_expect_false(expr)      triaxi_E1(true, 1, #expr, expr)
+/// @copydoc triax_expect_false
 #define triax_assert_false(expr)      triaxi_A1(true, 1, #expr, expr)
 
-/// @brief Test whether a pointer is `NULL`
+/// @brief Passes if @p ptr is a null pointer.
+/// @param ptr Pointer to check.
 #define triax_expect_null(ptr)        triaxi_E1(null, 0, #ptr, ptr)
+/// @copydoc triax_expect_null
 #define triax_assert_null(ptr)        triaxi_A1(null, 0, #ptr, ptr)
+/// @brief Passes if @p ptr is not a null pointer.
+/// @param ptr Pointer to check.
 #define triax_expect_nonnull(ptr)     triaxi_E1(null, 1, #ptr, ptr)
+/// @copydoc triax_expect_nonnull
 #define triax_assert_nonnull(ptr)     triaxi_A1(null, 1, #ptr, ptr)
 
-// ── Equality
-// ────────────────────────────────────────────────────────────────── C:
-// _Generic dispatch over arithmetic/pointer types; if two (const) char* arguments are passed,
-// lexicographical string comparison is performed. C++: templates. In C, these do not accept @ref
-// triax_str() length-based strings; use the specialised string assertionsfor this use case.
+// ── Equality ──────────────────────────────────────────────────────────────────
 
-/// @brief Test whether two expressions evaluate to equal;
-/// Note:
-/// In C:
-/// Floating Point types: Implicitly converts to long double and performs
-/// comparison via `==` Integral Types: Works correctly and safely for mixed
-/// signed/unsigned integral types (const) char*: Performs lexicographical
-/// comparison of the strings, interpreting `NULL` as a unique string, different
-/// from all nonnull strings other pointer types: Whenever a non-char* pointer
-/// type is involved, it performs well-defined pointer comparisons Mixing
-/// between these type classes is not allowed and results in a compiler error In
-/// C++: Works equivalently to the C branch for the C builtin types and uses
-/// operator overloads for comparisons to work with custom types
+/// @brief Passes if @p exp and @p act compare equal.
+/// @param exp Expected value.
+/// @param act Actual value.
+///
+/// Supported operand pairs:
+/// - Integers, including mixed signed and unsigned types.
+/// - Floating-point values, compared exactly after conversion to long double.
+///   Use the tolerance checks when approximate equality is intended.
+/// - Strings: `char*`, `const char*`, and @ref Triax_Str in C and C++; additionally
+///   `std::string` and `std::string_view` (when available) in C++.
+///   String operands compare contents, not pointer identity. Comparison is
+///   case-sensitive; length-based operands may contain embedded NUL bytes.
+/// - Other supported object pointers, compared by address.
+/// - C++ custom types supporting `operator==`; inequality negates its result.
+///
+/// Integer/floating-point pairs are unsupported. In C, type selection uses
+/// `_Generic`; in C++, overloads also support custom comparison operators.
+/// A null string compares equal only to another null string, and differs from
+/// a non-null empty string. In C, use a typed null string pointer such as
+/// `(const char*)NULL` rather than an untyped null pointer constant.
+/// @code{.c}
+/// char a[] = "abc", b[] = "abc";
+/// triax_expect_eq(a, b);                         // string contents
+/// triax_expect_neq((const void*)a, (const void*)b); // pointer identity
+/// triax_expect_eq(triax_str(a, 2), triax_str(b, 2));
+/// @endcode
 #define triax_expect_eq(exp, act)     triaxi_E1(eq, 0, #exp ", " #act, exp, act)
+/// @copydoc triax_expect_eq
 #define triax_assert_eq(exp, act)     triaxi_A1(eq, 0, #exp ", " #act, exp, act)
+/// @brief Passes if @p exp and @p act compare unequal.
+/// @copydetails triax_expect_eq
 #define triax_expect_neq(exp, act)    triaxi_E1(eq, 1, #exp ", " #act, exp, act)
+/// @copydoc triax_expect_neq
 #define triax_assert_neq(exp, act)    triaxi_A1(eq, 1, #exp ", " #act, exp, act)
 
+// ── Element-wise array comparison ─────────────────────────────────────────────
+
+/// @brief Passes if corresponding elements of @p exp and @p act compare equal.
+/// @param exp Expected array or C++ container.
+/// @param act Actual array or C++ container.
+///
+/// Elements use the same comparison rules as @ref triax_expect_eq; this is not
+/// a byte-wise comparison. For equal-length operands, an equality failure
+/// identifies the first differing element.
+/// In C, both operands must be fixed-size arrays of the same element count.
+/// Pointers do not supply a length; use @ref triax_expect_arreq_n for them.
+/// In C++, built-in arrays and containers with `size()` and indexed element
+/// access are supported, including `std::array` and `std::vector`.
+/// If both sizes are known at compile time, they must match. Otherwise a
+/// runtime length mismatch fails equality and satisfies inequality.
+/// @code{.c}
+/// int expected[] = {1, 2, 3}, actual[] = {1, 2, 3};
+/// triax_expect_arreq(expected, actual);
+/// @endcode
 #define triax_expect_arreq(exp, act)  triaxi_ARREQ(0, #exp ", " #act, exp, act)
+/// @copydoc triax_expect_arreq
 #define triax_assert_arreq(exp, act)  triaxi_ARREQ(1, #exp ", " #act, exp, act)
+/// @brief Passes if an element differs, or runtime-sized operand lengths differ.
+/// @copydetails triax_expect_arreq
 #define triax_expect_arrneq(exp, act) triaxi_ARRNEQ(0, #exp ", " #act, exp, act)
+/// @copydoc triax_expect_arrneq
 #define triax_assert_arrneq(exp, act) triaxi_ARRNEQ(1, #exp ", " #act, exp, act)
 
+/// @brief Passes if the first @p count elements compare equal.
+/// @param exp Expected array, pointer, or indexable C++ container.
+/// @param act Actual array, pointer, or indexable C++ container.
+/// @param count Number of elements to compare.
+///
+/// Both operands must provide at least @p count accessible elements; lengths
+/// are not inferred or checked. Element comparison follows @ref triax_expect_eq.
+/// A zero count satisfies equality and fails inequality.
 #define triax_expect_arreq_n(exp, act, count)                                                      \
   triaxi_ARREQ_N(0, #exp ", " #act ", " #count, exp, act, count)
+/// @copydoc triax_expect_arreq_n
 #define triax_assert_arreq_n(exp, act, count)                                                      \
   triaxi_ARREQ_N(1, #exp ", " #act ", " #count, exp, act, count)
+/// @brief Passes if at least one of the first @p count elements differs.
+/// @copydetails triax_expect_arreq_n
 #define triax_expect_arrneq_n(exp, act, count)                                                     \
   triaxi_ARRNEQ_N(0, #exp ", " #act ", " #count, exp, act, count)
+/// @copydoc triax_expect_arrneq_n
 #define triax_assert_arrneq_n(exp, act, count)                                                     \
   triaxi_ARRNEQ_N(1, #exp ", " #act ", " #count, exp, act, count)
 
-// ── Ordering
-// ──────────────────────────────────────────────────────────────────
+// ── Ordering ──────────────────────────────────────────────────────────────────
+
+/// @brief Passes if @p a is greater than @p b.
+/// @param a Left operand.
+/// @param b Right operand.
+///
+/// Operand types follow @ref triax_expect_eq. Strings compare lexicographically
+/// by bytes, with a null string ordered before every non-null string. Other
+/// supported pointers use address order. C++ custom types use only the operator
+/// corresponding to the requested relation; no reverse or equality comparison is required.
+/// Floating-point comparisons involving NaN fail these ordering checks,
+/// including the non-strict variants.
 #define triax_expect_gt(a, b)  triaxi_E1(gt, 0, #a ", " #b, a, b)
+/// @copydoc triax_expect_gt
 #define triax_assert_gt(a, b)  triaxi_A1(gt, 0, #a ", " #b, a, b)
+/// @brief Passes if @p a is greater than or equal to @p b.
+/// @copydetails triax_expect_gt
 #define triax_expect_geq(a, b) triaxi_E1(lt, 1, #a ", " #b, a, b)
+/// @copydoc triax_expect_geq
 #define triax_assert_geq(a, b) triaxi_A1(lt, 1, #a ", " #b, a, b)
+/// @brief Passes if @p a is less than @p b.
+/// @copydetails triax_expect_gt
 #define triax_expect_lt(a, b)  triaxi_E1(lt, 0, #a ", " #b, a, b)
+/// @copydoc triax_expect_lt
 #define triax_assert_lt(a, b)  triaxi_A1(lt, 0, #a ", " #b, a, b)
+/// @brief Passes if @p a is less than or equal to @p b.
+/// @copydetails triax_expect_gt
 #define triax_expect_leq(a, b) triaxi_E1(gt, 1, #a ", " #b, a, b)
+/// @copydoc triax_expect_leq
 #define triax_assert_leq(a, b) triaxi_A1(gt, 1, #a ", " #b, a, b)
 
-// ── Floating-point
-// ────────────────────────────────────────────────────────── Absolute tolerance: |exp - act| <= tol
+// ── Floating-point tolerance ──────────────────────────────────────────────────
+
+/// @brief Passes if the absolute difference is at most @p tol.
+/// @param exp Expected value.
+/// @param act Actual value.
+/// @param tol Absolute tolerance in the same units as the operands.
+///
+/// For finite operands, checks `|exp - act| <= tol`. Values are converted to
+/// long double. A negative or NaN tolerance never satisfies equality; a NaN
+/// operand never matches. Equal values, including equal infinities and signed
+/// zeros, match when the tolerance is nonnegative. Other infinite operands do
+/// not match. The `floatneq` variants negate this equality result.
+/// @code{.c}
+/// triax_expect_floateq_abstol(1.0, 1.0001, 0.001);
+/// @endcode
 #define triax_expect_floateq_abstol(exp, act, tol)                                                 \
   triaxi_E1(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+/// @copydoc triax_expect_floateq_abstol
 #define triax_assert_floateq_abstol(exp, act, tol)                                                 \
   triaxi_A1(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+/// @brief Passes if the values are not equal within the absolute tolerance.
+/// @copydetails triax_expect_floateq_abstol
 #define triax_expect_floatneq_abstol(exp, act, tol)                                                \
   triaxi_E1(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+/// @copydoc triax_expect_floatneq_abstol
 #define triax_assert_floatneq_abstol(exp, act, tol)                                                \
   triaxi_A1(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
-// Relative tolerance: |exp - act| / max(|exp|, |act|) <= tol
+
+/// @brief Passes if the relative difference is at most @p tol.
+/// @param exp Expected value.
+/// @param act Actual value.
+/// @param tol Dimensionless relative tolerance; `0.01` means one percent.
+///
+/// For finite unequal operands, checks
+/// `|exp - act| / max(|exp|, |act|) <= tol`. Equal zeros match without division.
+/// Conversion and non-finite-value rules follow @ref triax_expect_floateq_abstol.
+/// The `floatneq` variants negate the equality result. This check has no
+/// absolute-tolerance floor; use an absolute tolerance for small values near
+/// zero when that better expresses the expected error.
+/// @code{.c}
+/// triax_expect_floateq_reltol(100.0, 100.5, 0.01);
+/// @endcode
 #define triax_expect_floateq_reltol(exp, act, tol)                                                 \
   triaxi_E1(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+/// @copydoc triax_expect_floateq_reltol
 #define triax_assert_floateq_reltol(exp, act, tol)                                                 \
   triaxi_A1(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+/// @brief Passes if the values are not equal within the relative tolerance.
+/// @copydetails triax_expect_floateq_reltol
 #define triax_expect_floatneq_reltol(exp, act, tol)                                                \
   triaxi_E1(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+/// @copydoc triax_expect_floatneq_reltol
 #define triax_assert_floatneq_reltol(exp, act, tol)                                                \
   triaxi_A1(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
 
-// ── Memory
-// ────────────────────────────────────────────────────────────────────
+// ── Memory ────────────────────────────────────────────────────────────────────
+
+/// @brief Passes if the first @p siz bytes of both memory regions are equal.
+/// @param ptr1 First memory region.
+/// @param ptr2 Second memory region.
+/// @param siz Number of bytes to compare.
+///
+/// Both pointers must provide @p siz readable bytes. Comparison is byte-wise,
+/// including any padding bytes; use element-wise checks for value comparison.
+/// A zero size satisfies equality and fails inequality.
 #define triax_expect_memeq(ptr1, ptr2, siz)                                                        \
   triaxi_E1(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+/// @copydoc triax_expect_memeq
 #define triax_assert_memeq(ptr1, ptr2, siz)                                                        \
   triaxi_A1(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+/// @brief Passes if at least one of the first @p siz bytes differs.
+/// @copydetails triax_expect_memeq
 #define triax_expect_memneq(ptr1, ptr2, siz)                                                       \
   triaxi_E1(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+/// @copydoc triax_expect_memneq
 #define triax_assert_memneq(ptr1, ptr2, siz)                                                       \
   triaxi_A1(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
 
-/// @brief Test if ptr[0..siz-1] is all-zero / not all-zero
+/// @brief Passes if every byte in the memory region is zero.
+/// @param ptr Memory region containing at least @p siz readable bytes.
+/// @param siz Number of bytes to inspect.
+/// A zero size satisfies `memzero` and fails `memnzero`.
 #define triax_expect_memzero(ptr, siz)  triaxi_E1(memzero, 0, #ptr ", " #siz, ptr, siz)
+/// @copydoc triax_expect_memzero
 #define triax_assert_memzero(ptr, siz)  triaxi_A1(memzero, 0, #ptr ", " #siz, ptr, siz)
+/// @brief Passes if at least one byte in the memory region is nonzero.
+/// @copydetails triax_expect_memzero
 #define triax_expect_memnzero(ptr, siz) triaxi_E1(memzero, 1, #ptr ", " #siz, ptr, siz)
+/// @copydoc triax_expect_memnzero
 #define triax_assert_memnzero(ptr, siz) triaxi_A1(memzero, 1, #ptr ", " #siz, ptr, siz)
 
-// ── Strings
-// ───────────────────────────────────────────────────────────────────
+// ── Strings and byte views ────────────────────────────────────────────────────
 
-/// @brief String-slice type used by string/stream assertions.
-/// In C++, this Implicitly constructs from `const char*`, `std::string` or `std::string_view` (if
-/// available). Use @ref triax_str(ptr, len) to pass a non-null-terminated buffer.
+/// @brief Non-owning view of a string or byte sequence.
+/// The view does not copy, free, or extend the lifetime of its storage. The
+/// caller must keep the referenced bytes valid while the view is used.
+/// The sequence need not be NUL-terminated and may contain embedded NUL bytes.
+/// A null string has a null pointer and zero length; a non-null empty string
+/// is a distinct value.
+///
+/// C++ permits implicit construction from `const char*`, `std::string`, and
+/// `std::string_view` when available. Views of temporary or modified strings
+/// can dangle. Use @ref triax_str for an explicit pointer/length pair.
 typedef struct Triax_Str {
-  const char* str;
-  size_t      len;
+  const char* str; ///< Borrowed byte pointer; NULL represents a null string.
+  size_t      len; ///< Number of bytes in the view.
 #if TRIAXI_CPP
   Triax_Str() : str{nullptr}, len{0} {}
   Triax_Str(const char* s, size_t l) : str{s}, len{l} {}
@@ -522,80 +675,140 @@ typedef struct Triax_Str {
 #endif
 } Triax_Str;
 
-/// @brief Creates a @ref Triax_Str object from a pointer and a length
+/// @brief Creates a borrowed view of @p len bytes at @p ptr.
+/// @param ptr Pointer to at least @p len readable bytes, or NULL with zero length.
+/// @param len Byte count; no terminating NUL is required or added.
+/// No allocation or copy occurs. The caller retains ownership of the storage.
+/// @code{.c}
+/// const char bytes[] = {'a', '\0', 'b'};
+/// Triax_Str view = triax_str(bytes, sizeof(bytes));
+/// triax_expect_streq(view, triax_str("a\0b", 3));
+/// @endcode
 static inline Triax_Str triax_str(const char* ptr, size_t len);
 
-/// @name Captured byte access
-///
-/// These functions allocate memory on the sender side. Returned strings remain valid until the
-/// current test ends and are freed automatically.
-///
+/// @name File and captured-output snapshots
+/// Call these functions only during a test invocation. Each returns a snapshot
+/// rather than a live view of the file or output stream. Returned storage is
+/// managed by Triax, remains valid through fixture teardown, and is released
+/// during invocation cleanup. Do not free it or retain it after the invocation.
+/// The returned bytes need not be NUL-terminated; use the view's length.
 /// @{
 
-/// @brief Reads the complete contents of a file.
-///
-/// Opens the file at @p path, reads its contents into memory, and closes the file before returning.
-///
-/// @param path NUL-terminated valid path to the file.
-/// @return A string view over the file contents.
-/// @note Fails the current test if the file cannot be opened or read.
+/// @brief Reads the complete contents of a file into a framework-managed view.
+/// @param path NUL-terminated path to the file.
+/// @return A snapshot of the file's bytes, which may include embedded NUL bytes.
+/// The file is opened, read, and closed before returning. An open failure
+/// stops the invocation with a file-open test error; a read failure also stops
+/// the invocation. Contents are read until EOF; the reported size is only an
+/// allocation hint, so pseudo-files reporting zero or an upper bound work too.
+/// The file must remain stable while it is being read and eventually reach EOF.
 static inline Triax_Str triax_read_file(const char* path);
 
-/// @brief Returns the output captured from `stdout`.
-/// @return A string view over all bytes written to `stdout` since the current test started.
+/// @brief Returns a snapshot of stdout captured so far in the current invocation.
+/// @return All captured stdout bytes since the invocation began, including
+/// fixture output emitted so far.
+/// Pending stdio output is flushed before reading. This does not clear the
+/// capture; later calls include earlier bytes as well as newly written output.
 static inline Triax_Str triax_read_stdout(void);
 
-/// @brief Returns the output captured from `stderr`.
-/// @return A string view over all bytes written to `stderr` since the current test started.
+/// @brief Returns a snapshot of stderr captured so far in the current invocation.
+/// @return All captured stderr bytes since the invocation began, including
+/// fixture output emitted so far.
+/// Pending stdio output is flushed before reading. This does not clear the
+/// capture; later calls include earlier bytes as well as newly written output.
 static inline Triax_Str triax_read_stderr(void);
 
 /// @}
 
-/// @brief Accept (const) char*, std::string, std::string_view (C++17), or Triax_Str (create via
-/// @ref triax_str(str, len)). Null pointers are safe to use and compare equal to only each other.
-/// To pass pointer-length pairs (which may contain embedded nulls), one may pass a Triax_Str object
-/// (either directly or by using the @ref triax_str() function) NULL strings are treated safely as
-/// strings different from all nonnull strings.
+/// @brief Passes if the two strings have identical contents and lengths.
+/// @param str1 First string.
+/// @param str2 Second string.
+///
+/// C accepts `char*`, `const char*`, and @ref Triax_Str. C++ additionally accepts
+/// `std::string`, `std::string_view` when available, and `nullptr`.
+/// C-string operands must be NUL-terminated. Use @ref triax_str for explicit
+/// byte lengths, including sequences containing embedded NUL bytes.
+/// Comparison is case-sensitive and byte-wise, without Unicode normalization.
+/// Two null strings match; a null string differs from every non-null string,
+/// including an empty one. In C, pass `(const char*)NULL` for a null C string.
 #define triax_expect_streq(str1, str2)                                                             \
   triaxi_E1(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+/// @copydoc triax_expect_streq
 #define triax_assert_streq(str1, str2)                                                             \
   triaxi_A1(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+/// @brief Passes if the strings differ in contents, length, or nullness.
+/// @copydetails triax_expect_streq
 #define triax_expect_strneq(str1, str2)                                                            \
   triaxi_E1(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+/// @copydoc triax_expect_strneq
 #define triax_assert_strneq(str1, str2)                                                            \
   triaxi_A1(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
 
+/// @brief Passes if @p str starts with @p pref.
+/// @param str String to inspect.
+/// @param pref Required prefix.
+/// Operand types and byte interpretation follow @ref triax_expect_streq.
+/// Both strings must be non-null for a match. A non-null empty prefix matches
+/// any non-null string, including an empty string.
 #define triax_expect_str_startswith(str, pref)                                                     \
   triaxi_E1(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+/// @copydoc triax_expect_str_startswith
 #define triax_assert_str_startswith(str, pref)                                                     \
   triaxi_A1(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+/// @brief Passes if @p str does not start with @p pref, or either string is null.
+/// @copydetails triax_expect_str_startswith
 #define triax_expect_str_nstartswith(str, pref)                                                    \
   triaxi_E1(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+/// @copydoc triax_expect_str_nstartswith
 #define triax_assert_str_nstartswith(str, pref)                                                    \
   triaxi_A1(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
 
+/// @brief Passes if @p str ends with @p suf.
+/// @param str String to inspect.
+/// @param suf Required suffix.
+/// Operand types and byte interpretation follow @ref triax_expect_streq.
+/// Both strings must be non-null for a match. A non-null empty suffix matches
+/// any non-null string, including an empty string.
 #define triax_expect_str_endswith(str, suf)                                                        \
   triaxi_E1(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+/// @copydoc triax_expect_str_endswith
 #define triax_assert_str_endswith(str, suf)                                                        \
   triaxi_A1(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+/// @brief Passes if @p str does not end with @p suf, or either string is null.
+/// @copydetails triax_expect_str_endswith
 #define triax_expect_str_nendswith(str, suf)                                                       \
   triaxi_E1(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+/// @copydoc triax_expect_str_nendswith
 #define triax_assert_str_nendswith(str, suf)                                                       \
   triaxi_A1(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
 
+/// @brief Passes if @p str contains @p needle as a contiguous byte sequence.
+/// @param str String to search.
+/// @param needle Required substring.
+/// Operand types and byte interpretation follow @ref triax_expect_streq.
+/// Both strings must be non-null for a match. A non-null empty needle matches
+/// any non-null string, including an empty string.
 #define triax_expect_str_contains(str, needle)                                                     \
   triaxi_E1(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+/// @copydoc triax_expect_str_contains
 #define triax_assert_str_contains(str, needle)                                                     \
   triaxi_A1(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+/// @brief Passes if @p str lacks @p needle, or either string is null.
+/// @copydetails triax_expect_str_contains
 #define triax_expect_str_ncontains(str, needle)                                                    \
   triaxi_E1(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+/// @copydoc triax_expect_str_ncontains
 #define triax_assert_str_ncontains(str, needle)                                                    \
   triaxi_A1(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
 
-// ── Process
-// ───────────────────────────────────────────────────────────────────
-/// @brief Platform-agnostic fault wrappers: These abstract over types of errors
+// ── Faults and process exits ──────────────────────────────────────────────────
+
+/// @brief Platform-specific fault code used by fault checks.
+/// Use `TRIAX_FAULT_*` constants for common fault reasons. Codes correspond to
+/// POSIX signals or Windows exceptions; their numeric values are not portable.
+/// Escaping C++ exceptions are reported separately and are not native faults.
 typedef uint32_t Triax_Fault;
+/// @brief Accepts any native fault in a positive fault check.
 #define TRIAX_FAULT_ANY ((Triax_Fault)(-1))
 #if TRIAXI_PLATFORM_POSIX
 # define TRIAX_FAULT_MEMORY     ((Triax_Fault)SIGSEGV)
@@ -613,41 +826,83 @@ typedef uint32_t Triax_Fault;
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
-/// @brief Asserts that @p ... terminates the process with a fault matching @p
-/// fault.
-/// @param fault  Expected crash reason (@ref Triax_Fault). `TRIAX_FAULT_ANY`
-/// accepts any crash.
-/// @param ...    Code block to execute, evaluated as a statement.
+/// @brief Passes if the code block faults with the expected reason.
+/// @param fault Expected native fault code; `TRIAX_FAULT_ANY` accepts any fault.
+/// @param ... Code block executed as statements in the current test's process.
+///
+/// If the block returns normally, the check fails: `assert` stops the test,
+/// while `expect` continues. If a fault occurs, the invocation ends whether
+/// the fault matches or not. Code after the check and fixture teardown do not
+/// run. Use process isolation for crash containment; non-isolated recovery
+/// cannot protect against arbitrary memory corruption or interrupted runtime
+/// operations. A normal process exit does not satisfy a fault check.
+/// @code{.c}
+/// triax_test(process, aborts, .isolation = TRIAX_ISOLATION_ON) {
+///   triax_assert_fault(TRIAX_FAULT_ABORT, abort());
+///   // Not reached when abort() faults as expected.
+/// }
+/// @endcode
 #define triax_assert_fault(fault, ...)                                                             \
   triaxi_assert_fault(0, 1, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
+/// @copydoc triax_assert_fault
 #define triax_expect_fault(fault, ...)                                                             \
   triaxi_assert_fault(0, 0, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
+
+/// @brief Passes if the code block completes without a native fault.
+/// @param ... Code block executed as statements in the current test's process.
+/// Normal completion continues the test. A fault ends the invocation and fails
+/// the check; a process exit or escaping C++ exception is also an unexpected
+/// termination. Process isolation provides crash containment.
 #define triax_assert_nfault(...) triaxi_assert_fault(1, 1, 0, #__VA_ARGS__ " ", __VA_ARGS__)
+/// @copydoc triax_assert_nfault
 #define triax_expect_nfault(...) triaxi_assert_fault(1, 0, 0, #__VA_ARGS__ " ", __VA_ARGS__)
 
+/// @brief Accepts any ordinary process exit status in a positive exit check.
 #define TRIAX_EXIT_ANY           UINT32_MAX
 
-/// @brief Test that @p ... calls `exit()` with a code matching @p exit_code.
-/// @param code       Expected exit code; pass `TRIAX_EXIT_ANY` to accept any.
-/// @param ...        Code block to execute, evaluated as a statement.
-/// @note Requires process isolation. Using this assertion without isolation
-/// reports a test error because exit() cannot be safely intercepted in-process.
+/// @brief Passes if the code block terminates the process with the expected status.
+/// @param code Expected observable exit status; `TRIAX_EXIT_ANY` accepts any.
+/// @param ... Code block executed as statements in the current test's process.
+///
+/// A call such as `exit(code)` or `_Exit(code)` ends the invocation. Code after
+/// the check and fixture teardown do not run. If the block returns normally,
+/// the check fails: `assert` stops the test, while `expect` continues.
+/// A native fault does not satisfy an ordinary exit check. On POSIX, only the
+/// low eight bits of the process exit status are observable.
+/// @note Requires process isolation. Without isolation, a test API error is
+/// reported before the code block executes.
+/// @code{.c}
+/// triax_test(process, exits, .isolation = TRIAX_ISOLATION_ON) {
+///   triax_assert_exit(7, exit(7));
+///   // Not reached when exit(7) terminates the process.
+/// }
+/// @endcode
 #define triax_assert_exit(code, ...)                                                               \
   triaxi_assert_exit(0, 1, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
+/// @copydoc triax_assert_exit
 #define triax_expect_exit(code, ...)                                                               \
   triaxi_assert_exit(0, 0, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
+
+/// @brief Passes if the code block completes without terminating the process.
+/// @param ... Code block executed as statements in the current test's process.
+/// Normal completion continues the test. A process exit, native fault, or
+/// escaping C++ exception ends the invocation and fails the check.
+/// @note Requires process isolation, even when the block is expected to return.
+/// Without isolation, a test API error is reported before the block executes.
 #define triax_assert_nexit(...) triaxi_assert_exit(1, 1, 0, #__VA_ARGS__ " ", __VA_ARGS__)
+/// @copydoc triax_assert_nexit
 #define triax_expect_nexit(...) triaxi_assert_exit(1, 0, 0, #__VA_ARGS__ " ", __VA_ARGS__)
 /// @}
 /// @} // triax_test_module
 
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////  Implementation   /////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////// Implementation//////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+#pragma region implementation
 
 #include <assert.h>
 #include <errno.h>
@@ -792,23 +1047,26 @@ typedef uint32_t Triax_Fault;
 # define TRIAXI_IGNWARN_GNU_BEG(warn)
 # define TRIAXI_IGNWARN_GNU_END
 #endif
-#pragma region implementation
 #pragma region common_utilities
 #define TRIAXI_WRONGMODULE_ERR(FNAME)                                                              \
   static_assert(0, #FNAME " cannot be used in a non-runner translation unit — define TRIAX_IMPL "  \
                           "in exactly one translation unit or disable TRIAX_MULTI_TU.")
 
-#if TRIAXI_MSVC_COMPAT
-# define triaxi_restrict __restrict
-#elif TRIAXI_GNU_COMPAT
-# define triaxi_restrict __restrict__
-#elif TRIAXI_C >= 199901L
-# define triaxi_restrict restrict
-#else
-# define triaxi_restrict
-#endif
+#define TRIAXI_STRINGIFY_(x)    #x
+#define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
+#define TRIAXI_CONCAT_(a, b)    a##b
+#define TRIAXI_CONCAT(a, b)     TRIAXI_CONCAT_(a, b)
+#define TRIAXI_COMMA_ONE(x)     x,
+
+// NOLINTNEXTLINE(bugprone-macro-parentheses)
+#define TRIAXI_COUNT_ONE(X)     +1
+#define TRIAXI_COUNT_ALL(X)     (0 + X(TRIAXI_COUNT_ONE, ))
+
+#define TRIAXI_STRINGIFY_ONE(x) #x,
+#define TRIAXI_STRINGIFY_ALL(X) X(TRIAXI_STRINGIFY_ONE, )
 
 #if TRIAXI_CPP
+# define triaxi_alignof(T)       alignof(T)
 # define triaxi_alignas(x)       alignas(x)
 # define TRIAXI_EXTERN_FOR_CONST extern
 # define TRIAXI_EXTERN_C_BEG     extern "C" {
@@ -816,6 +1074,7 @@ typedef uint32_t Triax_Fault;
 # define TRIAXI_ZINIT
 # define TRIAXI_T(T) T
 #else
+# define triaxi_alignof(T) _Alignof(T)
 # define triaxi_alignas(x) _Alignas(x)
 # define TRIAXI_EXTERN_FOR_CONST
 # define TRIAXI_EXTERN_C_BEG
@@ -848,24 +1107,21 @@ typedef uint32_t Triax_Fault;
 # define triaxi_noreturn
 #endif
 
-#define triaxi_countof(...)     (sizeof(__VA_ARGS__) / sizeof((__VA_ARGS__)[0]))
-#define triaxi_lenof(lit)       (sizeof("" lit "") - 1)
+#if TRIAXI_MSVC_COMPAT
+# define triaxi_restrict __restrict
+#elif TRIAXI_GNU_COMPAT
+# define triaxi_restrict __restrict__
+#elif TRIAXI_C >= 199901L
+# define triaxi_restrict restrict
+#else
+# define triaxi_restrict
+#endif
 
-#define TRIAXI_STRINGIFY_(x)    #x
-#define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
-#define TRIAXI_CONCAT_(a, b)    a##b
-#define TRIAXI_CONCAT(a, b)     TRIAXI_CONCAT_(a, b)
-#define TRIAXI_COMMA_ONE(x)     x,
+#define triaxi_countof(...) (sizeof(__VA_ARGS__) / sizeof((__VA_ARGS__)[0]))
+#define triaxi_lenof(lit)   (sizeof("" lit "") - 1)
 
-// NOLINTNEXTLINE(bugprone-macro-parentheses)
-#define TRIAXI_COUNT_ONE(X)     +1
-#define TRIAXI_COUNT_ALL(X)     (0 + X(TRIAXI_COUNT_ONE, ))
-
-#define TRIAXI_STRINGIFY_ONE(x) #x,
-#define TRIAXI_STRINGIFY_ALL(X) X(TRIAXI_STRINGIFY_ONE, )
-
-#define TRIAXI_MIN(x, y)        ((x) <= (y) ? (x) : (y))
-#define TRIAXI_MAX(x, y)        ((x) >= (y) ? (x) : (y))
+#define TRIAXI_MIN(x, y)    ((x) <= (y) ? (x) : (y))
+#define TRIAXI_MAX(x, y)    ((x) >= (y) ? (x) : (y))
 
 static inline char* triaxi_catstr(char* dst, const void* src, size_t len) {
   return memcpy(dst, src, len), dst + len;
@@ -929,7 +1185,9 @@ static inline int64_t triaxi_now_ms(void) {
   LARGE_INTEGER        counter;
   if (!freq.QuadPart && !QueryPerformanceFrequency(&freq)) { triaxi_fatal(); }
   if (!QueryPerformanceCounter(&counter)) { triaxi_fatal(); }
-  return (counter.QuadPart * 1000LL) / freq.QuadPart;
+  // Divide first: multiplying the uptime counter can overflow after only days.
+  return (counter.QuadPart / freq.QuadPart) * 1000LL
+       + (counter.QuadPart % freq.QuadPart) * 1000LL / freq.QuadPart;
 #else /* triaxi_embedded */
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
@@ -1189,12 +1447,6 @@ private:
 };
 #endif
 
-#if TRIAXI_CPP
-# define TRIAXI_ALIGNOF(T) alignof(T)
-#else
-# define TRIAXI_ALIGNOF(T) _Alignof(T)
-#endif
-
 #if TRIAXI_CLANG
 # define TRIAXI_NOSANITIZE , no_sanitize("address")
 #else
@@ -1219,7 +1471,7 @@ private:
 # elif TRIAXI_SECTION_GNU
 #  define TRIAXI_LINKER_USE(x)
 #  define TRIAXI_OBJECT_SECTION(section_name, T)                                                   \
-    __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used TRIAXI_NOSANITIZE))
+    __attribute__((section(section_name), aligned(triaxi_alignof(T)), used TRIAXI_NOSANITIZE))
 
 # endif
 
@@ -1231,7 +1483,7 @@ private:
 #  error "Triax: unsupported Mach-O section-placement syntax"
 # endif
 # define TRIAXI_OBJECT_SECTION(section_name, T)                                                    \
-   __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used TRIAXI_NOSANITIZE))
+   __attribute__((section(section_name), aligned(triaxi_alignof(T)), used TRIAXI_NOSANITIZE))
 # define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("__DATA,TRXTST", TRIAXI_Test)
 # define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("__DATA,TRXSUT", TRIAXI_SuiteReg)
 
@@ -1240,7 +1492,7 @@ private:
 #  error "Triax: unsupported ELF section-placement syntax"
 # endif
 # define TRIAXI_OBJECT_SECTION(section_name, T)                                                    \
-   __attribute__((section(section_name), aligned(TRIAXI_ALIGNOF(T)), used,                         \
+   __attribute__((section(section_name), aligned(triaxi_alignof(T)), used,                         \
                   retain TRIAXI_NOSANITIZE))
 # define TRIAXI_TEST_SECTION(x)  TRIAXI_OBJECT_SECTION("TRXTST", TRIAXI_Test)
 # define TRIAXI_SUITE_SECTION(x) TRIAXI_OBJECT_SECTION("TRXSUT", TRIAXI_SuiteReg)
@@ -1402,6 +1654,13 @@ typedef struct TRIAXI_AssertHdr {
 #define TRIAXI_ENCODING_MASK      0x0Fu
 #define TRIAXI_ENCODING_DEFAULT   0x00u
 #define TRIAXI_ENCODING_STRING    0x01u
+/*
+ * One or more length-prefixed blobs (a size_t byte count, then that many raw bytes, repeated
+ * until the record ends) — unlike TRIAXI_ENCODING_DEFAULT's NUL-separated arguments, content may
+ * contain embedded NULs of its own (a user printf argument, or a custom C++ type's operator<</
+ * std::formatter output) without being misread as extra arguments or quoted like a string.
+ */
+#define TRIAXI_ENCODING_BLOB      0x02u
 
 #define TRIAXI_ENCODING_NULL_ARG1 0x40u
 #define TRIAXI_ENCODING_NULL_ARG2 0x80u
@@ -1448,7 +1707,8 @@ typedef enum TRIAXI_Error {
   TRIAXI_ERROR_ASSERT_IN_FIXTURE,
   TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION,
 
-  TRIAXI_ERROR_FILE_OPEN
+  TRIAXI_ERROR_FILE_OPEN,
+  TRIAXI_ERROR_INTERNAL
 } TRIAXI_Error;
 
 enum {
@@ -1514,7 +1774,7 @@ typedef struct TRIAXI_Shared {
 
 TRIAXI_EXTERN_C_BEG
 
-TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr; // todo broken on windows
+TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
 #if !TRIAXI_GNU_COMPAT
 # pragma warning(push)
 // C4324 (structure padded due to alignment specifier): TRIAXI_ExecState
@@ -1564,11 +1824,14 @@ static inline void* triaxi_allocate(size_t nbytes) {
   void* ptr = malloc(nbytes);
   if (!ptr) { triaxi_fatal(); }
   if (TRIAXI_exec.allocations.count == TRIAXI_exec.allocations.cap) {
-    TRIAXI_exec.allocations.cap
-        = TRIAXI_exec.allocations.cap ? TRIAXI_exec.allocations.cap * 2 : 16;
-    TRIAXI_exec.allocations.ptrs = (void**)realloc((void*)TRIAXI_exec.allocations.ptrs,
-                                                   sizeof(void*) * TRIAXI_exec.allocations.cap);
-    if (!TRIAXI_exec.allocations.ptrs) { triaxi_fatal(); }
+    size_t cap  = TRIAXI_exec.allocations.cap ? TRIAXI_exec.allocations.cap * 2 : 16;
+    void** ptrs = (void**)realloc(TRIAXI_exec.allocations.ptrs, sizeof(void*) * cap);
+    if (!ptrs) {
+      free(ptr); // since fatal in noisolation does not abort the runner and pointer
+      triaxi_fatal();
+    }
+    TRIAXI_exec.allocations.ptrs = ptrs;
+    TRIAXI_exec.allocations.cap  = cap;
   }
   TRIAXI_exec.allocations.ptrs[TRIAXI_exec.allocations.count++] = ptr;
   return ptr;
@@ -1613,11 +1876,61 @@ static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
   return triaxi_file_read_into(f, str, len), TRIAXI_T(Triax_Str){str, len};
 }
 
+/* Sequential reads for user files, whose reported size need not describe their contents. */
+static inline size_t triaxi_file_read_some(TRIAXI_File f, char* dst, size_t len) {
+#if TRIAXI_PLATFORM_POSIX
+  ssize_t n;
+  do { n = read(f, dst, TRIAXI_MIN(len, SIZE_MAX >> 1u)); } while (n < 0 && errno == EINTR);
+  if (n < 0) { triaxi_fatal(); }
+  return (size_t)n;
+#elif TRIAXI_PLATFORM_WINDOWS
+  DWORD n, chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
+  if (!ReadFile(f, dst, chunk, &n, NULL)) { triaxi_fatal(); }
+  return (size_t)n;
+#else /* triaxi_embedded */
+# error "TRIAX_NO_OS: not yet implemented for this region"
+#endif
+}
+
+static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
+  size_t cap = triaxi_file_size(f), len = 0;
+  size_t allocation = TRIAXI_exec.allocations.count;
+  char*  str        = (char*)triaxi_allocate(cap);
+  for (;;) {
+    if (len == cap) {
+      /* Probe before growing: empty files allocate nothing; exactly sized files need no realloc. */
+      char byte;
+      if (!triaxi_file_read_some(f, &byte, 1)) { break; }
+      if (cap > SIZE_MAX / 2) { triaxi_fatal(); }
+      cap = cap ? cap * 2 : 4096;
+      if (str) {
+        char* grown = (char*)realloc(str, cap);
+        if (!grown) { triaxi_fatal(); }
+        TRIAXI_exec.allocations.ptrs[allocation] = str = grown;
+      } else {
+        str = (char*)triaxi_allocate(cap);
+      }
+      str[len++] = byte;
+      continue;
+    }
+    size_t n = triaxi_file_read_some(f, str + len, cap - len);
+    if (!n) { break; }
+    len += n;
+  }
+  return len ? TRIAXI_T(Triax_Str){str, len} : TRIAXI_STRLIT("");
+}
+
 static inline Triax_Str triax_read_file(const char* path) {
-  if (!path) { errno = EINVAL, triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
+  if (!path) {
+#if TRIAXI_PLATFORM_POSIX
+    triaxi_user_error_f(TRIAXI_ERROR_FILE_OPEN, (uint32_t)EINVAL);
+#elif TRIAXI_PLATFORM_WINDOWS
+    triaxi_user_error_f(TRIAXI_ERROR_FILE_OPEN, ERROR_INVALID_PARAMETER);
+#endif
+  }
   TRIAXI_File f = triaxi_file_open_r(path);
   if (!triaxi_file_valid(f)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
-  Triax_Str res = triaxi_file_read(f);
+  Triax_Str res = triaxi_file_read_all(f);
   triaxi_file_close(f);
   return res;
 }
@@ -1644,8 +1957,30 @@ static inline void triaxi_log_write(const void* buf, size_t len) {
   triaxi_file_write(TRIAXI_exec.log, buf, len);
 }
 
+/*
+ * Backs a proposed byte-count truncation of a UTF-8 string off to the last complete character
+ * boundary at or before it, so TRIAX_EXPR_MAX's cap below can never split a multi-byte character
+ * — a cut mid-character leaves a dangling partial sequence that the JUnit writer's XML escaping
+ * (triaxi_print_xml_escape) would otherwise emit as-is, producing a byte sequence no XML parser
+ * accepts ("not well-formed (invalid token)"), reproduced with a failing string comparison
+ * containing 100 multi-byte characters. s[cap] is always safe to read regardless of whether
+ * truncation is actually happening: when the string is shorter than cap, s[cap] is its NUL
+ * terminator, which is never a continuation byte, so this is then correctly a no-op. This only
+ * needs to tell a lead byte from a continuation byte, not fully validate the sequence — already-
+ * malformed UTF-8 reaching here from some other source is triaxi_print_xml_bytes's job to catch,
+ * with a safe hex fallback.
+ */
+static inline size_t triaxi_utf8_safe_trunc_len(const char* s, size_t cap) {
+  if (((unsigned char)s[cap] & 0xC0) != 0x80) { return cap; }
+  size_t i = cap;
+  while (i > 0 && ((unsigned char)s[i - 1] & 0xC0) == 0x80) { --i; }
+  if (i > 0) { --i; }
+  return i;
+}
+
 static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t neg, uint32_t cr,
                                   uint32_t line, const char* str) {
+  len = (uint8_t)triaxi_utf8_safe_trunc_len(str, len);
 #if TRIAXI_PLATFORM_POSIX
   TRIAXI_AssertHdr hdr = {{len}, type, ae, neg, cr, line, {0}, str};
 #elif TRIAXI_PLATFORM_WINDOWS
@@ -1689,28 +2024,34 @@ static inline void triaxi_debug_break(void) {
 #endif
 }
 
-static inline void triaxi_log_res(TRIAXI_AR val) {
-  TRIAXI_exec.pkg.val = (uint8_t)val;
-  size_t pad          = (sizeof(TRIAXI_exec.pkg) + TRIAXI_exec.pkg.len + 7) & ~(size_t)7;
-  memset(TRIAXI_exec.pkg.args + TRIAXI_exec.pkg.len, 0,
-         pad - sizeof(TRIAXI_exec.pkg) - TRIAXI_exec.pkg.len);
-  triaxi_log_write(&TRIAXI_exec.pkg, pad);
-  /*
-   * The result is now fully logged, so this assertion is resolved — every
-   * caller (the plain expect/assert ternary, TRIAXI_ABORT_TEST) would reset
-   * state back to TEST right after this returns anyway. Doing it here
-   * instead, before triaxi_debug_break() below, matters because a signal
-   * landing inside triaxi_debug_break() (the intended case: SIGTRAP with no
-   * debugger attached, so Triax's own crash handler runs) must not observe
-   * state still IN_ASSERT — triaxi_test_interpret only expects IN_ASSERT
-   * paired with an EXIT_ERROR exit (e.g. assert-in-fixture); pairing it with
-   * EXIT_FAULT here as if it were a mid-predicate crash previously tripped
-   * its consistency check (triaxi_fatal()) instead of reporting a normal
-   * ucrashed/fault outcome, since — unlike a real mid-predicate crash — this
-   * assertion's result had already been completely logged.
-   */
+/*
+ * Every assertion result path — this file's simple triaxi_log_res, and the streamed string/array
+ * paths too long to fit it (triaxi_log_strings, triaxi_AF_arreq_SS) — must call this
+ * once its own write is fully complete. The result is now logged, so this assertion is resolved —
+ * every caller (the plain expect/assert ternary, TRIAXI_ABORT_TEST) would reset state back to TEST
+ * right after returning anyway. Doing it here instead, before triaxi_debug_break() below, matters
+ * because a signal landing inside triaxi_debug_break() (the intended case: SIGTRAP with no
+ * debugger attached, so Triax's own crash handler runs) must not observe state still IN_ASSERT —
+ * triaxi_test_interpret only expects IN_ASSERT paired with an EXIT_ERROR exit (e.g. assert-in-
+ * fixture); pairing it with EXIT_FAULT here as if it were a mid-predicate crash previously tripped
+ * its consistency check (triaxi_fatal()) instead of reporting a normal crashed/fault outcome,
+ * since — unlike a real mid-predicate crash — this assertion's result had already been completely
+ * logged.
+ */
+static inline void triaxi_log_resolved(void) {
+  /* A debugger trap may leave via longjmp, so clear transient encoding before it can fire. */
+  TRIAXI_exec.pkg.code      = TRIAXI_ENCODING_DEFAULT;
   TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;
   if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }
+}
+
+static inline void triaxi_log_res(TRIAXI_AR val) {
+  TRIAXI_exec.pkg.val = (uint8_t)val;
+  size_t record_size  = (sizeof(TRIAXI_exec.pkg) + TRIAXI_exec.pkg.len + 7) & ~(size_t)7;
+  memset(TRIAXI_exec.pkg.args + TRIAXI_exec.pkg.len, 0,
+         record_size - sizeof(TRIAXI_exec.pkg) - TRIAXI_exec.pkg.len); // zero out padding
+  triaxi_log_write(&TRIAXI_exec.pkg, record_size);
+  triaxi_log_resolved();
 }
 #pragma endregion log_protocol
 
@@ -1756,6 +2097,11 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
   }
   abort();
 }
+
+#define TRIAXI_SKIP()                                                                              \
+  (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST                                                  \
+       ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_SKIPPED)                                                    \
+       : triaxi_user_error(TRIAXI_ERROR_SKIP_IN_FIXTURE))
 
 #define triaxi_A1(type, neg, lit, ...)                                                             \
   (TRIAXI_LOG_HDR(TRIAXI_AT_##type, 1, neg, 0, lit),                                               \
@@ -1842,109 +2188,88 @@ static inline bool triaxi_AF_exit(bool v, uint32_t expected) {
   triaxi_log_res(TRIAXI_AR_FAIL1);
   return 1;
 }
+static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
+                                      const size_t* index) {
+  if (!val) { return false; }
 
-static inline bool triaxi_strn_compare_impl_send(uint8_t val, Triax_Str e1, Triax_Str e2) {
-  if (!val) { return 0; }
-  TRIAXI_exec.pkg.val = val;
   const bool null1 = !e1.str, null2 = !e2.str;
-
+  TRIAXI_exec.pkg.val  = val;
   TRIAXI_exec.pkg.code = TRIAXI_ENCODING_STRING | (null1 ? TRIAXI_ENCODING_NULL_ARG1 : 0)
                        | (null2 ? TRIAXI_ENCODING_NULL_ARG2 : 0);
   if (null1) { e1 = TRIAXI_STRLIT(""); }
   if (null2) { e2 = TRIAXI_STRLIT(""); }
-  /*
-   * Result payload lengths are uint32_t on the wire. Keep both string
-   * diagnostics when truncation is necessary: reserve roughly half for each,
-   * then give any space unused by a short string to the other.
-   */
-  const size_t max_data = UINT32_MAX - sizeof(e1.len);
-  size_t       e1_len   = e1.len;
-  size_t       e2_len   = e2.len;
+
+  char* p = TRIAXI_exec.pkg.args;
+  if (index) {
+    int n = snprintf(p, sizeof(size_t) * 3 + 1, "%zu", *index);
+    if (n < 0) { triaxi_fatal(); }
+    p += (size_t)n + 1;
+  }
+  const size_t metadata = (size_t)(p - TRIAXI_exec.pkg.args) + sizeof(size_t);
+  const size_t max_data
+      = TRIAXI_MIN((size_t)UINT32_MAX, (size_t)PTRDIFF_MAX - sizeof(TRIAXI_exec.pkg) - 7)
+      - metadata;
+
+  size_t e1_len = e1.len, e2_len = e2.len;
   if (e1_len > max_data || e2_len > max_data - e1_len) {
-    size_t half = max_data / 2;
-    e1_len      = TRIAXI_MIN(e1.len, half);
-    e2_len      = TRIAXI_MIN(e2.len, max_data - e1_len);
+    e1_len = TRIAXI_MIN(e1.len, max_data / 2);
+    e2_len = TRIAXI_MIN(e2.len, max_data - e1_len);
     if (e2_len == e2.len) { e1_len = TRIAXI_MIN(e1.len, max_data - e2_len); }
   }
-  TRIAXI_exec.pkg.len        = (uint32_t)(sizeof(e1.len) + e1_len + e2_len);
+  p                          = triaxi_catstr(p, &e1_len, sizeof(e1_len));
+  TRIAXI_exec.pkg.len        = (uint32_t)(metadata + e1_len + e2_len);
+
   static const char zeros[8] = {TRIAXI_ZINIT};
-  size_t            pad      = (8 - (TRIAXI_exec.pkg.len & 7)) & 7;
+  const size_t      pad      = (8 - (TRIAXI_exec.pkg.len & 7)) & 7;
+
 #if TRIAXI_PLATFORM_POSIX
   TRIAXI_IGNWARN_GNU_BEG("-Wcast-qual")
-  struct iovec bufs[] = {{&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg)},
-                         {(void*)&e1_len, sizeof(e1_len)},
-                         {(void*)e1.str, e1_len},
-                         {(void*)e2.str, e2_len},
-                         {(void*)zeros, pad}};
+  struct iovec bufs[] = {
+      {&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg) + metadata},
+      {(void*)e1.str, e1_len},
+      {(void*)e2.str, e2_len},
+      {(void*)zeros, pad},
+  };
   TRIAXI_IGNWARN_GNU_END
-  for (size_t count = triaxi_countof(bufs), i = 0; i < count;) {
-    while (i < count && bufs[i].iov_len == 0) { ++i; }
-    if (i >= count) { break; }
-    ssize_t ns = writev(TRIAXI_exec.log, &bufs[i], (int)(count - i));
-    if (ns < 0) {
-      if (errno == EINTR) { continue; }
-      triaxi_fatal();
-    } else if (ns == 0) {
+  enum { count = triaxi_countof(bufs) };
+  for (size_t i = 0; i < count;) {
+    while (i < count && !bufs[i].iov_len) { ++i; }
+    if (i == count) { break; }
+
+    ssize_t n = writev(TRIAXI_exec.log, bufs + i, (int)(count - i));
+    if (n <= 0) {
+      if (n < 0 && errno == EINTR) { continue; }
       triaxi_fatal();
     }
-    for (size_t n = (size_t)ns; i < count; ++i) {
-      struct iovec* v = &bufs[i];
-      if (n >= v->iov_len) {
-        n -= v->iov_len;
-      } else {
-        v->iov_base = (char*)v->iov_base + n, v->iov_len -= n;
+
+    for (size_t remaining = (size_t)n; i < count; ++i) {
+      if (remaining < bufs[i].iov_len) {
+        bufs[i].iov_base  = (char*)bufs[i].iov_base + remaining;
+        bufs[i].iov_len  -= remaining;
         break;
       }
+      remaining -= bufs[i].iov_len;
     }
   }
-  TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
-  return 1;
+
 #elif TRIAXI_PLATFORM_WINDOWS
   if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage)) {
-    char* p = TRIAXI_exec.pkg.args;
-    memcpy(p, &e1_len, sizeof(e1_len)), p += sizeof(e1_len);
-    memcpy(p, e1.str, e1_len), p          += e1_len;
-    memcpy(p, e2.str, e2_len), p          += e2_len;
-    memcpy(p, zeros, pad), p              += pad;
+    p = triaxi_catstr(p, e1.str, e1_len);
+    p = triaxi_catstr(p, e2.str, e2_len);
+    p = triaxi_catstr(p, zeros, pad);
     triaxi_log_write(&TRIAXI_exec.pkg, (size_t)(p - (char*)&TRIAXI_exec.pkg));
-    TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
-    return 1;
+  } else {
+    triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg) + metadata);
+    triaxi_log_write(e1.str, e1_len);
+    triaxi_log_write(e2.str, e2_len);
+    triaxi_log_write(zeros, pad);
   }
-  /*
-   * Slow path: batch buffers into storage and write in chunks. The packet
-   * header lives in TRIAXI_exec.pkg's fixed fields, not the chunked args
-   * storage below, so it needs its own write before the payload —
-   * triaxi_test_interpret's reader expects every result record to start
-   * with these header bytes.
-   */
-  triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg));
-  Triax_Str bufs[] = {
-      {(const char*)&e1_len, sizeof(e1_len)},
-      {e1.str, e1_len},
-      {e2.str, e2_len},
-      {zeros, pad},
-  };
-  char *beg = (char*)TRIAXI_exec.storage, *end = beg + sizeof(TRIAXI_exec.storage), *cur = beg;
-
-  for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
-    while (bufs[i].len) {
-      size_t to_copy = TRIAXI_MIN(bufs[i].len, (size_t)(end - cur));
-      memcpy(cur, bufs[i].str, to_copy);
-      cur         += to_copy;
-      bufs[i].str += to_copy;
-      bufs[i].len -= to_copy;
-      if (cur == end) {
-        triaxi_log_write(beg, (size_t)(cur - beg));
-        cur = beg;
-      }
-    }
-  }
-  if (cur > beg) { triaxi_log_write(beg, (size_t)(cur - beg)); }
-  TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
-  return 1;
-#else /* triaxi_embedded */
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
+
+  triaxi_log_resolved();
+  return true;
 }
 
 #if TRIAXI_GNU_COMPAT
@@ -1954,24 +2279,40 @@ static inline bool triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
   (void)v;
   if (!failed) { return 0; }
 
-  va_list ap;
+  /*
+   * Length-prefixed, not NUL-terminated: a user format/argument can legitimately embed a NUL
+   * (e.g. "%c" with 0). triaxi_print_unpack_args' default encoding treats every NUL in the
+   * record as a one-argument separator into a fixed-size args[] array — an embedded NUL here
+   * would be misread as ending this message early and starting another "argument", and enough of
+   * them overflow that array (triaxi_unreachable() past its last slot — undefined behavior if
+   * actually reached, not a safe trap). Prefixing the exact byte count instead means the message
+   * reads back exactly as formatted, embedded NULs included, with nothing left to misinterpret.
+   */
+  char* const  msg  = TRIAXI_exec.pkg.args + sizeof(size_t);
+  const size_t mcap = sizeof(TRIAXI_exec.storage) - 7 - sizeof(size_t);
+
+  va_list      ap;
   va_start(ap, fmt);
-  size_t cap = sizeof(TRIAXI_exec.storage) - 7;
-  int    n   = vsnprintf(TRIAXI_exec.pkg.args, cap, fmt, ap);
+  int n = vsnprintf(msg, mcap, fmt + 1, ap);
   va_end(ap);
+
+  size_t msg_len;
   if (n < 0) {
-    static const char msg[] = "[format error]";
-    memcpy(TRIAXI_exec.pkg.args, msg, sizeof(msg));
-    TRIAXI_exec.pkg.len = sizeof(msg);
+    static const char err[] = "[format error]";
+    memcpy(msg, err, sizeof(err) - 1);
+    msg_len = sizeof(err) - 1;
+  } else if ((size_t)n < mcap) {
+    msg_len = (size_t)n;
   } else {
-    bool   trunc        = n >= (int)cap;
-    size_t len          = trunc ? cap : (size_t)n + 1;
-    TRIAXI_exec.pkg.len = (uint32_t)len;
-    if (trunc) {
-      static const char marker[] = "...[truncated]";
-      memcpy(TRIAXI_exec.pkg.args + len - sizeof(marker), marker, sizeof(marker));
+    static const char marker[] = "...[truncated]";
+    msg_len = mcap - 1; /* vsnprintf wrote mcap-1 content bytes plus its own NUL */
+    if (msg_len >= sizeof(marker) - 1) {
+      memcpy(msg + msg_len - (sizeof(marker) - 1), marker, sizeof(marker) - 1);
     }
   }
+  memcpy(TRIAXI_exec.pkg.args, &msg_len, sizeof(msg_len));
+  TRIAXI_exec.pkg.len  = (uint32_t)(sizeof(msg_len) + msg_len);
+  TRIAXI_exec.pkg.code = TRIAXI_ENCODING_BLOB;
   triaxi_log_res(TRIAXI_AR_FAIL1);
   return 1;
 }
@@ -1999,8 +2340,7 @@ static inline bool triaxi_AF_memeq(bool v, const void* e1, const void* e2, size_
       return 1;
     }
   }
-
-  /* Equal. */
+  // equal
   if (!v) { return 0; }
   TRIAXI_exec.pkg.len = 0;
   triaxi_log_res(TRIAXI_AR_FAIL1);
@@ -2025,22 +2365,23 @@ static inline bool triaxi_AF_memzero(bool v, const void* e1, size_t e2) {
       return 1;
     }
   }
-  if (!v) { return 0; } /* All zero. */
+  // All zero.
+  if (!v) { return 0; }
   TRIAXI_exec.pkg.len = 0;
   triaxi_log_res(TRIAXI_AR_FAIL1);
   return 1;
 }
 
 static inline bool triaxi_AF_eq_SS(bool v, Triax_Str e1, Triax_Str e2) {
-  return triaxi_strn_compare_impl_send(TRIAXI_eq(v, triaxi_strcmp(e1, e2), 0), e1, e2);
+  return triaxi_log_strings(TRIAXI_eq(v, triaxi_strcmp(e1, e2), 0), e1, e2, NULL);
 }
 static inline bool triaxi_AF_gt_SS(bool v, Triax_Str e1, Triax_Str e2) {
   int val = triaxi_strcmp(e1, e2);
-  return triaxi_strn_compare_impl_send(TRIAXI_gt(v, val, 0), e1, e2);
+  return triaxi_log_strings(TRIAXI_gt(v, val, 0), e1, e2, NULL);
 }
 static inline bool triaxi_AF_lt_SS(bool v, Triax_Str e1, Triax_Str e2) {
   int val = triaxi_strcmp(e1, e2);
-  return triaxi_strn_compare_impl_send(TRIAXI_lt(v, val, 0), e1, e2);
+  return triaxi_log_strings(TRIAXI_lt(v, val, 0), e1, e2, NULL);
 }
 #if !TRIAXI_CPP
 static inline bool triaxi_AF_eq_ss(bool v, const char* e1, const char* e2) {
@@ -2077,12 +2418,12 @@ static inline bool triaxi_AF_streq(bool v, Triax_Str e1, Triax_Str e2) {
 static inline bool triaxi_AF_str_startswith(bool v, Triax_Str str, Triax_Str pref) {
   bool ok = str.str && pref.str && str.len >= pref.len
          && (!pref.len || !memcmp(str.str, pref.str, pref.len));
-  return triaxi_strn_compare_impl_send(!v ? !ok : ok, str, pref);
+  return triaxi_log_strings(!v ? !ok : ok, str, pref, NULL);
 }
 static inline bool triaxi_AF_str_endswith(bool v, Triax_Str str, Triax_Str suf) {
   bool ok = str.str && suf.str && str.len >= suf.len
          && (!suf.len || !memcmp(str.str + str.len - suf.len, suf.str, suf.len));
-  return triaxi_strn_compare_impl_send(!v ? !ok : ok, str, suf);
+  return triaxi_log_strings(!v ? !ok : ok, str, suf, NULL);
 }
 static inline bool triaxi_AF_str_contains(bool v, Triax_Str str, Triax_Str needle) {
   bool found = str.str && needle.str && !needle.len;
@@ -2096,7 +2437,7 @@ static inline bool triaxi_AF_str_contains(bool v, Triax_Str str, Triax_Str needl
       }
     }
   }
-  return triaxi_strn_compare_impl_send(!v ? !found : found, str, needle);
+  return triaxi_log_strings(!v ? !found : found, str, needle, NULL);
 }
 
 static inline bool triaxi_AF_eq_u(bool v, unsigned long long e1, unsigned long long e2) {
@@ -2162,10 +2503,23 @@ static inline bool triaxi_AF_floateq_abstol(bool v, long double e1, long double 
 
 static inline bool triaxi_AF_floateq_reltol(bool v, long double e1, long double e2,
                                             long double tol) {
-  bool close
-      = (tol >= 0)
-     && (e1 == e2
-         || (isfinite(e1) && isfinite(e2) && fabsl(e1 - e2) <= tol * fmaxl(fabsl(e1), fabsl(e2))));
+  bool close = tol >= 0 && e1 == e2;
+  if (tol >= 0 && !close && isfinite(e1) && isfinite(e2)) {
+    long double hi = fabsl(e1), lo = fabsl(e2);
+    if (hi < lo) {
+      long double tmp = hi;
+      hi              = lo;
+      lo              = tmp;
+    }
+    /* Same signs: subtract first to preserve nearby differences without overflow.
+     * Opposite signs: compare 1 + lo/hi <= tol as lo/hi <= tol - 1, without
+     * overflowing the sum or rounding a nonzero contribution away at tol == 1. */
+    if (signbit(e1) != signbit(e2) && lo > 0) {
+      close = tol > 1 && (tol >= 2 || lo / hi <= tol - 1);
+    } else {
+      close = (hi - lo) / hi <= tol;
+    }
+  }
   return triaxi_log_RES3(v == close, e1, "%.21Lg", e2, "%.21Lg", tol, "%.21Lg");
 }
 
@@ -2218,108 +2572,9 @@ static inline bool triaxi_AF_arreq_vp(bool v, size_t index, const void* e1, cons
   return r;
 }
 static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_Str e2) {
-  const bool r = !(triaxi_strcmp(e1, e2) == 0);
-  if (v || !r) { return r; }
-
-  TRIAXI_exec.pkg.val = TRIAXI_AR_FAIL1;
-  const bool null1 = !e1.str, null2 = !e2.str;
-  TRIAXI_exec.pkg.code = TRIAXI_ENCODING_STRING | (null1 ? TRIAXI_ENCODING_NULL_ARG1 : 0)
-                       | (null2 ? TRIAXI_ENCODING_NULL_ARG2 : 0);
-  if (null1) { e1 = TRIAXI_STRLIT(""); }
-  if (null2) { e2 = TRIAXI_STRLIT(""); }
-
-  char index_buf[sizeof(size_t) * 3 + 1];
-  int  index_n = snprintf(index_buf, sizeof(index_buf), "%zu", index);
-  if (index_n < 0 || (size_t)index_n >= sizeof(index_buf)) { triaxi_fatal(); }
-
-  // Include the terminating NUL in the wire representation.
-  const size_t index_len = (size_t)index_n + 1;
-  const size_t metadata  = index_len + sizeof(size_t);
-  const size_t max_data  = (size_t)UINT32_MAX - metadata;
-
-  size_t       e1_len = e1.len, e2_len = e2.len;
-
-  if (e1_len > max_data || e2_len > max_data - e1_len) {
-    size_t half = max_data / 2;
-    e1_len      = TRIAXI_MIN(e1.len, half);
-    e2_len      = TRIAXI_MIN(e2.len, max_data - e1_len);
-    if (e2_len == e2.len) { e1_len = TRIAXI_MIN(e1.len, max_data - e2_len); }
-  }
-  TRIAXI_exec.pkg.len        = (uint32_t)(metadata + e1_len + e2_len);
-  static const char zeros[8] = {TRIAXI_ZINIT};
-  const size_t      pad      = (8 - (TRIAXI_exec.pkg.len & 7)) & 7;
-#if TRIAXI_PLATFORM_POSIX
-  TRIAXI_IGNWARN_GNU_BEG("-Wcast-qual")
-  struct iovec bufs[] = {
-      {&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg)},
-      {index_buf, index_len},
-      {&e1_len, sizeof(e1_len)},
-      {(void*)e1.str, e1_len},
-      {(void*)e2.str, e2_len},
-      {(void*)zeros, pad},
-  };
-  TRIAXI_IGNWARN_GNU_END
-  for (size_t nbufs = triaxi_countof(bufs), i = 0; i < nbufs;) {
-    while (i < nbufs && bufs[i].iov_len == 0) { ++i; }
-    if (i >= nbufs) { break; }
-    ssize_t ns = writev(TRIAXI_exec.log, &bufs[i], (int)(nbufs - i));
-    if (ns < 0) {
-      if (errno == EINTR) { continue; }
-      triaxi_fatal();
-    }
-    if (ns == 0) { triaxi_fatal(); }
-    for (size_t n = (size_t)ns; i < nbufs; ++i) {
-      struct iovec* buf = &bufs[i];
-      if (n >= buf->iov_len) {
-        n -= buf->iov_len;
-      } else {
-        buf->iov_base  = (char*)buf->iov_base + n;
-        buf->iov_len  -= n;
-        break;
-      }
-    }
-  }
-#elif TRIAXI_PLATFORM_WINDOWS
-  if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage)) {
-    char* p = TRIAXI_exec.pkg.args;
-    memcpy(p, index_buf, index_len), p    += index_len;
-    memcpy(p, &e1_len, sizeof(e1_len)), p += sizeof(e1_len);
-    memcpy(p, e1.str, e1_len), p          += e1_len;
-    memcpy(p, e2.str, e2_len), p          += e2_len;
-    memcpy(p, zeros, pad), p              += pad;
-    triaxi_log_write(&TRIAXI_exec.pkg, (size_t)(p - (char*)&TRIAXI_exec.pkg));
-  } else {
-    /*
-     * Slow path: the packet header lives in TRIAXI_exec.pkg's fixed fields,
-     * not the chunked args storage below, so it needs its own write before
-     * the payload — triaxi_test_interpret's reader expects every result
-     * record to start with these header bytes.
-     */
-    triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_exec.pkg));
-    Triax_Str bufs[] = {{index_buf, index_len},
-                        {(const char*)&e1_len, sizeof(e1_len)},
-                        {e1.str, e1_len},
-                        {e2.str, e2_len},
-                        {zeros, pad}};
-    char *    beg = TRIAXI_exec.storage, *end = beg + sizeof(TRIAXI_exec.storage), *cur = beg;
-    for (size_t i = 0; i < triaxi_countof(bufs); ++i) {
-      while (bufs[i].len) {
-        size_t to_copy = TRIAXI_MIN(bufs[i].len, (size_t)(end - cur));
-        memcpy(cur, bufs[i].str, to_copy), cur += to_copy;
-        bufs[i].str += to_copy, bufs[i].len -= to_copy;
-        if (cur == end) {
-          triaxi_log_write(beg, (size_t)(cur - beg));
-          cur = beg;
-        }
-      }
-    }
-    if (cur > beg) { triaxi_log_write(beg, (size_t)(cur - beg)); }
-  }
-#else /* triaxi_embedded */
-# error "TRIAX_NO_OS: not yet implemented for this region"
-#endif
-  TRIAXI_exec.pkg.code = TRIAXI_ENCODING_DEFAULT;
-  return r;
+  const bool different = triaxi_strcmp(e1, e2) != 0;
+  if (!v && different) { triaxi_log_strings(TRIAXI_AR_FAIL1, e1, e2, &index); }
+  return different;
 }
 
 static inline bool triaxi_AF_arreq_ss(bool v, size_t index, const char* e1, const char* e2) {
@@ -2473,7 +2728,7 @@ void triaxi_int_float_error(int, ...); // linker error on MSVC
                  unsigned: F##_u,                                                                  \
                  unsigned long: F##_u,                                                             \
                  unsigned long long: F##_u,                                                        \
-                 bool: F##_i,                                                                      \
+                 bool: F##_ui,                                                                     \
                  default: F##_vp)))
 // clang-format on
 
@@ -2521,8 +2776,8 @@ static inline
   return SIZE_MAX;
 }
 
-// Both operands have statically-known extents. A size mismatch is considered
-// programmer misuse for both eq and neq.
+// Both operands have statically-known extents. A size mismatch is considered programmer misuse for
+// both eq and neq.
 template <typename A, typename B>
 static inline typename std::enable_if<TRIAXI_StaticExtent<A>::value != SIZE_MAX
                                           && TRIAXI_StaticExtent<B>::value != SIZE_MAX,
@@ -2533,36 +2788,68 @@ static inline typename std::enable_if<TRIAXI_StaticExtent<A>::value != SIZE_MAX
   return TRIAXI_StaticExtent<A>::value;
 }
 
+/*
+ * Each argument is stored as a TRIAXI_ENCODING_BLOB entry (a size_t byte count, then exactly that
+ * many raw bytes — see triaxi_print_unpack_args), not NUL-separated: a custom operator<< or
+ * std::formatter can legitimately write anything, embedded NULs included, and a NUL-separated
+ * scheme has no way to tell such a byte apart from a real separator. Overflowing the latter's
+ * fixed-size unpacked-args array is exactly the crash this class used to cause. begin_arg/end_arg
+ * below reserve the count up front and backfill it once each argument's actual length is known,
+ * so content can be written through the normal streambuf machinery with no scanning or escaping.
+ */
 class TRIAXI_TestStream : public std::ostream {
 public:
   TRIAXI_TestStream() : std::ostream(&streambuf) {}
   template <class T>
   void add_arg(const T& val) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
 # if defined(__cpp_lib_format)
     add_arg_impl<T>(val, formattable<T>{}, streamable<T>{});
 # else
     add_arg_impl<T>(val, streamable<T>{});
 # endif
+    streambuf.end_arg(mark);
   }
-  void add_arg(std::nullptr_t) { this->write("null", 4), this->put('\0'); }
+  void add_arg(std::nullptr_t) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
+    this->write("null", 4);
+    streambuf.end_arg(mark);
+  }
   void add_arg(float val) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
     auto p = this->precision(9);
-    *this << val, this->precision(p), this->put('\0');
+    *this << val, this->precision(p);
+    streambuf.end_arg(mark);
   }
   void add_arg(double val) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
     auto p = this->precision(17);
-    *this << val, this->precision(p), this->put('\0');
+    *this << val, this->precision(p);
+    streambuf.end_arg(mark);
   }
   void add_arg(long double val) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
     auto p = this->precision(21);
-    *this << val, this->precision(p), this->put('\0');
+    *this << val, this->precision(p);
+    streambuf.end_arg(mark);
   }
   bool send(TRIAXI_AR val) {
-    if (streambuf.trunc) {
-      static constexpr char tc[] = "...[truncated]";
-      memcpy(TRIAXI_exec.pkg.args + streambuf.len - sizeof(tc), tc, sizeof(tc));
+    if (streambuf.trunc && streambuf.last_arg != SIZE_MAX) {
+      /* Mark content only, even if the final record is empty or no further prefix fits. */
+      static constexpr char marker[] = "...[truncated]";
+      char*                 arg      = TRIAXI_exec.pkg.args + streambuf.last_arg;
+      size_t                len;
+      memcpy(&len, arg, sizeof(len));
+      size_t n = TRIAXI_MIN(len, sizeof(marker) - 1);
+      memcpy(arg + sizeof(len) + len - n, marker, n);
     }
-    TRIAXI_exec.pkg.len = (uint32_t)streambuf.len;
+    TRIAXI_exec.pkg.len  = (uint32_t)streambuf.len;
+    TRIAXI_exec.pkg.code = TRIAXI_ENCODING_BLOB;
     triaxi_log_res((TRIAXI_AR)val);
     return 1;
   }
@@ -2587,42 +2874,29 @@ private:
 
   template <class T>
   void add_arg_impl(const T& val, std::true_type /*formattable*/, ...) {
-    const size_t avail = streambuf.cap - streambuf.len;
-    /* Need at least one byte for this argument's terminating NUL. */
-    if (avail <= 1) {
-      streambuf.trunc = true, streambuf.len = streambuf.cap;
-      return;
-    }
-    char* const  dst = TRIAXI_exec.pkg.args + streambuf.len;
-    /* reserve one byte for '\0' */
-    const auto   res     = std::format_to_n(dst, (ptrdiff_t)(avail - 1), "{}", val);
-
-    const size_t written = (size_t)(res.out - dst);
-    if ((size_t)res.size > avail - 1) {
-      streambuf.trunc = true;
-      streambuf.len   = streambuf.cap;
-      return;
-    }
-    streambuf.len                         += written;
-    TRIAXI_exec.pkg.args[streambuf.len++]  = '\0';
+    const size_t avail  = streambuf.cap - streambuf.len;
+    char* const  dst    = TRIAXI_exec.pkg.args + streambuf.len;
+    const auto   res    = std::format_to_n(dst, (ptrdiff_t)avail, "{}", val);
+    streambuf.len      += (size_t)(res.out - dst);
+    streambuf.trunc     = (size_t)res.size > avail;
   }
 
   template <class T> // Fallback: operator<< streamable
   void add_arg_impl(const T& val, std::false_type, std::true_type /*streamable*/) {
-    *this << val, this->put('\0');
+    *this << val;
   }
   template <class T> // Last resort
   void add_arg_impl(const T&, std::false_type, std::false_type) {
-    this->write("<?>", 3), this->put('\0');
+    this->write("<?>", 3);
   }
 # else
   template <class T>
   void add_arg_impl(const T& val, std::true_type) {
-    *this << val, this->put('\0');
+    *this << val;
   }
   template <class T>
   void add_arg_impl(const T&, std::false_type) {
-    this->write("<?>", 3), this->put('\0');
+    this->write("<?>", 3);
   }
 # endif
   class TRIAX_Sbuf : public std::streambuf {
@@ -2631,11 +2905,12 @@ private:
   protected:
     static constexpr size_t cap{sizeof(TRIAXI_exec.storage) - 7};
     size_t                  len{0};
+    size_t                  last_arg{SIZE_MAX}; // prefix of the last nonempty argument
     bool                    trunc{false};
     virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
       size_t avail = cap - len;
       if ((size_t)n > avail) { trunc = true, n = (std::streamsize)avail; }
-      memcpy(TRIAXI_exec.pkg.args + len, s, (size_t)n), len += (size_t)n;
+      if (n) { memcpy(TRIAXI_exec.pkg.args + len, s, (size_t)n), len += (size_t)n; }
       return n;
     }
     virtual int_type overflow(int_type ch) override {
@@ -2644,6 +2919,23 @@ private:
         TRIAXI_exec.pkg.args[len++] = (char)ch;
       }
       return ch;
+    }
+    // Reserves this argument's length prefix up front, returning where its content should start
+    // (SIZE_MAX if there wasn't even room for the prefix) — backfilled by end_arg once the
+    // content's actual length is known.
+    size_t begin_arg() {
+      if (trunc || cap - len < sizeof(size_t)) {
+        trunc = true;
+        return SIZE_MAX;
+      }
+      len += sizeof(size_t);
+      return len;
+    }
+    void end_arg(size_t mark) {
+      if (mark == SIZE_MAX) { return; }
+      size_t content_len = len - mark;
+      memcpy(TRIAXI_exec.pkg.args + mark - sizeof(size_t), &content_len, sizeof(content_len));
+      if (content_len) { last_arg = mark - sizeof(size_t); }
     }
   } streambuf;
 };
@@ -2702,10 +2994,26 @@ struct TRIAXI_IsHandled
    static inline bool triaxi_AF_##OP(bool v, const T& e1, const U& e2) {                           \
      return triaxi_AF_##OP##_SS(v, Triax_Str(e1), Triax_Str(e2));                                  \
    }
+/* Compile-time selection instantiates only the requested custom operator. Built-in overloads
+ * still take bool and retain their existing predicates and richer diagnostics. */
+# define TRIAXI_CUSTOM_COMPARE(OP, V, expr)                                                        \
+   template <class T, class U>                                                                     \
+   static inline uint8_t triaxi_compare_##OP##_XX(std::integral_constant<bool, V>, const T& a,     \
+                                                  const U& b) {                                    \
+     return (uint8_t)(expr);                                                                       \
+   }
+TRIAXI_CUSTOM_COMPARE(eq, false, !(a == b))
+TRIAXI_CUSTOM_COMPARE(eq, true, !!(a == b))
+TRIAXI_CUSTOM_COMPARE(gt, false, !(a > b))
+TRIAXI_CUSTOM_COMPARE(gt, true, !(a <= b))
+TRIAXI_CUSTOM_COMPARE(lt, false, !(a < b))
+TRIAXI_CUSTOM_COMPARE(lt, true, !(a >= b))
+# undef TRIAXI_CUSTOM_COMPARE
 # define TRIAXI_AF_FORWARD_XX(OP)                                                                  \
-   template <class T, class U, TRIAXI_FOR_unhandled>                                               \
-   static inline bool triaxi_AF_##OP(bool v, const T& e1, const U& e2) {                           \
-     uint8_t val = TRIAXI_##OP(v, e1, e2);                                                         \
+   template <bool V, class T, class U, TRIAXI_FOR_unhandled>                                       \
+   static inline bool triaxi_AF_##OP(std::integral_constant<bool, V> v, const T& e1,               \
+                                     const U& e2) {                                                \
+     uint8_t val = triaxi_compare_##OP##_XX(v, e1, e2);                                            \
      if (!val) { return 0; }                                                                       \
      TRIAXI_TestStream stream;                                                                     \
      stream.add_arg(e1), stream.add_arg(e2);                                                       \
@@ -2744,6 +3052,10 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD, TRIAXI_AF_FORWARD_SS, TRIAXI_AF_FORWARD_X
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD_ARREQ, TRIAXI_AF_FORWARD_ARREQ_SS, TRIAXI_AF_FORWARD_ARREQ_XX,
                     arreq)
+
+# define triaxi_AF_eq(v, a, b) triaxi_AF_eq(std::integral_constant<bool, !!(v)>{}, a, b)
+# define triaxi_AF_gt(v, a, b) triaxi_AF_gt(std::integral_constant<bool, !!(v)>{}, a, b)
+# define triaxi_AF_lt(v, a, b) triaxi_AF_lt(std::integral_constant<bool, !!(v)>{}, a, b)
 
 #endif /*TRIAXI_CPP*/
 
@@ -2857,7 +3169,7 @@ typedef struct TRIAXI_TestSlot {
   TRIAXI_Shared* shared;
   TRIAXI_File    log, out, err;
 # if TRIAXI_PLATFORM_WINDOWS
-  WCHAR* environment; // todo
+  WCHAR* environment;
 # endif
 
   // Current invocation state.
@@ -3035,6 +3347,7 @@ static inline Triax_Str triaxi_file_read_buf(TRIAXI_File f, TRIAXI_DynBuf* buf) 
 }
 
 static inline void triaxi_file_clear_stream(FILE* file) {
+  if (ferror(file) || fflush(file)) { triaxi_fatal(); }
   if (triaxi_ftruncate(triaxi_fileno(file), 0)) { triaxi_fatal(); }
   if (fseek(file, 0, SEEK_SET)) { triaxi_fatal(); }
 }
@@ -3189,7 +3502,7 @@ static inline void triaxi_sections_init(void) {
         if (triaxi_entry) { triaxi_arr[triaxi_i++] = *triaxi_entry; }                              \
       }                                                                                            \
       (field).beg = triaxi_arr;                                                                    \
-      (field).end = triaxi_arr + triaxi_n;                                                         \
+      (field).end = triaxi_n ? triaxi_arr + triaxi_n : triaxi_arr;                                 \
     } while (0)
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_Test, TRIAXI_global.tests);
   TRIAXI_SECTION_INIT_MSVC(TRIAXI_SuiteReg, TRIAXI_global.suiteregs);
@@ -3513,8 +3826,7 @@ static inline void triaxi_process_control_reset(void) {
     triaxi_sigaction(TRIAXI_signals.crash[i], &TRIAXI_signals.old.crash[i], NULL);
   }
   stack_t ss = TRIAXI_signals.old.altstack;
-  if (ss.ss_flags & SS_DISABLE) {
-    // Darwin bug: zero size isn't ignored with SS_DISABLE
+  if (ss.ss_flags & SS_DISABLE) { // Darwin bug: zero size isn't ignored with SS_DISABLE
     ss.ss_flags = SS_DISABLE, ss.ss_size = (size_t)SIGSTKSZ;
   } else {
     ss.ss_flags = 0;
@@ -3532,6 +3844,11 @@ static inline void triaxi_process_control_reset(void) {
 }
 TRIAXI_EXTERN_C_BEG
 triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
+  // A framework failure must never satisfy a user's expected crash/exit.
+  if (TRIAXI_exec.in_test) {
+    TRIAXI_exec.shared->exit.code = triaxi_error_pack(TRIAXI_ERROR_INTERNAL, 0);
+    TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
+  }
 # if TRIAXI_PLATFORM_POSIX
   int         error = errno;
   TRIAXI_File err   = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
@@ -3642,6 +3959,15 @@ static inline Triax_Str triaxi_print_unpack_cstr(const char** beg, const char* e
   *beg        = nul + 1;
   return r;
 }
+static inline Triax_Str triaxi_print_unpack_blob(const char** beg, const char* end) {
+  size_t len;
+  if ((size_t)(end - *beg) < sizeof(len)) { triaxi_fatal(); }
+  memcpy(&len, *beg, sizeof(len)), *beg += sizeof(len);
+  if (len > (size_t)(end - *beg)) { triaxi_fatal(); }
+  Triax_Str r  = {*beg, len};
+  *beg        += len;
+  return r;
+}
 static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       type,
                                                         const TRIAXI_AssertRes* res) {
   TRIAXI_PrintArgs r = {TRIAXI_ZINIT};
@@ -3668,7 +3994,9 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
   case TRIAXI_AT_arreq:
     if (res->val == TRIAXI_AR_FAIL1) {
       r.meta  = TRIAXI_PRINT_META_INDEX;
-      r.index = triaxi_print_unpack_cstr(&beg, end);
+      r.index = (res->code & TRIAXI_ENCODING_MASK) == TRIAXI_ENCODING_BLOB
+                  ? triaxi_print_unpack_blob(&beg, end)
+                  : triaxi_print_unpack_cstr(&beg, end);
     }
     break;
   case TRIAXI_AT_exit          :
@@ -3692,6 +4020,12 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
     while (beg < end) {
       if (r.nargs == triaxi_countof(r.args)) { triaxi_unreachable(); }
       r.args[r.nargs++] = triaxi_print_unpack_cstr(&beg, end);
+    }
+    return r;
+  case TRIAXI_ENCODING_BLOB:
+    while (beg < end) {
+      if (r.nargs == triaxi_countof(r.args)) { triaxi_unreachable(); }
+      r.args[r.nargs++] = triaxi_print_unpack_blob(&beg, end);
     }
     return r;
   case TRIAXI_ENCODING_STRING: {
@@ -3721,6 +4055,7 @@ static inline Triax_Str triaxi_error_name(TRIAXI_Error error) {
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION:
     return TRIAXI_STRLIT("exit_assert_without_isolation");
   case TRIAXI_ERROR_FILE_OPEN: return TRIAXI_STRLIT("file_open");
+  case TRIAXI_ERROR_INTERNAL : return TRIAXI_STRLIT("internal_error");
   default                    : triaxi_unreachable();
   }
 }
@@ -3738,6 +4073,7 @@ static inline Triax_Str triaxi_error_tostr(TRIAXI_Error error) {
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION:
     return TRIAXI_STRLIT("exit assertions require process isolation");
   case TRIAXI_ERROR_FILE_OPEN: return TRIAXI_STRLIT("could not open file");
+  case TRIAXI_ERROR_INTERNAL : return TRIAXI_STRLIT("internal framework error");
   default                    : triaxi_unreachable();
   }
 }
@@ -3950,8 +4286,18 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
     if (!more) { return; }
   }
   TRIAXI_PrintArgs pa = triaxi_print_unpack_args(atype, res);
-  char             prebuf[512], postbuf[512];
-  char             obuf[512];
+  if (atype == TRIAXI_AT_check) {
+    // Length-prefixed (TRIAXI_ENCODING_BLOB), so pa.args[0].str may contain embedded NULs and
+    // isn't NUL-terminated at a meaningful point — unlike every other case below, which treats
+    // op as a short, genuinely NUL-terminated literal, this has to go through fputStr directly
+    // instead of "%s".
+    fprintf(out, "%s", run->out.ansi.red);
+    triaxi_fputStr(pa.args[0], out);
+    fprintf(out, "%s\n", run->out.ansi.reset);
+    return;
+  }
+  char prebuf[512], postbuf[512];
+  char obuf[512];
   prebuf[0] = '\0', postbuf[0] = '\0';
   char *          pre = prebuf, *post = postbuf;
   Triax_Str       exp = {TRIAXI_ZINIT}, got = {TRIAXI_ZINIT};
@@ -3971,7 +4317,9 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
   }
 
   switch (atype) {
-  default            : triaxi_unreachable();
+  default: triaxi_unreachable();
+  case TRIAXI_AT_check:
+    triaxi_unreachable(); // handled separately above, before this switch
   // --- crash / exit ---
   case TRIAXI_AT_exit:
   case TRIAXI_AT_fault:
@@ -4070,7 +4418,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
     op = !neg ? " does not contain " : " contains ";
     break;
   // --- format ---
-  case TRIAXI_AT_check: op = pa.args[0].str; break;
+  // TRIAXI_AT_check is handled separately above, before this switch.
   case TRIAXI_AT_arreq:
     if (res->val == TRIAXI_AR_FAIL2) {
       // Automatic-size arreq: runtime lengths differ.
@@ -4093,6 +4441,11 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       *pre = '\0';
     }
     break;
+  }
+  if ((res->code & TRIAXI_ENCODING_MASK) == TRIAXI_ENCODING_BLOB
+      && (atype == TRIAXI_AT_gt || atype == TRIAXI_AT_lt)) {
+    op = atype == TRIAXI_AT_gt ? (!neg ? " > " : " <= ") : (!neg ? " < " : " >= ");
+    memcpy(postbuf, " is false", sizeof(" is false"));
   }
   fprintf(out, "%s%s", prebuf, q1);
   if (exp.len) { triaxi_fputStr(exp, out); }
@@ -4550,16 +4903,20 @@ static inline void triaxi_print_assert_junit(const TRIAXI_RunCtx* run, const TRI
   if (!res) { return; }
   fprintf(out, "        %s_%s(", hdr->ae ? "assert" : "expect",
           TRIAXI_assertnames[hdr->neg][(TRIAXI_AssertType)hdr->type]);
-  triaxi_print_xml_escape(out, TRIAXI_T(Triax_Str){hdr->expr_str, (size_t)hdr->expr_len});
+  // Defense in depth alongside triaxi_utf8_safe_trunc_len above: falls back to a safe hex
+  // encoding instead of emitting un-parseable XML if this ever turns out not to be valid UTF-8
+  // for some other reason (e.g. a non-UTF-8 source file encoding).
+  triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){hdr->expr_str, (size_t)hdr->expr_len});
   triaxi_fputlit(")\n", out);
 }
 static inline void triaxi_print_copy_file_range(FILE* dst, FILE* src) {
-  fflush(src), fflush(dst);
+  if (ferror(src) || ferror(dst) || fflush(src) || fflush(dst)) { triaxi_fatal(); }
   if (fseek(src, 0, SEEK_SET)) { triaxi_fatal(); }
   char* chunk = TRIAXI_exec.storage;
   for (size_t n; (n = fread(chunk, 1, sizeof(TRIAXI_exec.storage), src)) > 0;) {
-    fwrite(chunk, 1, n, dst);
+    if (fwrite(chunk, 1, n, dst) != n) { triaxi_fatal(); }
   }
+  if (ferror(src)) { triaxi_fatal(); }
 }
 
 static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
@@ -4633,9 +4990,7 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
     case TRIAXI_STATE_DONE     :
     case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
     }
-
     fprintf(out, "      <error type=\"%s\" message=\"%s", type, phase);
-
     switch (r->exit.type) {
     default                 :
     case TRIAXI_EXIT_NONE   :
@@ -4646,10 +5001,7 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
     case TRIAXI_EXIT_ERROR    : {
       triaxi_print_xml_escape(out, triaxi_error_tostr(triaxi_error_kind(r->exit.code)));
       const Triax_Str sysmsg = triaxi_syserror_tostr(triaxi_error_syserr(r->exit.code));
-      if (sysmsg.len) {
-        triaxi_fputlit(": ", out);
-        triaxi_print_xml_escape(out, sysmsg);
-      }
+      if (sysmsg.len) { triaxi_fputlit(": ", out), triaxi_print_xml_escape(out, sysmsg); }
       break;
     }
     }
@@ -4749,9 +5101,8 @@ static inline void triaxi_print_run_end(const TRIAXI_RunCtx* run, const TRIAXI_R
 # pragma endregion runner_printing
 
 # pragma region runner_initialisation
-# define triaxi_config_error_f(fmt, ...) /* todo check if maybe true_stderr?*/                     \
-   (fprintf(stderr, "Error: " fmt "\n", __VA_ARGS__), exit(2))
-# define triaxi_config_error(lit) triaxi_config_error_f("%s", (lit))
+# define triaxi_config_error_f(fmt, ...) (fprintf(stderr, "Error: " fmt "\n", __VA_ARGS__), exit(2))
+# define triaxi_config_error(lit)        triaxi_config_error_f("%s", (lit))
 
 static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  config,
                                                     const TRIAXI_StdBackup* saved) {
@@ -4793,7 +5144,10 @@ static inline void triaxi_output_close(const TRIAXI_RunCtx* run) {
   FILE* const outfiles[] = {run->out.streams.text, run->out.streams.json, run->out.streams.tap,
                             run->out.streams.junit};
   for (size_t i = 0; i < triaxi_countof(outfiles); ++i) {
-    if (outfiles[i] && outfiles[i] != run->saved.out.file) {
+    if (outfiles[i]) {
+      /* A previous flush can discard unwritten bytes; fclose alone need not report that error. */
+      if (ferror(outfiles[i])) { triaxi_fatal(); }
+      if (outfiles[i] == run->saved.out.file) { continue; }
       if (fclose(outfiles[i])) { triaxi_fatal(); }
     }
   }
@@ -4951,6 +5305,22 @@ static inline void triaxi_config_validate(const Triax_RunConfig* config) {
     triaxi_config_error_f("--jobs: value %u exceeds maximum of %u.", (unsigned)config->njobs,
                           (unsigned)TRIAXI_JOBS_MAX);
   }
+  const char* const paths[] = {config->outpaths.text, config->outpaths.json, config->outpaths.tap,
+                               config->outpaths.junit};
+  for (size_t i = 0; i < triaxi_countof(paths); ++i) {
+    const char* path = paths[i];
+    if (path == TRIAX_OUTPATH_DEFAULT || path == TRIAX_OUTPATH_NONE
+        || path == TRIAX_OUTPATH_STDOUT) {
+      continue;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      const char* prev = paths[j];
+      if (prev != TRIAX_OUTPATH_DEFAULT && prev != TRIAX_OUTPATH_NONE
+          && prev != TRIAX_OUTPATH_STDOUT && !strcmp(path, prev)) {
+        triaxi_config_error_f("Output formats must use distinct paths: '%s'.", path);
+      }
+    }
+  }
 }
 
 static inline void          triaxi_windows_childentry(const Triax_RunConfig* config);
@@ -5024,7 +5394,12 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
 static volatile sig_atomic_t TRIAXI_crash_signal;
 static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
   if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
-  TRIAXI_crash_signal = (sig_atomic_t)ep->ExceptionRecord->ExceptionCode;
+  DWORD code = ep->ExceptionRecord->ExceptionCode;
+  // First-chance C++ exceptions must reach language catch handlers, not longjmp.
+  if (code == 0xE06D7363UL || (code & 0xFCFFFFFFUL) == 0x20474343UL) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  TRIAXI_crash_signal = (sig_atomic_t)code;
   longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED);
 }
 static PVOID TRIAXI_veh_handle;
@@ -5048,7 +5423,7 @@ static PVOID TRIAXI_veh_handle;
  * handler, not something setjmp/longjmp can safely resume from the way
  * POSIX/Windows allow. Unlike the other triaxi_embedded sites in this
  * file, there is nothing to port here; this is a settled "no containment
- * on this target" decision, not a TODO. A crash in a non-isolated test is
+ * on this target" decision, not a TOD O. A crash in a non-isolated test is
  * simply fatal to the whole run, same as it would be with no test
  * framework involved at all.
  */
@@ -5066,6 +5441,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   TRIAXI_exec.in_test = true;
   TRIAXI_exec.param  = t->params.ptr ? (const char*)t->params.ptr + t->params.elsize * inv->idx : 0;
   TRIAXI_exec.shared = shared;
+  memset(&TRIAXI_exec.pkg, 0, sizeof(TRIAXI_exec.pkg));
   TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_NONE;
   TRIAXI_exec.shared->exit.code   = 0;
   int64_t                     t0  = triaxi_now_ms();
@@ -5136,10 +5512,14 @@ which is exactly what this line does by design.
 # endif
     break;
   }
-  if (res == TRIAXI_EXEC_CRASHED) {
-    // todo cleanup, should this have something?
-  } else if (res == TRIAXI_EXEC_ERROR) {
-  } else {
+  /* Keep a body error pending while teardown runs. Leaving it in shared->exit would mask a
+   * subsequent fixture fault/timeout as an already finished result. Restore it only on normal
+   * teardown completion, together with its original phase. These locals are reinitialised after
+   * a crash longjmp; the crashed path never restores the interrupted invocation's pending error. */
+  const TRIAXI_State error_state = TRIAXI_exec.shared->state;
+  const uint32_t     error_code  = res == TRIAXI_EXEC_ERROR ? TRIAXI_exec.shared->exit.code : 0;
+  if (res == TRIAXI_EXEC_ERROR) { TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_NONE; }
+  if (res != TRIAXI_EXEC_CRASHED) {
     for (size_t fi = 3; fi-- > 0;) {
       if (!fixtures[fi]->fini) { continue; }
       TRIAXI_exec.shared->state = TRIAXI_STATE_FINI;
@@ -5150,8 +5530,12 @@ which is exactly what this line does by design.
   triaxi_flush_all();
   TRIAXI_exec.shared->duration_ms = triaxi_elapsed_ms(t0);
   switch (res) {
-  default                  : triaxi_unreachable();
-  case TRIAXI_EXEC_ERROR   : break; // todo does this really not set anything?
+  default: triaxi_unreachable();
+  case TRIAXI_EXEC_ERROR:
+    TRIAXI_exec.shared->state     = error_state;
+    TRIAXI_exec.shared->exit.code = error_code;
+    TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
+    break;
   case TRIAXI_EXEC_RETURNED:
   case TRIAXI_EXEC_ASSERTED:
     TRIAXI_exec.shared->state     = TRIAXI_STATE_DONE;
@@ -5164,13 +5548,23 @@ which is exactly what this line does by design.
     break;
 
   case TRIAXI_EXEC_EXCEPTION:
-    TRIAXI_exec.shared->state     = TRIAXI_STATE_TEST; // correct until c++ init/fini
+    TRIAXI_exec.shared->state     = error_state;
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_EXCEPTION;
     break;
 
   case TRIAXI_EXEC_CRASHED:
-    TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
-    TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
+    /*
+     * exit.type != NONE here means triaxi_user_error_f already recorded its own exit (type
+     * ERROR, with the specific packed reason) before calling abort() for fixture misuse — the
+     * same "already finished" test triaxi_test_finished's isolated-mode equivalent checks for.
+     * Overwriting it with this crash's fault would report a bare "Aborted" instead of the actual
+     * recorded reason (e.g. skip_in_fixture), which the isolated path never loses since the
+     * parent reads it back from shared memory untouched.
+     */
+    if (TRIAXI_exec.shared->exit.type == TRIAXI_EXIT_NONE) {
+      TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
+      TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
+    }
     break;
   }
   if (TRIAXI_exec.isolated) { return; }
@@ -5252,15 +5646,11 @@ state_hdr:
     r.outcome = r.exit.type == TRIAXI_EXIT_TIMEOUT ? TRIAXI_OUTCOME_TIMEOUT : TRIAXI_OUTCOME_ERROR;
     break;
   case TRIAXI_STATE_TEST:
+  case TRIAXI_STATE_IN_ASSERT:
     /*
-     * Not mid-assertion, so unlike the equivalent switch in state_res below
-     * there's no pending expected fault/exit code to compare against —
-     * whatever happened here is always unexpected. Previously every
-     * non-timeout exit type here was lumped into a generic "test_error",
-     * which misclassified a plain crash/uncaught-exception/unexpected-exit()
-     * in ordinary test-body code (i.e. not inside an assert_fault/
-     * assert_exit expression) as framework/user misuse instead of the
-     * ucrashed/uexception/uexited outcome it actually is.
+     * No assertion is pending in the fully parsed log. IN_ASSERT can still be observed
+     * if a signal/timeout arrives after a complete result write but before the state reset.
+     * Classify that termination normally instead of treating the brief window as corruption.
      */
     switch (r.exit.type) {
     default                   :
@@ -5271,28 +5661,6 @@ state_hdr:
     case TRIAXI_EXIT_EXIT     : r.outcome = TRIAXI_OUTCOME_UEXIT; break;
     case TRIAXI_EXIT_EXCEPTION: r.outcome = TRIAXI_OUTCOME_UEXCEPT; break;
     }
-    break;
-  case TRIAXI_STATE_IN_ASSERT:
-    /*
-     * Reaching state_hdr at all means the log, fully parsed, held only
-     * complete header(+result) records — nothing dangling. So if state is
-     * still IN_ASSERT here, whatever stopped execution did so strictly
-     * between "the current assertion's outcome was fully logged" and "the
-     * state gets reset to TEST" — a gap that's now closed on the normal
-     * path (triaxi_log_res resets state to TEST itself, right after
-     * writing the result, before triaxi_debug_break() can fire) and on the
-     * error path (triaxi_user_error_f only reaches this state==IN_ASSERT
-     * check by having already set exit.type = ERROR, and setting it is
-     * unconditional before the branch that decides whether to longjmp).
-     * Anything else that could stop execution mid-predicate (a real crash,
-     * a hang killed by timeout) does so *before* a result is ever logged,
-     * which is a state_res short-read on the result, not a state_hdr
-     * short-read on the next header — see state_res's own IN_ASSERT
-     * handling below for that case. This used to fire on quite literally
-     * every failing assertion under --break (see triaxi_log_res).
-     */
-    if (r.exit.type != TRIAXI_EXIT_ERROR) { triaxi_fatal(); }
-    r.outcome = TRIAXI_OUTCOME_ERROR;
     break;
   case TRIAXI_STATE_DONE   : break;
   case TRIAXI_STATE_SKIPPED: triaxi_unreachable();
@@ -5327,7 +5695,7 @@ state_res: // expected res
   case TRIAXI_STATE_IN_ASSERT: break;
   }
   TRIAXI_AssertRes* d = &TRIAXI_exec.pkg;
-  memset(d, 0, sizeof(*d)); // old msvc on c++ won't accept the other one
+  memset(d, 0, sizeof(*d)); // old msvc on c++ won't accept assignment for FAM structs
   switch (r.exit.type) {
   default                 :
   case TRIAXI_EXIT_NONE   : triaxi_unreachable();
@@ -5640,8 +6008,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
         return triaxi_collect_active_at(run, rres, active, inflight, i, nreported);
       }
       if (timeout_ms == TRIAX_TIMEOUT_NONE || now - h->start_ms < (int64_t)timeout_ms) { continue; }
-      // The child may have exited naturally after the probe above but before we
-      // reached the timeout
+      // The child may have exited naturally after the probe above but before we reached the timeout
       switch (triaxi_waitpid(h->process, &status, WNOHANG)) {
       case -1: triaxi_fatal();
       case 0 : break;
@@ -5667,8 +6034,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
           killed = true;
           break;
         default:
-          // It exited naturally in the race window, not actually a timeout
-          // kill.
+          // It exited naturally in the race window, not actually a timeout kill.
           triaxi_fix_testres(h, status, triaxi_elapsed_ms(h->start_ms));
           return triaxi_collect_active_at(run, rres, active, inflight, i, nreported);
         }
@@ -5784,7 +6150,6 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
        ++sr) {
     if (sr->name && !strcmp(sr->name, t->suitename)) {
       launch->suite_idx = (uint32_t)(sr - TRIAXI_global.suiteregs.beg);
-      break;
     }
   }
 
@@ -5866,13 +6231,15 @@ static inline void triaxi_test_exec_noisolation(TRIAXI_TestSlot* h) {
 static inline void triaxi_test_start(TRIAXI_TestSlot* h, TRIAXI_TestInvocation inv,
                                      const TRIAXI_StdBackup* saved) {
   triaxi_flush_all(); // required before fork/redirection
-  h->invocation          = inv;
-  h->shared->state       = TRIAXI_STATE_SETUP;
-  h->shared->duration_ms = 0;
-  h->shared->exit        = TRIAXI_T(TRIAXI_Exit){TRIAXI_ZINIT};
-  h->start_ms            = triaxi_now_ms();
-  if (((inv.test->params.ptr != NULL) ^ (inv.test->params.elsize > 0))
-      || (inv.test->params.ptr && !inv.test->params.elcount)) {
+  h->invocation               = inv;
+  h->shared->state            = TRIAXI_STATE_SETUP;
+  h->shared->duration_ms      = 0;
+  h->shared->exit             = TRIAXI_T(TRIAXI_Exit){TRIAXI_ZINIT};
+  h->start_ms                 = triaxi_now_ms();
+  const TRIAXI_Params* params = &inv.test->params;
+  if ((params->ptr != NULL) != (params->elsize != 0)
+      || (params->ptr != NULL) != (params->elcount != 0)
+      || (params->elsize && params->elcount > SIZE_MAX / params->elsize)) {
     h->process           = TRIAXI_PROC_NONE;
     h->shared->exit.type = TRIAXI_EXIT_ERROR;
     h->shared->exit.code = triaxi_error_pack(TRIAXI_ERROR_MALFORMED_PARAMS, 0);
@@ -6151,7 +6518,6 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 
 // NOLINTEND(performance-enum-size)
 #pragma endregion implementation
-
 #endif /* TRIAXI_TEST_H */
 
 // MIT License

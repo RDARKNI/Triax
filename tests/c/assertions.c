@@ -6,8 +6,19 @@
 #define TRIAX_MULTI_TU
 #include "triax.h"
 #include "triax_selfverify.h"
+#include <float.h>
 
 triax_suite(assertions, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+
+// triaxi_print_unpack_args' default encoding treats every NUL byte in a logged message as a
+// one-argument separator, with a fixed 5-slot array to unpack into. A message that legitimately
+// embeds more than 5 NULs of its own (here, six literal NUL bytes from "%c" with 0) used to
+// overflow that array via triaxi_unreachable() — undefined behavior, not a safe trap, since it
+// actually gets reached. Expecting a plain "failed" outcome (not a crash) proves the embedded
+// NULs got sanitized before being stored, instead of being mistaken for six separate arguments.
+triaxi_validate(assertions, check_embedded_nul_message, TRIAXI_VALIDATE_FAILED) {
+  triax_expect(0, "%c%c%c%c%c%c", 0, 0, 0, 0, 0, 0);
+}
 
 triaxi_validate(assertions, eq_neq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_eq((char)'a', (char)'a');
@@ -172,6 +183,22 @@ triaxi_validate(ordering, unsigned_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_gt((unsigned)1, (unsigned)0);
   triax_expect_geq((unsigned)1, (unsigned)1);
 }
+// bool vs. a wide unsigned type: bool must never be funneled through the same
+// dispatch bucket as a signed integer, or the unsigned operand gets
+// reinterpreted as negative (e.g. ULLONG_MAX read back as -1) instead of
+// comparing bool's only two values (0/1) directly against it.
+triaxi_validate(ordering, bool_unsigned_pass, TRIAXI_VALIDATE_PASSED) {
+  triax_expect_gt(ULLONG_MAX, (bool)1);
+  triax_expect_gt(ULLONG_MAX, (bool)0);
+  triax_expect_lt((bool)1, ULLONG_MAX);
+  triax_expect_lt((bool)0, ULLONG_MAX);
+  triax_expect_geq((bool)1, (bool)1);
+  triax_expect_leq((bool)0, (unsigned)0);
+}
+triaxi_validate(ordering, bool_unsigned_fail, TRIAXI_VALIDATE_FAILED) {
+  triax_expect_lt(ULLONG_MAX, (bool)1);
+  triax_expect_gt((bool)1, ULLONG_MAX);
+}
 triaxi_validate(ordering, float_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_lt(1.0, 2.0);
   triax_expect_leq(2.0, 2.0);
@@ -219,4 +246,42 @@ triaxi_validate(float_tol, floatneq_pass, TRIAXI_VALIDATE_PASSED) {
 triaxi_validate(float_tol, floatneq_fail, TRIAXI_VALIDATE_FAILED) {
   triax_expect_floatneq_abstol(1.0, 1.0 + 9e-5, 1e-4); // within tolerance
   triax_expect_floatneq_abstol(1.0, 1.0, 1e-4);        // exactly equal
+}
+
+// ── float tolerance — floateq_reltol / floatneq_reltol ─────────────────────
+// LDBL_MAX vs -LDBL_MAX cases: e1 - e2 itself overflows to +Infinity (opposite
+// signs, magnitudes summing past LDBL_MAX), even though e1 and e2 are each
+// individually finite. The true relative difference is exactly 2 regardless —
+// a correct implementation must scale each operand down before subtracting,
+// not divide after the fact, or the overflow either wrongly accepts any
+// tolerance >= 1 (comparing Infinity <= an equally-overflowed threshold) or
+// wrongly rejects every tolerance, even one exactly matching the true ratio
+// (comparing an unrecoverable Infinity <= tol).
+triaxi_validate(float_tol, reltol_pass, TRIAXI_VALIDATE_PASSED) {
+  triax_expect_floateq_reltol(1.0, 1.0 + 1e-10, 1e-9); // within tolerance
+  triax_expect_floateq_reltol(100.0, 100.0, 0.0);      // exact, zero tolerance
+  triax_expect_floateq_reltol(LDBL_MAX, -LDBL_MAX, 2.0L); // true ratio == tol, exactly
+}
+triaxi_validate(float_tol, reltol_fail, TRIAXI_VALIDATE_FAILED) {
+  triax_expect_floateq_reltol(1.0, 2.0, 0.1);             // well outside (ratio 1.0)
+  triax_expect_floateq_reltol(LDBL_MAX, -LDBL_MAX, 1.5L); // true ratio 2 > tol
+  // Opposite signs, magnitudes many orders apart: the true ratio is 1 + (q / LDBL_MAX), strictly
+  // > 1 since q is nonzero — but that tiny second term underflows to exactly 0 in any floating
+  // type, so a formula that compares the *computed ratio's value* against tol (rather than
+  // checking the smaller operand's exact zero-ness first) wrongly rounds this down to passing at
+  // tol == 1.0.
+  triax_expect_floateq_reltol(LDBL_MAX, -nextafterl(0.0L, 1.0L), 1.0L);
+  // Precision near equality: pre-dividing both operands by mag before subtracting (instead of
+  // subtracting first, which is exact here, then dividing once) adds a second rounding — enough
+  // to wrongly pass a tolerance deliberately set just under the true ratio.
+  triax_expect_floateq_reltol(1.5L, nextafterl(1.5L, 0.0L),
+                              (1.5L - nextafterl(1.5L, 0.0L)) / 1.5L * 0.9L);
+}
+triaxi_validate(float_tol, reltolneq_pass, TRIAXI_VALIDATE_PASSED) {
+  triax_expect_floatneq_reltol(1.0, 2.0, 0.1);
+  triax_expect_floatneq_reltol(LDBL_MAX, -LDBL_MAX, 1.5L);
+}
+triaxi_validate(float_tol, reltolneq_fail, TRIAXI_VALIDATE_FAILED) {
+  triax_expect_floatneq_reltol(1.0, 1.0 + 1e-10, 1e-9);
+  triax_expect_floatneq_reltol(LDBL_MAX, -LDBL_MAX, 2.0L);
 }

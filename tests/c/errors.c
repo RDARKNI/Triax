@@ -42,6 +42,35 @@ triaxi_validate_user_error(errors, file_open_missing_path, "file_open") {
   (void)triax_read_file("/nonexistent/triax-selftest-path/does-not-exist");
 }
 
+// A test-body error (not a fixture one) used to skip every fini callback —
+// triaxi_run_func special-cased TRIAXI_EXEC_ERROR out of the teardown loop
+// entirely. The fixture below can only report "skip_in_fixture" by actually
+// running, so seeing that reason here (instead of file_open_missing_path's
+// own "file_open") proves fini ran despite the test body having errored
+// first. Isolated, like the other fixture-abort cases above, specifically so
+// this only exercises the teardown-skipping bug and not the separate
+// non-isolated abort/reason-preserving one below.
+static void errors_fini_proves_it_ran(void) {
+  if (triaxi_validate_is_child()) { triax_skip(); }
+}
+triaxi_validate_user_error_attrs(errors, body_error_still_runs_fini, "skip_in_fixture",
+                                 .fini = errors_fini_proves_it_ran) {
+  (void)triax_read_file("/nonexistent/triax-selftest-path/does-not-exist");
+}
+
+// Exercises the in-process (non-isolated) SIGABRT handler path the suite
+// comment above avoids by forcing isolation on: triaxi_user_error_f records
+// TRIAXI_EXIT_ERROR (reason "skip_in_fixture") before calling abort() for
+// fixture misuse, but triaxi_run_func's crash branch used to unconditionally
+// overwrite that with a generic TRIAXI_EXIT_FAULT, reporting a bare
+// "Aborted" instead. Reusing errors_skip_in_fixture_init non-isolated proves
+// the recorded reason now survives that abort.
+triax_suite(errors_noniso, .isolation = TRIAX_ISOLATION_OFF);
+triaxi_validate_user_error_attrs(errors_noniso, skip_in_fixture, "skip_in_fixture",
+                                 .init = errors_skip_in_fixture_init) {
+  // Unreached: the fixture above aborts before this body ever runs.
+}
+
 // malformed_params is deliberately NOT covered here: it's rejected in
 // triaxi_test_start before the body ever dispatches, for every invocation of
 // that (suite, test) — outer meta-check included, since a test's .params is

@@ -395,6 +395,33 @@ got:
 $junit_result"
 fi
 
+# ── UTF-8 expression truncation produces well-formed JUnit XML ─────────────
+# TRIAX_EXPR_MAX truncates a logged expression by byte count; combo_utf8's
+# test contains enough multi-byte (3-byte euro sign) characters to exceed it
+# at an offset chosen so a naive truncation would split one — this must
+# still parse as well-formed XML (triaxi_utf8_safe_trunc_len in triax.h),
+# not reproduce the "not well-formed (invalid token)" ParseError a mid-
+# character cut used to produce.
+"$COMBO" --text=none --no-color --junit="$(native_path "$WORKDIR/utf8.xml")" \
+  combo_utf8 >/dev/null 2>&1 || true
+utf8_result="$(python3 - "$(native_path "$WORKDIR/utf8.xml")" <<'PY' | tr -d '\r'
+import sys
+import xml.etree.ElementTree as ET
+
+sys.stdout.reconfigure(newline="\n")
+try:
+    ET.parse(sys.argv[1])
+    print("well-formed")
+except ET.ParseError as e:
+    print(f"parse_error: {e}")
+PY
+)"
+if [ "$utf8_result" = "well-formed" ]; then
+  ok "UTF-8 expression truncation: JUnit XML is well-formed"
+else
+  fail "UTF-8 expression truncation: JUnit XML" "$utf8_result"
+fi
+
 # uexception (C++-only) against combo_reporters_cpp, same treatment.
 "$COMBO_CPP" --text=none --no-color --json="$(native_path "$WORKDIR/rep_cpp.json")" \
   --tap="$(native_path "$WORKDIR/rep_cpp.tap")" --junit="$(native_path "$WORKDIR/rep_cpp.xml")" \

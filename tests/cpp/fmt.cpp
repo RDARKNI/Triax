@@ -12,6 +12,7 @@
 #include "triax.h"
 #include "triax_selfverify.h"
 #include <iostream>
+#include <limits>
 
 // ── Custom type ────────────────────────────────────────────────────────────
 // Exercises the fallback formatting path (operator<< / no operator<<)
@@ -44,6 +45,64 @@ triaxi_validate(cpp_fmt, custom_type_no_stream_fail, TRIAXI_VALIDATE_FAILED) {
   // expect output: eq(&<addr>, &<addr>) — address fallback
   Opaque a{1}, b{2};
   triax_expect_eq(a, b);
+}
+
+struct NulWriter {
+  int  v;
+  bool operator==(const NulWriter& o) const { return v == o.v; }
+  bool operator!=(const NulWriter& o) const { return v != o.v; }
+};
+// Simulates a type whose stream representation legitimately contains raw NUL
+// bytes (e.g. wrapped binary data), as opposed to the real per-argument
+// separator TRIAXI_TestStream writes between args. triaxi_print_unpack_args'
+// default encoding has no way to tell the two apart — six or more embedded
+// NULs used to overflow its fixed 5-slot args[] array via
+// triaxi_unreachable() (actually reached, so undefined behavior, not a safe
+// trap) instead of being read back as one argument.
+static std::ostream& operator<<(std::ostream& os, const NulWriter& n) {
+  for (int i = 0; i < 6; ++i) { os.put('\0'); }
+  return os << n.v;
+}
+triaxi_validate(cpp_fmt, custom_type_embedded_nul_fail, TRIAXI_VALIDATE_FAILED) {
+  NulWriter a{1}, b{2};
+  triax_expect_eq(a, b);
+}
+
+// Mirrors std::optional<double> containing NaN (the original repro for this bug) without needing
+// <optional>/C++17: every one of <, <=, ==, >, >= forwards to the double's own operator, so all
+// five come back false for NaN — NaN is unordered with everything, itself included.
+struct Unordered {
+  double v;
+  bool   operator==(const Unordered& o) const { return v == o.v; }
+  bool   operator!=(const Unordered& o) const { return v != o.v; }
+  bool   operator<(const Unordered& o) const { return v < o.v; }
+  bool   operator<=(const Unordered& o) const { return v <= o.v; }
+  bool   operator>(const Unordered& o) const { return v > o.v; }
+  bool   operator>=(const Unordered& o) const { return v >= o.v; }
+};
+// Inferring gt from <=/< (resp. lt from >=/>) used to treat "mutually unordered" identically to
+// a real pass — both expect_gt(a, b) and expect_lt(a, b) wrongly passed even though a > b and
+// a < b are both false. Each must now fail (as "unordered"), not pass.
+triaxi_validate(cpp_fmt, unordered_gt_fail, TRIAXI_VALIDATE_FAILED) {
+  Unordered a{std::numeric_limits<double>::quiet_NaN()}, b{0.0};
+  triax_expect_gt(a, b);
+}
+triaxi_validate(cpp_fmt, unordered_lt_fail, TRIAXI_VALIDATE_FAILED) {
+  Unordered a{std::numeric_limits<double>::quiet_NaN()}, b{0.0};
+  triax_expect_lt(a, b);
+}
+
+// A fixed-size array of a custom (non-arithmetic, non-string) type routes through
+// TRIAXI_AF_FORWARD_ARREQ_XX, which logs via TRIAXI_TestStream (TRIAXI_ENCODING_BLOB) — the index
+// field is length-prefixed there, unlike every other arreq path (DEFAULT/STRING), where it's
+// NUL-terminated. triaxi_print_unpack_args used to NUL-scan it unconditionally, misreading the
+// blob's own length prefix as string content and desyncing everything that followed —
+// triaxi_unreachable() once the resulting garbage length check failed.
+triaxi_validate(cpp_fmt, custom_type_arreq_fail, TRIAXI_VALIDATE_FAILED) {
+  // expect output: [index 1] (1, 2) != (9, 9)
+  Point a[3] = {{1, 1}, {1, 2}, {1, 3}};
+  Point b[3] = {{1, 1}, {9, 9}, {1, 3}};
+  triax_expect_arreq(a, b);
 }
 
 // ── Integers (template path for non-long-long types) ──────────────────────

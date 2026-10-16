@@ -124,7 +124,7 @@ check "-h exits 0" 0 "$LAST_EXIT" "Usage: triax" "$WORKDIR/out"
 run --list
 check "list exits 0" 0 "$LAST_EXIT" "fx_a::one" "$WORKDIR/out"
 list_output="$(normalize_lf < "$WORKDIR/out")"
-if [ "$list_output" != "$(printf 'fx_a::one\nfx_a::two\nfx_b::first\nfx_b::second\nfx_c::malformed_params')" ]; then
+if [ "$list_output" != "$(printf 'fx_a::one\nfx_a::two\nfx_b::first\nfx_b::second\nfx_c::malformed_params\nfx_d::streq_fail\nfx_d::arreq_fail')" ]; then
   echo "FAIL [list output]: unexpected content:" >&2
   echo "$list_output" >&2
   status=1
@@ -208,6 +208,32 @@ if [ "${result%% *}" = "ucrashed" ]; then
   echo "OK   [--debug on a failing assertion reports ucrashed, not an internal error]"
 else
   echo "FAIL [--debug]: got '$result'" >&2
+  status=1
+fi
+
+# fx_d::streq_fail and fx_d::arreq_fail fail through the streamed string/
+# array result paths (triaxi_strn_compare_impl_send, triaxi_AF_arreq_SS)
+# instead of fx_b::first's plain triaxi_log_res path. Those two used to send
+# their failure record without calling triaxi_debug_break, so --break was a
+# silent no-op for a failing streq/arreq — both should report the same
+# "ucrashed" outcome fx_b::first does above.
+run fx_d::streq_fail --break --no-color --json="$(native_path "$WORKDIR/break_streq.json")"
+check "--break on a failing streq exits nonzero" 1 "$LAST_EXIT"
+result="$(json_outcome_and_reason "$WORKDIR/break_streq.json")"
+if [ "${result%% *}" = "ucrashed" ]; then
+  echo "OK   [--break on a failing streq reports ucrashed, not a silent no-op]"
+else
+  echo "FAIL [--break streq]: got '$result'" >&2
+  status=1
+fi
+
+run fx_d::arreq_fail --break --no-color --json="$(native_path "$WORKDIR/break_arreq.json")"
+check "--break on a failing arreq exits nonzero" 1 "$LAST_EXIT"
+result="$(json_outcome_and_reason "$WORKDIR/break_arreq.json")"
+if [ "${result%% *}" = "ucrashed" ]; then
+  echo "OK   [--break on a failing arreq reports ucrashed, not a silent no-op]"
+else
+  echo "FAIL [--break arreq]: got '$result'" >&2
   status=1
 fi
 
