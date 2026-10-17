@@ -271,6 +271,7 @@ if(BUILD_TESTING)
         tests/c/inputs.c
         tests/c/arrays.c
         tests/c/errors.c
+        tests/c/messages.c
     )
     target_link_libraries(
         triax-selftest-c
@@ -283,6 +284,17 @@ if(BUILD_TESTING)
         PRIVATE
             tests
     )
+# Regression guard independent of TRIAX_WARNINGS_AS_ERRORS: message-less
+# triax_expect/triax_assert calls must not produce an empty printf format
+# string. -Wno-pedantic only because omitting a variadic macro's arguments
+# is itself a C23 extension that -Wpedantic reports under C11.
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties(
+            tests/c/messages.c
+            PROPERTIES
+                COMPILE_OPTIONS "-Werror=format-zero-length;-Wno-pedantic"
+        )
+    endif()
     add_executable(
         triax-selftest-cpp
         tests/cpp/main.cpp

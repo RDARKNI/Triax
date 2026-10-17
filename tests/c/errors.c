@@ -42,6 +42,22 @@ triaxi_validate_user_error(errors, file_open_missing_path, "file_open") {
   (void)triax_read_file("/nonexistent/triax-selftest-path/does-not-exist");
 }
 
+// triax_read_file(NULL) used to hand NULL straight to fopen/CreateFile (UB on
+// POSIX); it's now reported as file_open with EINVAL/ERROR_INVALID_PARAMETER.
+triaxi_validate_user_error(errors, file_open_null_path, "file_open") {
+  (void)triax_read_file(NULL);
+}
+
+// Framework failures (triaxi_fatal) end in abort(), which used to satisfy an
+// expected SIGABRT: reading a directory fails inside triaxi_file_read_all
+// (EISDIR), and that internal error was reported as the very abort the check
+// asked for — a false pass. triaxi_fatal_f now records internal_error first.
+#if !defined(_WIN32)
+triaxi_validate_user_error(errors, framework_error_not_expected_fault, "internal_error") {
+  triax_expect_fault(TRIAX_FAULT_ABORT, (void)triax_read_file("/"));
+}
+#endif
+
 // A test-body error (not a fixture one) used to skip every fini callback —
 // triaxi_run_func special-cased TRIAXI_EXEC_ERROR out of the teardown loop
 // entirely. The fixture below can only report "skip_in_fixture" by actually
@@ -70,6 +86,15 @@ triaxi_validate_user_error_attrs(errors_noniso, skip_in_fixture, "skip_in_fixtur
                                  .init = errors_skip_in_fixture_init) {
   // Unreached: the fixture above aborts before this body ever runs.
 }
+
+// Same false pass as errors::framework_error_not_expected_fault, but through
+// the in-process SIGABRT handler instead of the parent reading a child's
+// abort status.
+#if !defined(_WIN32)
+triaxi_validate_user_error(errors_noniso, framework_error_not_expected_fault, "internal_error") {
+  triax_expect_fault(TRIAX_FAULT_ABORT, (void)triax_read_file("/"));
+}
+#endif
 
 // malformed_params is deliberately NOT covered here: it's rejected in
 // triaxi_test_start before the body ever dispatches, for every invocation of

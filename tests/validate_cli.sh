@@ -124,7 +124,7 @@ check "-h exits 0" 0 "$LAST_EXIT" "Usage: triax" "$WORKDIR/out"
 run --list
 check "list exits 0" 0 "$LAST_EXIT" "fx_a::one" "$WORKDIR/out"
 list_output="$(normalize_lf < "$WORKDIR/out")"
-if [ "$list_output" != "$(printf 'fx_a::one\nfx_a::two\nfx_b::first\nfx_b::second\nfx_c::malformed_params\nfx_d::streq_fail\nfx_d::arreq_fail')" ]; then
+if [ "$list_output" != "$(printf 'fx_a::one\nfx_a::two\nfx_b::first\nfx_b::second\nfx_c::malformed_params\nfx_c::params_count_without_ptr\nfx_c::params_size_overflow\nfx_d::streq_fail\nfx_d::arreq_fail')" ]; then
   echo "FAIL [list output]: unexpected content:" >&2
   echo "$list_output" >&2
   status=1
@@ -254,6 +254,40 @@ else
   status=1
 fi
 
+# Both used to pass validation: a null ptr with a nonzero element count, and
+# an elsize * elcount product overflowing size_t.
+for t in params_count_without_ptr params_size_overflow; do
+  run "fx_c::$t" --no-color --json="$(native_path "$WORKDIR/$t.json")"
+  check "fx_c::$t exits nonzero" 1 "$LAST_EXIT"
+  result="$(json_outcome_and_reason "$WORKDIR/$t.json")"
+  if [ "$result" = "test_error malformed_params" ]; then
+    echo "OK   [fx_c::$t reports test_error/malformed_params]"
+  else
+    echo "FAIL [fx_c::$t]: got '$result'" >&2
+    status=1
+  fi
+done
+
+# ── inherited signal dispositions (POSIX) ───────────────────────────────────
+
+# SIGCHLD set to SIG_IGN survives exec, and makes the kernel reap children
+# itself: waitpid() on an isolated test then fails with ECHILD. The runner
+# must reset SIGCHLD to SIG_DFL for its own waits (and restore it after).
+if python3 -c 'import signal, sys; sys.exit(0 if hasattr(signal, "SIGCHLD") else 1)'; then
+  LAST_EXIT=0
+  python3 -c 'import os, signal, sys; signal.signal(signal.SIGCHLD, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' \
+    "$BIN" fx_a --isolation=on --no-color --json="$WORKDIR/sigchld.json" >"$WORKDIR/out" 2>&1 || LAST_EXIT=$?
+  check "isolated run with SIGCHLD inherited as SIG_IGN exits 0" 0 "$LAST_EXIT"
+  names="$(json_test_names "$WORKDIR/sigchld.json" | tr '\n' ',')"
+  if [ "$names" = "fx_a::one,fx_a::two," ]; then
+    echo "OK   [isolated run with SIGCHLD inherited as SIG_IGN reports every test]"
+  else
+    echo "FAIL [SIGCHLD SIG_IGN]: got '$names'" >&2
+    cat "$WORKDIR/out" >&2
+    status=1
+  fi
+fi
+
 # ── CLI error handling ───────────────────────────────────────────────────────
 
 run --bogus-flag
@@ -273,6 +307,12 @@ check "--jobs exceeding max" 2 "$LAST_EXIT" "invalid value" "$WORKDIR/out"
 
 run --json=a.json --json=b.json
 check "duplicate output stream" 2 "$LAST_EXIT" "set more than once" "$WORKDIR/out"
+
+# Two formats writing one file used to interleave into output that was
+# neither valid JSON nor valid XML.
+same="$(native_path "$WORKDIR/same_report")"
+run fx_a --json="$same" --junit="$same"
+check "two formats sharing one output path" 2 "$LAST_EXIT" "distinct paths" "$WORKDIR/out"
 
 # shellcheck disable=SC2046 # word-splitting is intentional: 256 distinct args
 run $(python3 -c "print(' '.join(f'f{i}' for i in range(256)))")

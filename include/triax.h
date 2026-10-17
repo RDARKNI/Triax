@@ -385,7 +385,7 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 # define TRIAX_EXPR_MAX UINT8_MAX
 #elif TRIAXI_PLATFORM_WINDOWS
 # define TRIAX_EXPR_MAX 116
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
@@ -822,7 +822,7 @@ typedef uint32_t Triax_Fault;
 # define TRIAX_FAULT_ILLEGAL_OP ((Triax_Fault)EXCEPTION_ILLEGAL_INSTRUCTION)
 # define TRIAX_FAULT_ARITHMETIC ((Triax_Fault)EXCEPTION_INT_DIVIDE_BY_ZERO)
 # define TRIAX_FAULT_BREAKPOINT ((Triax_Fault)EXCEPTION_BREAKPOINT)
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
@@ -945,7 +945,7 @@ typedef uint32_t Triax_Fault;
 #  endif
 # endif
 # include <fcntl.h>
-# include <malloc.h> /* _resetstkoflw */
+# include <malloc.h> // _resetstkoflw
 # include <wchar.h>
 # include <windows.h>
 #endif
@@ -1143,7 +1143,7 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
 # define triaxi_user_syserror(error) triaxi_user_error_f((error), (uint32_t)errno)
 #elif TRIAXI_PLATFORM_WINDOWS
 # define triaxi_user_syserror(error) triaxi_user_error_f((error), (uint32_t)GetLastError())
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
@@ -1188,7 +1188,7 @@ static inline int64_t triaxi_now_ms(void) {
   // Divide first: multiplying the uptime counter can overflow after only days.
   return (counter.QuadPart / freq.QuadPart) * 1000LL
        + (counter.QuadPart % freq.QuadPart) * 1000LL / freq.QuadPart;
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1202,7 +1202,7 @@ typedef int TRIAXI_File;
 typedef HANDLE TRIAXI_File;
 # define triaxi_file_close(f) (!CloseHandle(f) ? triaxi_fatal() : (void)0)
 # define triaxi_file_valid(f) ((f) != INVALID_HANDLE_VALUE)
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
@@ -1212,7 +1212,7 @@ static inline TRIAXI_File triaxi_file_open_r(const char* path) {
 #elif TRIAXI_PLATFORM_WINDOWS
   return CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
                      FILE_ATTRIBUTE_NORMAL, NULL);
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1230,7 +1230,7 @@ static inline size_t triaxi_file_size(TRIAXI_File f) {
   if (size64.QuadPart < 0) { triaxi_fatal(); }
   if ((uintmax_t)size64.QuadPart > SIZE_MAX) { triaxi_fatal(); }
   return (size_t)size64.QuadPart;
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1260,7 +1260,7 @@ static inline void triaxi_file_read_into(TRIAXI_File f, char* str, size_t len) {
     pos += r;
   }
   if (!SetFilePointerEx(f, orig, NULL, FILE_BEGIN)) { triaxi_fatal(); }
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1299,7 +1299,7 @@ static inline Triax_Str triaxi_fault_tostr(Triax_Fault reason) {
   int n = snprintf(resbuf, sizeof(resbuf), "Unknown fault code: 0x%08" PRIX32, (uint32_t)code);
   if (n < 0) { triaxi_fatal(); }
   return TRIAXI_T(Triax_Str){resbuf, (size_t)n};
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1373,14 +1373,16 @@ typedef struct TRIAXI_SuiteReg {
 
 #pragma region registration_macros
 
-#if !TRIAXI_CPP /* clang-format off */
+// clang-format off
+#if !TRIAXI_CPP
 #  define TRIAXI_Test_attrs_init(...) {{0, __VA_ARGS__}}
 #  define TRIAXI_Suite_attrs_init(...) {0, __VA_ARGS__}
 #  define TRIAXI_as_params(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
 #   else
 #  define TRIAXI_Test_attrs_init(...) TRIAXI_TestConfigBuilder{} __VA_ARGS__
 #  define TRIAXI_Suite_attrs_init(...) TRIAXI_AttributeBuilder{} __VA_ARGS__
-#  define TRIAXI_as_params(arr) arr /* clang-format on */
+#  define TRIAXI_as_params(arr) arr
+// clang-format on
 template <typename D>
 struct TRIAXI_AttributeBuilderBase {
   constexpr D skip(bool v = true) const {
@@ -1518,7 +1520,7 @@ private:
 #define TRIAXI_MAKE_SUITEREG(x, ...)                                                               \
   TRIAXI_MAKE_RECORD(TRIAXI_SuiteReg, TRIAXI_SUITE_SECTION, x, __VA_ARGS__)
 
-/* Boundaries and section-existence placeholders. */
+// Boundaries and section-existence placeholders.
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 TRIAXI_EXTERN_C_BEG
 # if TRIAXI_FORMAT_COFF
@@ -1646,7 +1648,7 @@ typedef struct TRIAXI_AssertHdr {
   const char* expr_str;
 #elif TRIAXI_PLATFORM_WINDOWS
   char expr_str[TRIAX_EXPR_MAX];
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 } TRIAXI_AssertHdr;
@@ -1654,12 +1656,7 @@ typedef struct TRIAXI_AssertHdr {
 #define TRIAXI_ENCODING_MASK      0x0Fu
 #define TRIAXI_ENCODING_DEFAULT   0x00u
 #define TRIAXI_ENCODING_STRING    0x01u
-/*
- * One or more length-prefixed blobs (a size_t byte count, then that many raw bytes, repeated
- * until the record ends) — unlike TRIAXI_ENCODING_DEFAULT's NUL-separated arguments, content may
- * contain embedded NULs of its own (a user printf argument, or a custom C++ type's operator<</
- * std::formatter output) without being misread as extra arguments or quoted like a string.
- */
+// Repeated size_t lengths followed by raw argument bytes; embedded NULs are preserved.
 #define TRIAXI_ENCODING_BLOB      0x02u
 
 #define TRIAXI_ENCODING_NULL_ARG1 0x40u
@@ -1777,17 +1774,9 @@ TRIAXI_EXTERN_C_BEG
 TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
 #if !TRIAXI_GNU_COMPAT
 # pragma warning(push)
-// C4324 (structure padded due to alignment specifier): TRIAXI_ExecState
-// embeds a jmp_buf, which on Windows x64 carries its own platform-mandated
-// alignment (to save XMM register state for SEH-aware setjmp/longjmp) — the
-// compiler padding the struct to satisfy that is correct, expected
-// behavior, not a defect. GCC/Clang have no equivalent warning for this.
+// C4324: jmp_buf requires platform alignment, which may pad TRIAXI_ExecState.
 # pragma warning(disable : 4324)
-// C4201 (nonstandard extension used: nameless struct/union): the anonymous
-// struct nested in the pkg/storage union below (aliasing TRIAXI_AssertRes's
-// header size so TRIAXI_exec.storage lines up exactly with pkg's flexible
-// array member) is standard C11 (6.7.2.1p13), not an extension — MSVC still
-// flags it regardless of conformance mode. GCC/Clang don't warn on this.
+// C4201: the anonymous struct aligns storage with the result payload.
 # pragma warning(disable : 4201)
 #endif
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
@@ -1827,7 +1816,7 @@ static inline void* triaxi_allocate(size_t nbytes) {
     size_t cap  = TRIAXI_exec.allocations.cap ? TRIAXI_exec.allocations.cap * 2 : 16;
     void** ptrs = (void**)realloc(TRIAXI_exec.allocations.ptrs, sizeof(void*) * cap);
     if (!ptrs) {
-      free(ptr); // since fatal in noisolation does not abort the runner and pointer
+      free(ptr); // since fatal in noisolation does not abort the runner
       triaxi_fatal();
     }
     TRIAXI_exec.allocations.ptrs = ptrs;
@@ -1864,7 +1853,7 @@ static inline void triaxi_file_write(TRIAXI_File f, const void* buf, size_t len)
     DWORD chunk = (len > 0xFFFFFFFFu) ? 0xFFFFFFFFu : (DWORD)len;
     if (!WriteFile(f, ptr, chunk, &w, 0) || !w) { triaxi_fatal(); }
   }
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1876,7 +1865,7 @@ static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
   return triaxi_file_read_into(f, str, len), TRIAXI_T(Triax_Str){str, len};
 }
 
-/* Sequential reads for user files, whose reported size need not describe their contents. */
+// Sequential reads for user files, whose reported size need not describe their contents.
 static inline size_t triaxi_file_read_some(TRIAXI_File f, char* dst, size_t len) {
 #if TRIAXI_PLATFORM_POSIX
   ssize_t n;
@@ -1887,7 +1876,7 @@ static inline size_t triaxi_file_read_some(TRIAXI_File f, char* dst, size_t len)
   DWORD n, chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
   if (!ReadFile(f, dst, chunk, &n, NULL)) { triaxi_fatal(); }
   return (size_t)n;
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1898,7 +1887,7 @@ static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
   char*  str        = (char*)triaxi_allocate(cap);
   for (;;) {
     if (len == cap) {
-      /* Probe before growing: empty files allocate nothing; exactly sized files need no realloc. */
+      // Probe before growing: empty files allocate nothing; exactly sized files need no realloc.
       char byte;
       if (!triaxi_file_read_some(f, &byte, 1)) { break; }
       if (cap > SIZE_MAX / 2) { triaxi_fatal(); }
@@ -1957,19 +1946,8 @@ static inline void triaxi_log_write(const void* buf, size_t len) {
   triaxi_file_write(TRIAXI_exec.log, buf, len);
 }
 
-/*
- * Backs a proposed byte-count truncation of a UTF-8 string off to the last complete character
- * boundary at or before it, so TRIAX_EXPR_MAX's cap below can never split a multi-byte character
- * — a cut mid-character leaves a dangling partial sequence that the JUnit writer's XML escaping
- * (triaxi_print_xml_escape) would otherwise emit as-is, producing a byte sequence no XML parser
- * accepts ("not well-formed (invalid token)"), reproduced with a failing string comparison
- * containing 100 multi-byte characters. s[cap] is always safe to read regardless of whether
- * truncation is actually happening: when the string is shorter than cap, s[cap] is its NUL
- * terminator, which is never a continuation byte, so this is then correctly a no-op. This only
- * needs to tell a lead byte from a continuation byte, not fully validate the sequence — already-
- * malformed UTF-8 reaching here from some other source is triaxi_print_xml_bytes's job to catch,
- * with a safe hex fallback.
- */
+// Back up to a complete UTF-8 character boundary. s[cap] must be readable.
+// Malformed input is handled separately by the report writers.
 static inline size_t triaxi_utf8_safe_trunc_len(const char* s, size_t cap) {
   if (((unsigned char)s[cap] & 0xC0) != 0x80) { return cap; }
   size_t i = cap;
@@ -1986,7 +1964,7 @@ static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t
 #elif TRIAXI_PLATFORM_WINDOWS
   TRIAXI_AssertHdr hdr = {{len}, type, ae, neg, cr, line, {0}};
   memcpy(hdr.expr_str, str, hdr.expr_len);
-#else /* triaxi_embedded */
+#else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
   if (TRIAXI_exec.shared->state != TRIAXI_STATE_TEST) {
@@ -2002,44 +1980,22 @@ static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t
 
 static inline void triaxi_debug_break(void) {
 #if TRIAXI_PLATFORM_WINDOWS
-  // Windows always gets the canonical Win32 API, even under clang-cl: it's
-  // the primitive Windows debuggers are built to expect, not just a raw
-  // trap instruction — unlike the other two platforms below, there's no
-  // reason to prefer a compiler intrinsic over it here.
+  // Use the Windows debugger API, including under clang-cl.
   DebugBreak();
 #elif TRIAXI_CLANG && defined(__has_builtin) && __has_builtin(__builtin_debugtrap)
-  // A compiler intrinsic, not an OS facility, so equally the best option on
-  // POSIX and bare metal — raise(SIGTRAP) below is only the fallback for
-  // when the intrinsic itself isn't available.
+  // Use the compiler trap when available.
   __builtin_debugtrap();
 #elif TRIAXI_PLATFORM_POSIX
   raise(SIGTRAP);
 #else
-  // Bare metal, no __builtin_debugtrap: best-effort only. raise(SIGTRAP)
-  // does something useful only if the target's libc/runtime actually wires
-  // SIGTRAP to a real trap — unlike the other triaxi_embedded sites in this
-  // file, there's no further porting to do here if it doesn't; --break/
-  // --debug is a developer convenience, not load-bearing correctness.
+  // Best-effort trap when the target runtime supports SIGTRAP.
   raise(SIGTRAP);
 #endif
 }
 
-/*
- * Every assertion result path — this file's simple triaxi_log_res, and the streamed string/array
- * paths too long to fit it (triaxi_log_strings, triaxi_AF_arreq_SS) — must call this
- * once its own write is fully complete. The result is now logged, so this assertion is resolved —
- * every caller (the plain expect/assert ternary, TRIAXI_ABORT_TEST) would reset state back to TEST
- * right after returning anyway. Doing it here instead, before triaxi_debug_break() below, matters
- * because a signal landing inside triaxi_debug_break() (the intended case: SIGTRAP with no
- * debugger attached, so Triax's own crash handler runs) must not observe state still IN_ASSERT —
- * triaxi_test_interpret only expects IN_ASSERT paired with an EXIT_ERROR exit (e.g. assert-in-
- * fixture); pairing it with EXIT_FAULT here as if it were a mid-predicate crash previously tripped
- * its consistency check (triaxi_fatal()) instead of reporting a normal crashed/fault outcome,
- * since — unlike a real mid-predicate crash — this assertion's result had already been completely
- * logged.
- */
+// Call after the complete result is written, before a debugger trap can interrupt execution.
 static inline void triaxi_log_resolved(void) {
-  /* A debugger trap may leave via longjmp, so clear transient encoding before it can fire. */
+  // A debugger trap may leave via longjmp, so clear transient encoding before it can fire.
   TRIAXI_exec.pkg.code      = TRIAXI_ENCODING_DEFAULT;
   TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;
   if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }
@@ -2077,16 +2033,10 @@ struct TRIAXI_TestException { TRIAXI_ExecOutcome outcome; };
 #endif
 
 triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t syserr) {
-  TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
   TRIAXI_exec.shared->exit.code = triaxi_error_pack((TRIAXI_Error)error, syserr);
 
-  /*
-   * Errors raised while evaluating the test body/assertion can use the normal
-   * test-abort path. Fixture functions are noexcept in C++17+, so throwing
-   * through them would terminate; abort instead. In isolated mode the parent
-   * preserves TRIAXI_EXIT_ERROR from shared memory. POSIX non-isolated mode
-   * already catches SIGABRT, and its crash path preserves a pre-recorded error.
-   */
+  // Body/assertion errors stay pending through destructors and teardown, so a cleanup
+  // fault/timeout takes precedence. Fixtures may be noexcept: publish their error and abort.
   if (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST
       || TRIAXI_exec.shared->state == TRIAXI_STATE_IN_ASSERT) {
 #if !TRIAXI_CPP
@@ -2095,6 +2045,7 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
     throw TRIAXI_TestException{TRIAXI_EXEC_ERROR};
 #endif
   }
+  TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
   abort();
 }
 
@@ -2279,15 +2230,7 @@ static inline bool triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
   (void)v;
   if (!failed) { return 0; }
 
-  /*
-   * Length-prefixed, not NUL-terminated: a user format/argument can legitimately embed a NUL
-   * (e.g. "%c" with 0). triaxi_print_unpack_args' default encoding treats every NUL in the
-   * record as a one-argument separator into a fixed-size args[] array — an embedded NUL here
-   * would be misread as ending this message early and starting another "argument", and enough of
-   * them overflow that array (triaxi_unreachable() past its last slot — undefined behavior if
-   * actually reached, not a safe trap). Prefixing the exact byte count instead means the message
-   * reads back exactly as formatted, embedded NULs included, with nothing left to misinterpret.
-   */
+  // Store the message length explicitly to preserve embedded NULs in formatted output.
   char* const  msg  = TRIAXI_exec.pkg.args + sizeof(size_t);
   const size_t mcap = sizeof(TRIAXI_exec.storage) - 7 - sizeof(size_t);
 
@@ -2305,7 +2248,7 @@ static inline bool triaxi_AF_check(bool v, bool failed, const char* fmt, ...) {
     msg_len = (size_t)n;
   } else {
     static const char marker[] = "...[truncated]";
-    msg_len = mcap - 1; /* vsnprintf wrote mcap-1 content bytes plus its own NUL */
+    msg_len                    = mcap - 1; // vsnprintf wrote mcap-1 content bytes plus its own NUL
     if (msg_len >= sizeof(marker) - 1) {
       memcpy(msg + msg_len - (sizeof(marker) - 1), marker, sizeof(marker) - 1);
     }
@@ -2511,9 +2454,9 @@ static inline bool triaxi_AF_floateq_reltol(bool v, long double e1, long double 
       hi              = lo;
       lo              = tmp;
     }
-    /* Same signs: subtract first to preserve nearby differences without overflow.
-     * Opposite signs: compare 1 + lo/hi <= tol as lo/hi <= tol - 1, without
-     * overflowing the sum or rounding a nonzero contribution away at tol == 1. */
+    // Same signs: subtract first to preserve nearby differences without overflow.
+    // Opposite signs: compare 1 + lo/hi <= tol as lo/hi <= tol - 1, without
+    // overflowing the sum or rounding a nonzero contribution away at tol == 1.
     if (signbit(e1) != signbit(e2) && lo > 0) {
       close = tol > 1 && (tol >= 2 || lo / hi <= tol - 1);
     } else {
@@ -2788,15 +2731,8 @@ static inline typename std::enable_if<TRIAXI_StaticExtent<A>::value != SIZE_MAX
   return TRIAXI_StaticExtent<A>::value;
 }
 
-/*
- * Each argument is stored as a TRIAXI_ENCODING_BLOB entry (a size_t byte count, then exactly that
- * many raw bytes — see triaxi_print_unpack_args), not NUL-separated: a custom operator<< or
- * std::formatter can legitimately write anything, embedded NULs included, and a NUL-separated
- * scheme has no way to tell such a byte apart from a real separator. Overflowing the latter's
- * fixed-size unpacked-args array is exactly the crash this class used to cause. begin_arg/end_arg
- * below reserve the count up front and backfill it once each argument's actual length is known,
- * so content can be written through the normal streambuf machinery with no scanning or escaping.
- */
+// Store each argument as a size_t length followed by raw bytes, preserving embedded NULs.
+// begin_arg reserves the prefix; end_arg fills in the final length.
 class TRIAXI_TestStream : public std::ostream {
 public:
   TRIAXI_TestStream() : std::ostream(&streambuf) {}
@@ -2840,7 +2776,7 @@ public:
   }
   bool send(TRIAXI_AR val) {
     if (streambuf.trunc && streambuf.last_arg != SIZE_MAX) {
-      /* Mark content only, even if the final record is empty or no further prefix fits. */
+      // Mark content only, even if the final record is empty or no further prefix fits.
       static constexpr char marker[] = "...[truncated]";
       char*                 arg      = TRIAXI_exec.pkg.args + streambuf.last_arg;
       size_t                len;
@@ -2873,7 +2809,7 @@ private:
       : std::true_type {};
 
   template <class T>
-  void add_arg_impl(const T& val, std::true_type /*formattable*/, ...) {
+  void add_arg_impl(const T& val, std::true_type, ...) {
     const size_t avail  = streambuf.cap - streambuf.len;
     char* const  dst    = TRIAXI_exec.pkg.args + streambuf.len;
     const auto   res    = std::format_to_n(dst, (ptrdiff_t)avail, "{}", val);
@@ -2882,7 +2818,7 @@ private:
   }
 
   template <class T> // Fallback: operator<< streamable
-  void add_arg_impl(const T& val, std::false_type, std::true_type /*streamable*/) {
+  void add_arg_impl(const T& val, std::false_type, std::true_type) {
     *this << val;
   }
   template <class T> // Last resort
@@ -2920,9 +2856,7 @@ private:
       }
       return ch;
     }
-    // Reserves this argument's length prefix up front, returning where its content should start
-    // (SIZE_MAX if there wasn't even room for the prefix) — backfilled by end_arg once the
-    // content's actual length is known.
+    // Reserve a length prefix; return SIZE_MAX if it does not fit.
     size_t begin_arg() {
       if (trunc || cap - len < sizeof(size_t)) {
         trunc = true;
@@ -2994,8 +2928,8 @@ struct TRIAXI_IsHandled
    static inline bool triaxi_AF_##OP(bool v, const T& e1, const U& e2) {                           \
      return triaxi_AF_##OP##_SS(v, Triax_Str(e1), Triax_Str(e2));                                  \
    }
-/* Compile-time selection instantiates only the requested custom operator. Built-in overloads
- * still take bool and retain their existing predicates and richer diagnostics. */
+// Compile-time selection instantiates only the requested custom operator. Built-in overloads
+// still take bool and retain their existing predicates and richer diagnostics.
 # define TRIAXI_CUSTOM_COMPARE(OP, V, expr)                                                        \
    template <class T, class U>                                                                     \
    static inline uint8_t triaxi_compare_##OP##_XX(std::integral_constant<bool, V>, const T& a,     \
@@ -3053,15 +2987,15 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD, TRIAXI_AF_FORWARD_SS, TRIAXI_AF_FORWARD_X
 TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD_ARREQ, TRIAXI_AF_FORWARD_ARREQ_SS, TRIAXI_AF_FORWARD_ARREQ_XX,
                     arreq)
 
-# define triaxi_AF_eq(v, a, b) triaxi_AF_eq(std::integral_constant<bool, !!(v)>{}, a, b)
-# define triaxi_AF_gt(v, a, b) triaxi_AF_gt(std::integral_constant<bool, !!(v)>{}, a, b)
-# define triaxi_AF_lt(v, a, b) triaxi_AF_lt(std::integral_constant<bool, !!(v)>{}, a, b)
+# define triaxi_AF_eq(v, ...) triaxi_AF_eq(std::integral_constant<bool, !!(v)>{}, __VA_ARGS__)
+# define triaxi_AF_gt(v, ...) triaxi_AF_gt(std::integral_constant<bool, !!(v)>{}, __VA_ARGS__)
+# define triaxi_AF_lt(v, ...) triaxi_AF_lt(std::integral_constant<bool, !!(v)>{}, __VA_ARGS__)
 
-#endif /*TRIAXI_CPP*/
+#endif // TRIAXI_CPP
 
 #pragma endregion assertion_dispatch
 
-#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU) /* TRIAXI_REGION_RUNNER_ONLY */
+#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU) // TRIAXI_REGION_RUNNER_ONLY
 
 # pragma region runner_types
 
@@ -3114,7 +3048,7 @@ typedef struct TRIAXI_RunResult {
 #  define TRIAXI_PROC_NONE ((pid_t)0)
 # elif TRIAXI_PLATFORM_WINDOWS
 #  define TRIAXI_PROC_NONE NULL
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3178,7 +3112,7 @@ typedef struct TRIAXI_TestSlot {
 # elif TRIAXI_PLATFORM_WINDOWS
   HANDLE process;
   HANDLE job;
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   TRIAXI_TestInvocation invocation;
@@ -3207,7 +3141,7 @@ static struct {
   void   (*old_sigabrt)(int);
   HANDLE shared_mapping;
   WCHAR  executable_path[32768];
-  WCHAR  command_line[32768]; /* mutable CreateProcessW scratch */
+  WCHAR  command_line[32768]; // mutable CreateProcessW scratch
 # endif
 } TRIAXI_global;
 # define triaxi_global_initialised() (!!TRIAXI_global.max_prev_slots)
@@ -3238,7 +3172,7 @@ static const TRIAXI_Settings TRIAXI_default_settings = {
 #  define triaxi_isatty    _isatty
 #  define triaxi_ftruncate _chsize_s
 #  define triaxi_lseek     _lseeki64
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3267,7 +3201,7 @@ static inline void triaxi_mkdirp(const char* path) {
     char c = *p;
     *p     = '\0';
     CreateDirectoryA(buf, NULL);
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
     *p = c;
@@ -3282,7 +3216,7 @@ static inline TRIAXI_File triaxi_file_from_stream(FILE* f) {
   intptr_t h = _get_osfhandle(triaxi_fileno(f));
   if (h == -1 || h == -2) { return 0; }
   return (HANDLE)h;
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3319,7 +3253,7 @@ static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
                     &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
   if (res == INVALID_HANDLE_VALUE) { triaxi_fatal(); }
   return res;
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3364,7 +3298,7 @@ static inline void triaxi_file_clear_handle(HANDLE handle) {
   if (!SetEndOfFile(handle)) { triaxi_fatal(); }
 }
 #  define triaxi_file_clear triaxi_file_clear_handle
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3423,7 +3357,7 @@ static inline void triaxi_stdfds_redirect(TRIAXI_TestSlot* h) {
       TRIAXI_exec.err = (HANDLE)osfh;
     }
     if (!SetStdHandle(stdhandle, (HANDLE)osfh)) { triaxi_fatal(); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   }
@@ -3453,36 +3387,9 @@ static inline void triaxi_sections_init(void) {
 #   define TRIAXI_ALLOC_ARRAY(T, n) ((n) ? (T*)malloc((n) * sizeof(T)) : NULL)
 #  endif
 
-  /*
-   * TRIAXI_Test_a/_z (and the SuiteReg equivalents) are pointers, not
-   * objects — see TRIAXI_MAKE_TEST's comment above for why: it keeps every
-   * section entry the same size/alignment, so the $a/$m/$z subsection
-   * concatenation can't insert padding between them.
-   *
-   * The walk below reads that pointer table via plain uintptr_t arithmetic
-   * and memcpy, deliberately not by treating &T##_a/&T##_z as a T** and
-   * stepping/dereferencing across it. That distinction matters: T##_a and
-   * T##_z are each their own independently-declared extern object as far as
-   * the compiler's front end and optimizer are concerned — nothing in the
-   * language says they, plus every registered entry placed in between, form
-   * one contiguous array. This section-based registration idiom (the same
-   * one behind ELF's __start_/__stop_ and MSVC's own .CRT$XCU) only works
-   * because the linker actually places them contiguously; the compiler is
-   * never told that and has no obligation to respect it. Stepping a T**
-   * from &T##_a + 1 to &T##_z and dereferencing along the way is therefore
-   * undefined behavior by the strict object model — and not just
-   * theoretically: an earlier version of this macro did exactly that,
-   * built and ran correctly under MSVC /Ob1 (RelWithDebInfo), and crashed
-   * deterministically under /Ob2 (Release) with a read landing exactly at
-   * the end of the module's own mapped image. Full inlining at /Ob2 was
-   * enough to expose this walk and TRIAXI_Test's C++ copy-assignment
-   * (small enough to inline there) together to the optimizer, which is what
-   * let it miscompile. Reading each slot through uintptr_t address
-   * arithmetic plus memcpy avoids the whole class of hazard: there is no
-   * pointer whose validity depends on "being part of the same array as
-   * T##_a", only integer math and a raw byte copy, so none of the compiler's
-   * object-bounds assumptions ever apply to it.
-   */
+  // COFF sections contain equally sized pointer entries between the boundary symbols.
+  // The linker joins separately declared objects; walk addresses with uintptr_t and memcpy
+  // rather than assuming the symbols belong to one C/C++ array.
 #  define TRIAXI_SECTION_INIT_MSVC(T, field)                                                       \
     do {                                                                                           \
       uintptr_t triaxi_pbeg = (uintptr_t)(const void*)&T##_a + sizeof(void*);                      \
@@ -3596,6 +3503,7 @@ static struct {
     struct sigaction ign[3];
     struct sigaction term[3];
     struct sigaction crash[6];
+    struct sigaction chld;
     stack_t          altstack;
   } old;
 } TRIAXI_signals = {{SIGPIPE, SIGUSR1, SIGUSR2},
@@ -3607,20 +3515,13 @@ static struct {
 
 static inline void triaxi_sighandler_termination(int sig) {
   if (TRIAXI_exec.isolated) {
-    /*
-     * Isolated test is its own process-group leader. Kill the test and
-     * descendants together. The current signal is blocked while this handler
-     * executes, so resetting to default before kill() makes the re-raised
-     * signal terminate us when the handler returns.
-     */
+    // The child leads its process group. Restore the default action and signal the whole
+    // group; the blocked signal terminates this process when the handler returns.
     sigaction(sig, &TRIAXI_signals.sas.dfl, NULL);
     kill(0, sig);
     return;
   }
-  /*
-   * Runner: terminate only process groups belonging to active isolated tests.
-   * Do not signal the runner's inherited process group.
-   */
+  // Terminate active test groups, preserving the runner's inherited process group.
   for (size_t i = 0; i < triaxi_countof(TRIAXI_global.slots); ++i) {
     if (TRIAXI_global.slots[i].process > 0) { kill(-TRIAXI_global.slots[i].process, sig); }
   }
@@ -3640,7 +3541,7 @@ static inline void           triaxi_sighandler_crash(int sig) {
 static inline void triaxi_sighandler_abort(int sig) {
   (void)sig, RaiseException(TRIAX_FAULT_ABORT, EXCEPTION_NONCONTINUABLE, 0, NULL);
 }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3657,18 +3558,14 @@ static inline void triaxi_signals_init(void) {
   TRIAXI_signals.sas.term.sa_handler = triaxi_sighandler_termination;
   sigfillset(&TRIAXI_signals.sas.term.sa_mask);
 # elif TRIAXI_PLATFORM_WINDOWS
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
 
 # if TRIAXI_PLATFORM_WINDOWS
 
-/*
- * Environment blocks are sorted case-insensitively by variable name.
- * Special drive-current-directory entries have names such as "=C:", so
- * their separator is the second '=' rather than the first.
- */
+// Environment names sort case-insensitively; drive entries such as '=C:' use the second '='.
 static inline int triaxi_windows_env_name_cmp(const WCHAR* entry, const WCHAR* name) {
   const WCHAR* eq = wcschr(entry + (*entry == L'='), L'=');
   if (!eq || eq - entry > INT_MAX) { triaxi_fatal(); }
@@ -3682,7 +3579,7 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
   LPWCH penv = GetEnvironmentStringsW();
   if (!penv) { triaxi_fatal(); }
 
-  /* Upper bound for sanitized parent environment. */
+  // Upper bound for sanitized parent environment.
   size_t cap = 1;
   for (const WCHAR* p = penv; *p;) {
     size_t len = wcslen(p) + 1;
@@ -3706,7 +3603,7 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
     if (shm_at == SIZE_MAX && cshm >= 0) { shm_at = pos; }
     if (slot_at == SIZE_MAX && cslot >= 0) { slot_at = pos; }
 
-    /* Drop inherited/stale framework variables. */
+    // Drop inherited/stale framework variables.
     if (cshm && cslot) { memcpy(dst, src, len * sizeof(*dst)), dst += len; }
     src += len;
   }
@@ -3741,7 +3638,7 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
 
     WCHAR* out = env;
 
-    /* Before TRIAX_SHM. */
+    // Before TRIAX_SHM.
     memcpy(out, base, shm_at * sizeof(*out)), out     += shm_at;
     memcpy(out, shm_var, shm_len * sizeof(*out)), out += shm_len;
 
@@ -3758,12 +3655,7 @@ static inline void triaxi_windows_environments_init(size_t njobs) {
   if (!FreeEnvironmentStringsW(penv)) { triaxi_fatal(); }
 }
 
-/*
- * The root process is known to have exited before this is called.
- *
- * If terminated is false, terminate the job now to remove descendants.
- * If true, the timeout path already called TerminateJobObject.
- */
+// The root has exited. Terminate remaining descendants unless the timeout path did so.
 static inline void triaxi_windows_slot_process_finish(TRIAXI_TestSlot* h, bool terminated) {
   if (!terminated) {
     if (!TerminateJobObject(h->job, 1)) { triaxi_fatal(); }
@@ -3788,6 +3680,8 @@ static inline void triaxi_windows_slot_process_finish(TRIAXI_TestSlot* h, bool t
 static inline void triaxi_process_control_init(size_t njobs) {
 # if TRIAXI_PLATFORM_POSIX
   (void)njobs;
+  // Preserve child exit statuses even if the caller ignores SIGCHLD or uses SA_NOCLDWAIT.
+  triaxi_sigaction(SIGCHLD, &TRIAXI_signals.sas.dfl, &TRIAXI_signals.old.chld);
   static char altstack_mem[65536L]; // sized for ASAN/instrumented builds
   stack_t     ss = {0};
   ss.ss_sp = altstack_mem, ss.ss_size = sizeof(altstack_mem), ss.ss_flags = 0;
@@ -3809,13 +3703,14 @@ static inline void triaxi_process_control_init(size_t njobs) {
     triaxi_fatal();
   }
   triaxi_windows_environments_init(njobs);
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
 
 static inline void triaxi_process_control_reset(void) {
 # if TRIAXI_PLATFORM_POSIX
+  triaxi_sigaction(SIGCHLD, &TRIAXI_signals.old.chld, NULL);
   for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.term); ++i) {
     triaxi_sigaction(TRIAXI_signals.term[i], &TRIAXI_signals.old.term[i], NULL);
   }
@@ -3838,7 +3733,7 @@ static inline void triaxi_process_control_reset(void) {
     TRIAXI_global.slots[i].environment = NULL;
   }
   if (signal(SIGABRT, TRIAXI_global.old_sigabrt) == SIG_ERR) { triaxi_fatal(); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3872,7 +3767,7 @@ triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
       sigaction(SIGTERM, &TRIAXI_signals.sas.ign, NULL);
       kill(0, SIGTERM);
     }
-    abort(); /* non-isolated: SIGABRT handler -> longjmp -> test error */
+    abort(); // non-isolated: SIGABRT handler -> longjmp -> test error
   } else {
     if (!TRIAXI_exec.isolated) {
       for (size_t i = 0; i < triaxi_countof(TRIAXI_global.slots); ++i) {
@@ -3921,7 +3816,7 @@ triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
     }
   }
   abort();
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -4094,7 +3989,7 @@ static inline Triax_Str triaxi_syserror_tostr(uint32_t syserr) {
     while (n && (buf[n - 1] == '\r' || buf[n - 1] == '\n')) { buf[--n] = '\0'; }
   }
   return TRIAXI_T(Triax_Str){buf, (size_t)n};
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -4108,13 +4003,13 @@ static inline size_t triaxi_utf8_seq_len(const unsigned char* s, size_t len) {
   if (c <= 0xDF) { return 2; }
   if (len < 3 || (s[2] & 0xC0) != 0x80) { return 0; }
   if (c <= 0xEF) {
-    if (c == 0xE0 && b < 0xA0) { return 0; } /* overlong */
-    if (c == 0xED && b > 0x9F) { return 0; } /* surrogate */
+    if (c == 0xE0 && b < 0xA0) { return 0; } // overlong
+    if (c == 0xED && b > 0x9F) { return 0; } // surrogate
     return 3;
   }
   if (len < 4 || (s[3] & 0xC0) != 0x80) { return 0; }
-  if (c == 0xF0 && b < 0x90) { return 0; } /* overlong */
-  if (c == 0xF4 && b > 0x8F) { return 0; } /* above U+10FFFF */
+  if (c == 0xF0 && b < 0x90) { return 0; } // overlong
+  if (c == 0xF4 && b > 0x8F) { return 0; } // above U+10FFFF
   return 4;
 }
 
@@ -4287,10 +4182,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
   }
   TRIAXI_PrintArgs pa = triaxi_print_unpack_args(atype, res);
   if (atype == TRIAXI_AT_check) {
-    // Length-prefixed (TRIAXI_ENCODING_BLOB), so pa.args[0].str may contain embedded NULs and
-    // isn't NUL-terminated at a meaningful point — unlike every other case below, which treats
-    // op as a short, genuinely NUL-terminated literal, this has to go through fputStr directly
-    // instead of "%s".
+    // The message may contain embedded NULs; write its exact byte count.
     fprintf(out, "%s", run->out.ansi.red);
     triaxi_fputStr(pa.args[0], out);
     fprintf(out, "%s\n", run->out.ansi.reset);
@@ -4454,7 +4346,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
   fprintf(out, "%s%s\n", q2, postbuf);
 }
 
-/* Stable machine-readable execution phase; NULL when no phase is meaningful. */
+// Stable machine-readable execution phase; NULL when no phase is meaningful.
 static inline const char* triaxi_state_phase_name(TRIAXI_State state) {
   switch (state) {
   default                    : triaxi_unreachable();
@@ -4469,7 +4361,7 @@ static inline const char* triaxi_state_phase_name(TRIAXI_State state) {
   }
 }
 
-/* Human-readable phase for diagnostics; omit the ordinary test-body phase. */
+// Human-readable phase for diagnostics; omit the ordinary test-body phase.
 static inline const char* triaxi_state_phase_phrase(TRIAXI_State state) {
   switch (state) {
   default                    : triaxi_unreachable();
@@ -4903,9 +4795,7 @@ static inline void triaxi_print_assert_junit(const TRIAXI_RunCtx* run, const TRI
   if (!res) { return; }
   fprintf(out, "        %s_%s(", hdr->ae ? "assert" : "expect",
           TRIAXI_assertnames[hdr->neg][(TRIAXI_AssertType)hdr->type]);
-  // Defense in depth alongside triaxi_utf8_safe_trunc_len above: falls back to a safe hex
-  // encoding instead of emitting un-parseable XML if this ever turns out not to be valid UTF-8
-  // for some other reason (e.g. a non-UTF-8 source file encoding).
+  // Encode invalid XML bytes as hex, including malformed source encodings.
   triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){hdr->expr_str, (size_t)hdr->expr_len});
   triaxi_fputlit(")\n", out);
 }
@@ -5145,7 +5035,7 @@ static inline void triaxi_output_close(const TRIAXI_RunCtx* run) {
                             run->out.streams.junit};
   for (size_t i = 0; i < triaxi_countof(outfiles); ++i) {
     if (outfiles[i]) {
-      /* A previous flush can discard unwritten bytes; fclose alone need not report that error. */
+      // A previous flush can discard unwritten bytes; fclose alone need not report that error.
       if (ferror(outfiles[i])) { triaxi_fatal(); }
       if (outfiles[i] == run->saved.out.file) { continue; }
       if (fclose(outfiles[i])) { triaxi_fatal(); }
@@ -5163,7 +5053,7 @@ static inline void triaxi_junit_buffers_init(void) {
   if (!SetHandleInformation(te, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
   if ((su_fd = _open_osfhandle((intptr_t)su, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
   if ((te_fd = _open_osfhandle((intptr_t)te, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   if (!(TRIAXI_global.junit.suite_buf = triaxi_fdopen(su_fd, "w+b"))) { triaxi_fatal(); }
@@ -5199,7 +5089,7 @@ static inline void triaxi_shared_init(void) {
   DWORD n = GetModuleFileNameW(NULL, TRIAXI_global.executable_path,
                                (DWORD)triaxi_countof(TRIAXI_global.executable_path));
   if (!n || n >= (DWORD)triaxi_countof(TRIAXI_global.executable_path)) { triaxi_fatal(); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   for (size_t i = 0; i < TRIAXI_JOBS_MAX; ++i) {
@@ -5379,18 +5269,8 @@ static inline int triaxi_windows_exception_filter(DWORD fault) {
   return EXCEPTION_CONTINUE_SEARCH;
 }
 #  else
-/*
- * MinGW does not implement MSVC's __try/__except syntax, but
- * AddVectoredExceptionHandler is a plain Win32 API — not compiler-specific
- * syntax — that lets a GCC-compiled callback intercept any SEH exception
- * before Windows unwinds/terminates the process. That includes the one
- * triaxi_sighandler_abort's RaiseException raises for abort() (see
- * triaxi_process_control_init), which is otherwise unhandled on MinGW and
- * kills the process even for a non-isolated triax_assert_fault. The callback
- * longjmp()s straight back to TRIAXI_exec.jmp, mirroring the POSIX
- * sigaction handler's recovery path (triaxi_sighandler_crash above) rather
- * than MSVC's __except.
- */
+// MinGW uses VEH to recover native exceptions, including abort(), via longjmp.
+// MSVC uses __try/__except instead.
 static volatile sig_atomic_t TRIAXI_crash_signal;
 static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
   if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
@@ -5417,16 +5297,7 @@ static PVOID TRIAXI_veh_handle;
 #   define triaxi_win_except(...) if (0)
 #  endif
 # else
-/*
- * Bare metal: no portable in-process crash-recovery mechanism exists at
- * all — a real fault here is typically a vendor-specific HardFault/trap
- * handler, not something setjmp/longjmp can safely resume from the way
- * POSIX/Windows allow. Unlike the other triaxi_embedded sites in this
- * file, there is nothing to port here; this is a settled "no containment
- * on this target" decision, not a TOD O. A crash in a non-isolated test is
- * simply fatal to the whole run, same as it would be with no test
- * framework involved at all.
- */
+// Bare-metal faults terminate execution; no portable in-process recovery is available.
 #  define triaxi_crash_handlers_impl(_h)
 #  define triaxi_win_try
 #  define triaxi_win_except(...) if (0)
@@ -5446,11 +5317,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   TRIAXI_exec.shared->exit.code   = 0;
   int64_t                     t0  = triaxi_now_ms();
   volatile TRIAXI_ExecOutcome res = TRIAXI_EXEC_RETURNED;
-  // Not a platform dispatch (hence not POSIX-first like the genuine
-  // three-way splits elsewhere in this file): MSVC specifically needs a
-  // DWORD because GetExceptionCode() returns one. POSIX, MinGW, and bare
-  // metal all just need a plain int, so this is a narrow special case
-  // against a shared default, not three branches worth naming individually.
+  // MSVC GetExceptionCode() returns DWORD; other recovery paths use int.
 # if TRIAXI_PLATFORM_WINDOWS && TRIAXI_MSVC_COMPAT
   volatile DWORD fault = 0;
 # else
@@ -5458,14 +5325,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 # endif
 # if !TRIAXI_GNU_COMPAT
 #  pragma warning(push)
-/*
-C4611 (setjmp/C++ object destruction interaction is non-portable): MSVC
-flags any setjmp call in a function compiled under /EHsc, since a later
-longjmp would skip destructors for any live C++ locals. This function has
-none (fixtures[]/t0/res/fault are all POD) — the warning is inherent to
-combining setjmp/longjmp-based crash recovery with C++ exception support,
-which is exactly what this line does by design.
-*/
+// C4611: longjmp can skip C++ destructors; this function has only trivial locals.
 #  pragma warning(disable : 4611)
 # endif
   switch (setjmp(TRIAXI_exec.jmp)) {
@@ -5498,27 +5358,18 @@ which is exactly what this line does by design.
   case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
   case TRIAXI_EXEC_CRASHED:
     res = TRIAXI_EXEC_CRASHED;
-    /*
-     * Only reached via longjmp out of a signal/VEH handler — POSIX's
-     * sigaction path and MinGW's AddVectoredExceptionHandler path (see
-     * triaxi_veh_crash) both recover this way and stash the fault code in
-     * their own TRIAXI_crash_signal. MSVC's __except handler body sets
-     * `fault` directly (via GetExceptionCode(), above) and falls through
-     * normally instead of longjmp-ing, so it never reaches this case at all.
-     */
+    // POSIX/MinGW handlers save the fault code before longjmp.
+    // MSVC sets fault directly in its __except handler.
 # if !TRIAXI_MSVC_COMPAT
     if (TRIAXI_exec.isolated) { triaxi_unreachable(); }
     fault = TRIAXI_crash_signal;
 # endif
     break;
   }
-  /* Keep a body error pending while teardown runs. Leaving it in shared->exit would mask a
-   * subsequent fixture fault/timeout as an already finished result. Restore it only on normal
-   * teardown completion, together with its original phase. These locals are reinitialised after
-   * a crash longjmp; the crashed path never restores the interrupted invocation's pending error. */
+  // Save the pending body error across teardown; publish it and its original phase only
+  // after normal completion. Crash recovery reinitialises these locals and skips restoration.
   const TRIAXI_State error_state = TRIAXI_exec.shared->state;
   const uint32_t     error_code  = res == TRIAXI_EXEC_ERROR ? TRIAXI_exec.shared->exit.code : 0;
-  if (res == TRIAXI_EXEC_ERROR) { TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_NONE; }
   if (res != TRIAXI_EXEC_CRASHED) {
     for (size_t fi = 3; fi-- > 0;) {
       if (!fixtures[fi]->fini) { continue; }
@@ -5553,14 +5404,7 @@ which is exactly what this line does by design.
     break;
 
   case TRIAXI_EXEC_CRASHED:
-    /*
-     * exit.type != NONE here means triaxi_user_error_f already recorded its own exit (type
-     * ERROR, with the specific packed reason) before calling abort() for fixture misuse — the
-     * same "already finished" test triaxi_test_finished's isolated-mode equivalent checks for.
-     * Overwriting it with this crash's fault would report a bare "Aborted" instead of the actual
-     * recorded reason (e.g. skip_in_fixture), which the isolated path never loses since the
-     * parent reads it back from shared memory untouched.
-     */
+    // Preserve a framework/API error recorded before abort(); otherwise record the native fault.
     if (TRIAXI_exec.shared->exit.type == TRIAXI_EXIT_NONE) {
       TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
       TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
@@ -5572,168 +5416,116 @@ which is exactly what this line does by design.
   TRIAXI_exec.in_test = false;
   triaxi_allocations_free_all();
 }
-/*
- * Classifies a finished slot from its final (state, exit.type) pair, plus
- * whatever assertions its log recorded. Every triaxi_fatal()/
- * triaxi_unreachable() below encodes a claim that some (state, exit.type)
- * cell in that matrix cannot occur; two of those claims were wrong (see the
- * state_hdr TEST-state fix and the state_res SETUP/INIT/FINI/CLEANUP fix
- * below) and only surfaced once --break/--debug and fixture-crash
- * combinations were actually tested, not from reading the code. Whenever a
- * new cell (a new way to reach some state, or a new TRIAXI_ExitType/
- * TRIAXI_State value) is added here, re-examine every remaining unreachable/
- * fatal call, since each one is a claim, not a proof.
- *
- * One claim shared by several of them: r.exit.type is never
- * TRIAXI_EXIT_NONE by the time this runs. That's not a property of this
- * function — TRIAXI_EXIT_NONE is only ever written once, at the very start
- * of triaxi_run_func — it's a property every caller of
- * triaxi_collect_active_at (hence triaxi_test_collect_slot, hence here) is
- * responsible for upholding: each call site either has
- * h->process == TRIAXI_PROC_NONE (a non-isolated result, always fully
- * resolved by triaxi_run_func's own exhaustive completion switch before
- * being "parked" this way) or is preceded by a triaxi_fix_testres /
- * triaxi_fix_testres_timeout call. triaxi_unreachable() compiles to a bare
- * optimizer hint (__builtin_unreachable()/__assume(0)) on the compilers
- * this project actually ships warnings-clean on — undefined behavior, not a
- * diagnostic, if a future change to the collection loop ever violates this
- * without also updating every place that depends on it.
- */
+// Classify termination only; earlier assertion failures are aggregated by the interpreter.
+static inline TRIAXI_Outcome triaxi_classify_end(TRIAXI_State state, TRIAXI_Exit exit,
+                                                 const TRIAXI_AssertHdr* pending) {
+  switch (state) {
+  case TRIAXI_STATE_SKIPPED: return TRIAXI_OUTCOME_SKIP;
+  case TRIAXI_STATE_DONE   : return TRIAXI_OUTCOME_PASSED;
+  case TRIAXI_STATE_SETUP  :
+  case TRIAXI_STATE_INIT   :
+  case TRIAXI_STATE_FINI   :
+  case TRIAXI_STATE_CLEANUP:
+    return exit.type == TRIAXI_EXIT_TIMEOUT ? TRIAXI_OUTCOME_TIMEOUT : TRIAXI_OUTCOME_ERROR;
+  case TRIAXI_STATE_TEST     :
+  case TRIAXI_STATE_IN_ASSERT: break;
+  default                    : triaxi_unreachable();
+  }
+  switch (exit.type) {
+  case TRIAXI_EXIT_ERROR    : return TRIAXI_OUTCOME_ERROR;
+  case TRIAXI_EXIT_TIMEOUT  : return TRIAXI_OUTCOME_TIMEOUT;
+  case TRIAXI_EXIT_EXCEPTION: return TRIAXI_OUTCOME_UEXCEPT;
+  case TRIAXI_EXIT_EXIT:
+    if (!pending || pending->type != TRIAXI_AT_exit) { return TRIAXI_OUTCOME_UEXIT; }
+    return !pending->neg && (pending->cr == UINT32_MAX || pending->cr == exit.code)
+             ? TRIAXI_OUTCOME_PASSED
+             : TRIAXI_OUTCOME_FAIL;
+  case TRIAXI_EXIT_FAULT:
+    if (!pending || pending->type != TRIAXI_AT_fault) { return TRIAXI_OUTCOME_UCRASH; }
+    return !pending->neg && (pending->cr == UINT32_MAX || pending->cr == exit.reason)
+             ? TRIAXI_OUTCOME_PASSED
+             : TRIAXI_OUTCOME_FAIL;
+  case TRIAXI_EXIT_NONE:
+  default              : triaxi_unreachable();
+  }
+}
+
+// The collector must resolve exit.type before interpreting the final assertion log.
 static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run,
                                                       const TRIAXI_TestSlot* h) {
   TRIAXI_TestResult r = {TRIAXI_ZINIT};
   r.exit              = h->shared->exit;
   r.state             = h->shared->state;
   r.duration_ms       = h->shared->duration_ms;
-  if (r.state == TRIAXI_STATE_SKIPPED) { return r; }
-  r.outcome                   = TRIAXI_OUTCOME_PASSED;
-  Triax_Str log               = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
-  r.capt.out                  = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out),
-  r.capt.err                  = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
-  const TRIAXI_AssertHdr* hdr = NULL;
-  if (!log.str) { goto state_hdr; }
-  for (const char *b = log.str, *e = b + log.len;;) {
-    if ((size_t)(e - b) < sizeof(*hdr)) { goto state_hdr; }
-    hdr = (const TRIAXI_AssertHdr*)(const void*)b, b += sizeof(*hdr);
+  if (r.state == TRIAXI_STATE_SKIPPED) {
+    r.outcome = triaxi_classify_end(r.state, r.exit, NULL);
+    return r;
+  }
+  Triax_Str log                      = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
+  r.capt.out                         = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out);
+  r.capt.err                         = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
+
+  const TRIAXI_AssertHdr* unfinished = NULL;
+  const char*             b          = log.str;
+  size_t                  left       = log.len;
+  while (left >= sizeof(TRIAXI_AssertHdr)) {
+    const TRIAXI_AssertHdr* hdr  = (const TRIAXI_AssertHdr*)(const void*)b;
+    b += sizeof(*hdr), left -= sizeof(*hdr);
     ++r.nasserts;
+    unfinished                  = hdr;
     const TRIAXI_AssertRes* res = NULL;
-    if ((size_t)(e - b) < sizeof(TRIAXI_PacketPrefix)) { goto state_res; }
+    if (left < sizeof(TRIAXI_PacketPrefix)) { break; }
     if (*(const TRIAXI_PacketPrefix*)b == TRIAXI_RES_PREFIX) {
-      if ((size_t)(e - b) < sizeof(TRIAXI_AssertRes)) { goto state_res; }
-      res = (const TRIAXI_AssertRes*)(const void*)b, b += sizeof(TRIAXI_AssertRes);
+      if (left < sizeof(TRIAXI_AssertRes)) { break; }
+      res  = (const TRIAXI_AssertRes*)(const void*)b;
+      b += sizeof(*res), left -= sizeof(*res);
       size_t args_padded = ((size_t)res->len + 7) & ~(size_t)7;
-      if ((size_t)(e - b) < args_padded) { goto state_res; }
-      b += args_padded;
+      if (left < args_padded) { break; }
+      b += args_padded, left -= args_padded;
     }
     triaxi_print_assert(run, &h->invocation, &r, hdr, res);
-    if (res) { ++r.nfails, r.outcome = TRIAXI_OUTCOME_FAIL; }
+    if (res) { ++r.nfails; }
+    unfinished = NULL;
   }
-state_hdr:
-  switch (h->shared->state) {
-  default                : triaxi_unreachable();
-  case TRIAXI_STATE_SETUP:
-  case TRIAXI_STATE_INIT :
-  case TRIAXI_STATE_FINI :
-  case TRIAXI_STATE_CLEANUP:
-    /*
-     * Kept as a generic (phase-tagged) error rather than reclassified to
-     * ucrashed/uexited/uexception below: triaxi_print_test_end_json only
-     * emits "phase" for TRIAXI_OUTCOME_ERROR, and phase (setup/init/fini/
-     * cleanup) is exactly the useful information here — "fixture init
-     * error: Aborted" tells the user where it happened, which a bare
-     * "ucrashed" wouldn't.
-     */
-    r.outcome = r.exit.type == TRIAXI_EXIT_TIMEOUT ? TRIAXI_OUTCOME_TIMEOUT : TRIAXI_OUTCOME_ERROR;
-    break;
-  case TRIAXI_STATE_TEST:
-  case TRIAXI_STATE_IN_ASSERT:
-    /*
-     * No assertion is pending in the fully parsed log. IN_ASSERT can still be observed
-     * if a signal/timeout arrives after a complete result write but before the state reset.
-     * Classify that termination normally instead of treating the brief window as corruption.
-     */
-    switch (r.exit.type) {
-    default                   :
-    case TRIAXI_EXIT_NONE     : triaxi_unreachable();
-    case TRIAXI_EXIT_TIMEOUT  : r.outcome = TRIAXI_OUTCOME_TIMEOUT; break;
-    case TRIAXI_EXIT_ERROR    : r.outcome = TRIAXI_OUTCOME_ERROR; break;
-    case TRIAXI_EXIT_FAULT    : r.outcome = TRIAXI_OUTCOME_UCRASH; break;
-    case TRIAXI_EXIT_EXIT     : r.outcome = TRIAXI_OUTCOME_UEXIT; break;
-    case TRIAXI_EXIT_EXCEPTION: r.outcome = TRIAXI_OUTCOME_UEXCEPT; break;
-    }
-    break;
-  case TRIAXI_STATE_DONE   : break;
-  case TRIAXI_STATE_SKIPPED: triaxi_unreachable();
-  }
-  return r;
 
-state_res: // expected res
-  switch (h->shared->state) {
-  default               : triaxi_unreachable();
-  case TRIAXI_STATE_TEST:
-  case TRIAXI_STATE_DONE:
-  /*
-   * A header was logged with no result to follow (headers are always
-   * logged, even for a passing assertion; only a failure also logs a
-   * result) — the assertion that produced it passed, and execution has
-   * since moved on. That's true regardless of which phase things ended up
-   * in by the time we ran out of log data: state == SETUP/INIT/FINI/
-   * CLEANUP here means the last assertion in the test body passed and
-   * something abnormal (e.g. a crash) then happened in a fixture, which is
-   * a real, reachable case (see state_hdr's own SETUP/INIT/FINI/CLEANUP
-   * case for the phase-tagged classification of exactly that), not the
-   * impossible/corrupted-log situation a triaxi_fatal() here used to
-   * assume.
-   */
-  case TRIAXI_STATE_SETUP:
-  case TRIAXI_STATE_INIT :
-  case TRIAXI_STATE_FINI :
-  case TRIAXI_STATE_CLEANUP:
-    triaxi_print_assert(run, &h->invocation, &r, hdr, NULL); // Last assertion passed.
-    goto state_hdr;
-  case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
-  case TRIAXI_STATE_IN_ASSERT: break;
-  }
-  TRIAXI_AssertRes* d = &TRIAXI_exec.pkg;
-  memset(d, 0, sizeof(*d)); // old msvc on c++ won't accept assignment for FAM structs
-  switch (r.exit.type) {
-  default                 :
-  case TRIAXI_EXIT_NONE   : triaxi_unreachable();
-  case TRIAXI_EXIT_TIMEOUT: d->val = TRIAXI_AR_TIMEOUT, r.outcome = TRIAXI_OUTCOME_TIMEOUT; break;
-  case TRIAXI_EXIT_ERROR  : r.outcome = TRIAXI_OUTCOME_ERROR; return r;
-  case TRIAXI_EXIT_EXIT:
-    if ((TRIAXI_AssertType)hdr->type != TRIAXI_AT_exit) {
-      d->val = TRIAXI_AR_UEXITED, r.outcome = TRIAXI_OUTCOME_UEXIT;
-    } else if (hdr->neg) {
-      d->val = TRIAXI_AR_FAIL1, r.outcome = TRIAXI_OUTCOME_FAIL;
-      triaxi_sprintargs2(*d, "no exit", "%s", r.exit.code, "%" PRIu32);
-    } else if (hdr->cr != UINT32_MAX && hdr->cr != r.exit.code) {
-      d->val = TRIAXI_AR_FAIL1, r.outcome = TRIAXI_OUTCOME_FAIL;
-      triaxi_sprintargs2(*d, hdr->cr, "%" PRIu32, r.exit.code, "%" PRIu32);
-    } else {
-      d = NULL;
+  // A complete result may be logged before execution leaves IN_ASSERT.
+  const TRIAXI_AssertHdr* pending = r.state == TRIAXI_STATE_IN_ASSERT ? unfinished : NULL;
+  if (unfinished && !pending) { triaxi_print_assert(run, &h->invocation, &r, unfinished, NULL); }
+  const TRIAXI_Outcome end = triaxi_classify_end(r.state, r.exit, pending);
+  if (pending && end != TRIAXI_OUTCOME_ERROR) {
+    TRIAXI_AssertRes* d = &TRIAXI_exec.pkg;
+    memset(d, 0, sizeof(*d)); // Older MSVC rejects assignment to structs with flexible arrays.
+    switch (end) {
+    case TRIAXI_OUTCOME_PASSED : d = NULL; break;
+    case TRIAXI_OUTCOME_TIMEOUT: d->val = TRIAXI_AR_TIMEOUT; break;
+    case TRIAXI_OUTCOME_UCRASH : d->val = TRIAXI_AR_UCRASHED; break;
+    case TRIAXI_OUTCOME_UEXIT  : d->val = TRIAXI_AR_UEXITED; break;
+    case TRIAXI_OUTCOME_UEXCEPT: d->val = TRIAXI_AR_UEXCEPT; break;
+    case TRIAXI_OUTCOME_FAIL:
+      d->val = TRIAXI_AR_FAIL1;
+      if (r.exit.type == TRIAXI_EXIT_EXIT) {
+        if (pending->neg) {
+          triaxi_sprintargs2(*d, "no exit", "%s", r.exit.code, "%" PRIu32);
+        } else {
+          triaxi_sprintargs2(*d, pending->cr, "%" PRIu32, r.exit.code, "%" PRIu32);
+        }
+      } else if (pending->neg) {
+        triaxi_sprintargs2(*d, "no fault", "%s", triaxi_fault_tostr(r.exit.reason).str, "%s");
+      } else {
+        Triax_Str fault = triaxi_fault_tostr(pending->cr);
+        memcpy(d->args, fault.str, fault.len + 1), d->len = (uint32_t)(fault.len + 1);
+        fault = triaxi_fault_tostr(r.exit.reason);
+        memcpy(d->args + d->len, fault.str, fault.len + 1), d->len += (uint32_t)(fault.len + 1);
+      }
+      break;
+    case TRIAXI_OUTCOME_SKIP :
+    case TRIAXI_OUTCOME_ERROR:
+    default                  : triaxi_unreachable();
     }
-    break;
-  case TRIAXI_EXIT_FAULT:
-    if ((TRIAXI_AssertType)hdr->type != TRIAXI_AT_fault) {
-      d->val = TRIAXI_AR_UCRASHED, r.outcome = TRIAXI_OUTCOME_UCRASH;
-    } else if (hdr->neg) {
-      d->val = TRIAXI_AR_FAIL1, r.outcome = TRIAXI_OUTCOME_FAIL;
-      triaxi_sprintargs2(*d, "no fault", "%s", triaxi_fault_tostr(r.exit.reason).str, "%s");
-    } else if (hdr->cr != UINT32_MAX && hdr->cr != r.exit.reason) {
-      d->val = TRIAXI_AR_FAIL1, r.outcome = TRIAXI_OUTCOME_FAIL;
-      Triax_Str fltstr = triaxi_fault_tostr(hdr->cr);
-      memcpy(d->args, fltstr.str, fltstr.len + 1), d->len = (uint32_t)(fltstr.len + 1);
-      fltstr = triaxi_fault_tostr(r.exit.reason);
-      memcpy(d->args + d->len, fltstr.str, fltstr.len + 1), d->len += (uint32_t)(fltstr.len + 1);
-    } else {
-      d = NULL;
-    }
-    break;
-  case TRIAXI_EXIT_EXCEPTION: d->val = TRIAXI_AR_UEXCEPT, r.outcome = TRIAXI_OUTCOME_UEXCEPT; break;
+    triaxi_print_assert(run, &h->invocation, &r, pending, d);
+    if (d) { ++r.nfails; }
   }
-  triaxi_print_assert(run, &h->invocation, &r, hdr, d);
-  if (d) { ++r.nfails; }
+  r.outcome = end == TRIAXI_OUTCOME_PASSED && r.nfails ? TRIAXI_OUTCOME_FAIL : end;
   return r;
 }
 
@@ -5762,7 +5554,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   const char *shm_val = getenv("TRIAX_SHM"), *slot_val = getenv("TRIAX_SLOT");
   if (!shm_val || !slot_val) { return; } // not child
   TRIAXI_exec.isolated = true;
-  /* Suppress crash dialogs and WER in the child. */
+  // Suppress crash dialogs and WER in the child.
   SetErrorMode(SEM_NOGPFAULTERRORBOX | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
   if (signal(SIGABRT, triaxi_sighandler_abort) == SIG_ERR) { triaxi_fatal(); }
   setvbuf(stdout, NULL, _IONBF, 0), setvbuf(stderr, NULL, _IONBF, 0);
@@ -5817,7 +5609,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   triaxi_stdfds_redirect(&h);
   triaxi_run_func(&h.invocation, h.shared);
   _exit(0);
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -5869,7 +5661,7 @@ static inline bool triaxi_tags_match(const TRIAXI_RunCtx* run, const TRIAXI_Suit
 typedef int TRIAXI_RawStatus;
 # elif TRIAXI_PLATFORM_WINDOWS
 typedef DWORD TRIAXI_RawStatus;
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -5888,7 +5680,7 @@ static inline TRIAXI_Exit triaxi_exit_from_status(TRIAXI_RawStatus status) {
   } else {
     return TRIAXI_T(TRIAXI_Exit){TRIAXI_EXIT_EXIT, {status}};
   }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -5903,24 +5695,14 @@ static inline TRIAXI_Outcome triaxi_test_collect_slot(const TRIAXI_RunCtx*    ru
   return res.outcome;
 }
 # if TRIAXI_PLATFORM_POSIX
-/*
- * Terminate every process remaining in an isolated test's process group.
- *
- * The root test process is the group leader, so -pgid reaches it and all
- * descendants that remain in the group. POSIX provides no portable way for
- * the runner to reap arbitrary grandchildren or wait for an entire process
- * group to disappear: dead descendants may remain visible as zombies until
- * their eventual parent reaps them. Do not poll group existence here.
- *
- * Output produced by descendants after the root test process terminates is
- * not guaranteed to be captured; the containment guarantee is that remaining
- * group members are sent SIGKILL so they cannot continue running indefinitely.
- */
+// Kill descendants remaining in the test process group. POSIX cannot portably reap
+// arbitrary grandchildren; do not wait for the group to disappear.
+// Output from descendants after the root exits is not guaranteed to be captured.
 static inline void triaxi_terminate_group(pid_t pgid) {
   if (kill(-pgid, SIGKILL) && errno != ESRCH) { triaxi_fatal(); }
 }
 # elif TRIAXI_PLATFORM_WINDOWS
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -5934,7 +5716,7 @@ static inline TRIAXI_Outcome triaxi_collect_active_at(const TRIAXI_RunCtx*    ru
   if (h->process != TRIAXI_PROC_NONE) { triaxi_terminate_group(h->process); }
 # elif TRIAXI_PLATFORM_WINDOWS
   if (h->process != TRIAXI_PROC_NONE) { triaxi_windows_slot_process_finish(h, false); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   TRIAXI_Outcome o  = triaxi_test_collect_slot(run, rres, h, nreported);
@@ -5950,7 +5732,7 @@ static inline pid_t triaxi_waitpid(pid_t pid, int* status, int flags) {
   return res;
 }
 # elif TRIAXI_PLATFORM_WINDOWS
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -6025,11 +5807,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
         switch (triaxi_waitpid(h->process, &status, WNOHANG)) {
         case -1: triaxi_fatal();
         case 0:
-          /*
-           * It genuinely hasn't become waitable.
-           * Group kill failed for some other reason, so guarantee
-           * termination of our direct child.
-           */
+          // The child is still running; fall back to killing it directly.
           if (kill(h->process, SIGKILL) && errno != ESRCH) { triaxi_fatal(); }
           killed = true;
           break;
@@ -6045,12 +5823,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
       } else {
         triaxi_fix_testres(h, status, triaxi_elapsed_ms(h->start_ms));
       }
-      /*
-       * The timeout path already signalled the process group above. Repeat
-       * termination after reaping the root to cover descendants that may still
-       * remain in the group; this is containment only, not a wait-for-group
-       * operation.
-       */
+      // Kill the group again after reaping the root to contain any remaining descendants.
       triaxi_terminate_group(h->process);
       h->process = TRIAXI_PROC_NONE;
       return triaxi_collect_active_at(run, rres, active, inflight, i, nreported);
@@ -6060,9 +5833,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
   }
 
 # elif TRIAXI_PLATFORM_WINDOWS
-  // WaitForMultipleObjects blocks on every in-flight isolated child and wakes
-  // when one exits. The nearest test deadline bounds the wait. Job-object
-  // termination also kills descendants.
+  // Wait for a child exit or the nearest deadline; jobs contain descendants.
   HANDLE waits[TRIAXI_JOBS_MAX];
   for (size_t i = 0; i < n; ++i) {
     TRIAXI_TestSlot* h = active[i];
@@ -6121,7 +5892,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
     if (rr == WAIT_TIMEOUT) { continue; }
     triaxi_fatal();
   }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -6219,7 +5990,7 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 
   DeleteProcThreadAttributeList(sia.lpAttributeList);
   if (!CloseHandle(sia.StartupInfo.hStdInput)) { triaxi_fatal(); }
-# else /* triaxi_embedded */
+# else // triaxi_embedded
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -6499,7 +6270,7 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 }
 # pragma endregion runner_cli
 
-#endif /* TRIAXI_REGION_RUNNER_ONLY */
+#endif // TRIAXI_REGION_RUNNER_ONLY
 
 #undef triaxi_catlit
 #undef triaxi_noreturn
@@ -6518,7 +6289,7 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 
 // NOLINTEND(performance-enum-size)
 #pragma endregion implementation
-#endif /* TRIAXI_TEST_H */
+#endif // TRIAXI_TEST_H
 
 // MIT License
 //

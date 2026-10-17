@@ -425,7 +425,7 @@ fi
 # uexception (C++-only) against combo_reporters_cpp, same treatment.
 "$COMBO_CPP" --text=none --no-color --json="$(native_path "$WORKDIR/rep_cpp.json")" \
   --tap="$(native_path "$WORKDIR/rep_cpp.tap")" --junit="$(native_path "$WORKDIR/rep_cpp.xml")" \
-  >/dev/null 2>&1 || true
+  combo_reporters_cpp >/dev/null 2>&1 || true
 check_map "reporters x outcome: uexception (C++) JSON correct" \
   "$(json_outcomes "$WORKDIR/rep_cpp.json")" \
   "r_uexception uexception"
@@ -448,6 +448,53 @@ then
 else
   fail "reporters x outcome: uexception (C++) JUnit" "$(cat "$WORKDIR/rep_cpp.xml")"
 fi
+
+# ── C++ exceptions x assertions x isolation ──────────────────────────────────
+# A comparison that throws must count its assertion as failed (it used to
+# count as passed), in both isolation modes; a caught exception in a
+# non-isolated test must stay caught (MinGW's crash handler used to
+# intercept it).
+"$COMBO_CPP" --text=none --no-color --json="$(native_path "$WORKDIR/exc_cpp.json")" \
+  combo_exceptions_cpp >/dev/null 2>&1 || true
+exc_result="$(python3 - "$(native_path "$WORKDIR/exc_cpp.json")" <<'PY' | tr -d '\r'
+import json
+import sys
+
+sys.stdout.reconfigure(newline="\n")
+for t in json.load(open(sys.argv[1]))["suites"][0]["tests"]:
+    kinds = ",".join(f["kind"] for f in t.get("assert_failures", [])) or "-"
+    print(t["name"], t["outcome"], t["assert_count"], kinds)
+PY
+)"
+check_map "C++ exceptions: throwing comparison fails its assertion; caught throw stays caught" \
+  "$exc_result" \
+  "throwing_compare uexception 1 unhandled_exception
+throwing_compare_noniso uexception 1 unhandled_exception
+caught_noniso passed 1 -"
+
+# ── JUnit x consecutive failures ─────────────────────────────────────────────
+# Each <failure> must list only its own test's assertions, sequentially and
+# with parallel jobs.
+for jobs in 1 2; do
+  "$COMBO" --text=none --no-color --jobs=$jobs --junit="$(native_path "$WORKDIR/stale_$jobs.xml")" \
+    combo_junit_stale >/dev/null 2>&1 || true
+  stale_result="$(python3 - "$(native_path "$WORKDIR/stale_$jobs.xml")" <<'PY' | tr -d '\r'
+import sys
+import xml.etree.ElementTree as ET
+
+sys.stdout.reconfigure(newline="\n")
+for tc in ET.parse(sys.argv[1]).getroot().iter("testcase"):
+    failure = tc.find("failure")
+    if failure is not None:
+        print(tc.get("name"), " ".join((failure.text or "").split()))
+PY
+)"
+  if [ "$stale_result" = "b_fails expect_true(2 == 3)" ]; then
+    ok "JUnit --jobs=$jobs: no stale assertion lines from a previous test"
+  else
+    fail "JUnit --jobs=$jobs stale assertion lines" "$stale_result"
+  fi
+done
 
 echo
 echo "$check_num checks run"

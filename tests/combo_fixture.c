@@ -155,6 +155,16 @@ triax_test(combo_utf8, truncated_expr, 0) {
   triax_assert_streq("xx", "€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€€");
 }
 
+// JUnit buffers each test's failed assertions and copies them into <failure> only for a "failed"
+// outcome. a_crashes leaves its failed expectation buffered but uncopied; the buffer used to be
+// truncated before being flushed, so that stale line resurfaced inside b_fails's <failure>.
+triax_suite(combo_junit_stale, .isolation = TRIAX_ISOLATION_ON);
+triax_test(combo_junit_stale, a_crashes, 0) {
+  triax_expect_true(0 == 1 && "longer than b_fails's expression");
+  raise(SIGABRT);
+}
+triax_test(combo_junit_stale, b_fails, 0) { triax_expect_true(2 == 3); }
+
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
   return triax_run_argv(argc, argv, cfg);

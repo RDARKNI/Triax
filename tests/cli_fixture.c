@@ -22,7 +22,7 @@ triax_suite(fx_b, 0);
 triax_test(fx_b, first, 0) { triax_assert_true(0); }
 triax_test(fx_b, second, 0) { triax_assert_true(1); }
 
-// fx_c: a single test with malformed .params (non-null ptr, zero element
+// fx_c: tests with malformed .params, e.g. non-null ptr with zero element
 // size — a well-formed TRIAXI_Params from triax_as_params() never produces
 // this combination). Rejected in triaxi_test_start before the body ever
 // runs, for every invocation of this (suite, test) with no way to gate that
@@ -33,6 +33,14 @@ triax_test(fx_b, second, 0) { triax_assert_true(1); }
 static const int fx_c_malformed_params_arr[] = {1, 2, 3};
 triax_suite(fx_c, 0);
 triax_test(fx_c, malformed_params, .params = {0, 3, fx_c_malformed_params_arr}) {
+  triax_assert_true(1); // unreached
+}
+// Two shapes the old check let through: an element count with no array
+// (null ptr, zero size), and elsize * elcount overflowing size_t.
+triax_test(fx_c, params_count_without_ptr, .params = {0, 3, NULL}) {
+  triax_assert_true(1); // unreached
+}
+triax_test(fx_c, params_size_overflow, .params = {SIZE_MAX / 2, 3, fx_c_malformed_params_arr}) {
   triax_assert_true(1); // unreached
 }
 

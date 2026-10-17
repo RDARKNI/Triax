@@ -270,12 +270,13 @@ triaxi_validate(float_tol, reltol_fail, TRIAXI_VALIDATE_FAILED) {
   // type, so a formula that compares the *computed ratio's value* against tol (rather than
   // checking the smaller operand's exact zero-ness first) wrongly rounds this down to passing at
   // tol == 1.0.
-  triax_expect_floateq_reltol(LDBL_MAX, -nextafterl(0.0L, 1.0L), 1.0L);
+  triax_expect_floateq_reltol(LDBL_MAX, -LDBL_TRUE_MIN, 1.0L);
   // Precision near equality: pre-dividing both operands by mag before subtracting (instead of
   // subtracting first, which is exact here, then dividing once) adds a second rounding — enough
   // to wrongly pass a tolerance deliberately set just under the true ratio.
-  triax_expect_floateq_reltol(1.5L, nextafterl(1.5L, 0.0L),
-                              (1.5L - nextafterl(1.5L, 0.0L)) / 1.5L * 0.9L);
+  // 1.5L - LDBL_EPSILON is 1.5L's predecessor: the spacing in [1, 2) is LDBL_EPSILON. A constant
+  // rather than nextafterl(), which needs libm (-lm) on glibc.
+  triax_expect_floateq_reltol(1.5L, 1.5L - LDBL_EPSILON, LDBL_EPSILON / 1.5L * 0.9L);
 }
 triaxi_validate(float_tol, reltolneq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_floatneq_reltol(1.0, 2.0, 0.1);
