@@ -903,64 +903,9 @@ typedef uint32_t Triax_Fault;
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma region implementation
+#pragma region common
 
-#include <assert.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <math.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#if TRIAXI_CPP
-# include <array>
-# include <iostream>
-# include <sstream>
-# include <type_traits>
-# include <utility>
-# if TRIAXI_CPP >= 202002L && defined(__has_include)
-#  if __has_include(<format>)
-#   include <format>
-#  endif
-# endif
-#endif
-
-#if TRIAXI_PLATFORM_POSIX
-# include <fcntl.h>
-# include <sys/mman.h>
-# include <sys/stat.h>
-# include <sys/uio.h>
-# include <unistd.h>
-#elif TRIAXI_PLATFORM_WINDOWS
-# if defined(_MSC_VER) && !defined(__clang__) && TRIAXI_C
-#  if _MSC_VER < 1928
-#   error "triax.h in C mode on MSVC requires MSVC 19.28+"
-#  endif
-#  if TRIAXI_C < 201112L
-#   error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
-#  endif
-# endif
-# include <fcntl.h>
-# include <malloc.h> // _resetstkoflw
-# include <wchar.h>
-# include <windows.h>
-#endif
-
-#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
-# if TRIAXI_PLATFORM_POSIX
-#  include <sys/wait.h>
-#  ifdef __linux__
-#   include <sys/syscall.h>
-#  endif
-# elif TRIAXI_PLATFORM_WINDOWS
-#  include <io.h>
-# endif
-#endif
-
+#pragma region compiler_and_target
 #if defined(_MSC_VER) && !defined(__clang__)
 # define TRIAXI_MSVC _MSC_VER
 #else
@@ -1026,31 +971,99 @@ typedef uint32_t Triax_Fault;
 
 #define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 #if TRIAXI_GNU_COMPAT
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wpragmas"
-# pragma GCC diagnostic ignored "-Wgnu-anonymous-struct"
-# pragma GCC diagnostic ignored "-Wnested-anon-types"
-# pragma GCC diagnostic ignored "-Wc99-extensions"
-# pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-# pragma GCC diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
-# pragma GCC diagnostic ignored "-Wc2x-extensions"
-# pragma GCC diagnostic ignored "-Wunused-function"
 # define TRIAXI_IGNWARN_GNU_BEG(warn)                                                              \
    TRIAXI_DO_PRAGMA(GCC diagnostic push)                                                           \
    TRIAXI_DO_PRAGMA(GCC diagnostic ignored warn)
 # define TRIAXI_IGNWARN_GNU_END TRIAXI_DO_PRAGMA(GCC diagnostic pop)
 #else
-# pragma warning(push)
-# pragma warning(disable : 4996)
-
 # define TRIAXI_IGNWARN_GNU_BEG(warn)
 # define TRIAXI_IGNWARN_GNU_END
 #endif
+
+#pragma endregion compiler_and_target
+
+#pragma region dependencies
+#include <assert.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#if TRIAXI_CPP
+# include <array>
+# include <iostream>
+# include <sstream>
+# include <type_traits>
+# include <utility>
+# if TRIAXI_CPP >= 202002L && defined(__has_include)
+#  if __has_include(<format>)
+#   include <format>
+#  endif
+# endif
+#endif
+
+#if TRIAXI_PLATFORM_POSIX
+# include <fcntl.h>
+# include <sys/mman.h>
+# include <sys/stat.h>
+# include <sys/uio.h>
+# include <unistd.h>
+#elif TRIAXI_PLATFORM_WINDOWS
+# if defined(_MSC_VER) && !defined(__clang__) && TRIAXI_C
+#  if _MSC_VER < 1928
+#   error "triax.h in C mode on MSVC requires MSVC 19.28+"
+#  endif
+#  if TRIAXI_C < 201112L
+#   error "triax.h in C mode on MSVC requires /std:c11 or /std:clatest"
+#  endif
+# endif
+# include <fcntl.h>
+# include <malloc.h> // _resetstkoflw
+# include <wchar.h>
+# include <windows.h>
+#endif
+
+#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
+# if TRIAXI_PLATFORM_POSIX
+#  include <sys/wait.h>
+#  ifdef __linux__
+#   include <sys/syscall.h>
+#  endif
+# elif TRIAXI_PLATFORM_WINDOWS
+#  include <io.h>
+# endif
+#endif
+
+#pragma endregion dependencies
+
 #pragma region common_utilities
+// todo more targeted diagnostic suppression
+#if TRIAXI_GNU_COMPAT
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif TRIAXI_MSVC_COMPAT
+# pragma warning(push)
+# pragma warning(disable : 4996) // deprecated functions like strcpy
+#endif
+
 #define TRIAXI_WRONGMODULE_ERR(FNAME)                                                              \
   static_assert(0, #FNAME " cannot be used in a non-runner translation unit — define TRIAX_IMPL "  \
                           "in exactly one translation unit or disable TRIAX_MULTI_TU.")
+
+#if !defined(TRIAX_MULTI_TU)
+# define TRIAXI_SHARED_LINKAGE static
+#elif defined(TRIAX_IMPL)
+# define TRIAXI_SHARED_LINKAGE
+#else
+# define TRIAXI_SHARED_LINKAGE extern
+#endif
 
 #define TRIAXI_STRINGIFY_(x)    #x
 #define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
@@ -1307,7 +1320,6 @@ static inline Triax_Str triaxi_fault_tostr(Triax_Fault reason) {
 #pragma endregion common_utilities
 
 #pragma region common_types
-
 typedef struct TRIAXI_Params {
   size_t      elsize, elcount;
   const void* ptr;
@@ -1327,11 +1339,10 @@ static_assert(offsetof(TRIAXI_TestConfig, params) == sizeof(Triax_Attributes), "
 
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wpedantic"
+# pragma GCC diagnostic ignored "-Wpedantic" // Anonymous inner struct
 #else
 # pragma warning(push)
-# pragma warning(disable : 4201)
-# pragma warning(disable : 5274)
+# pragma warning(disable : 4201) // Anonymous inner struct
 #endif
 
 typedef struct TRIAXI_Test {
@@ -1372,7 +1383,6 @@ typedef struct TRIAXI_SuiteReg {
 #pragma endregion common_types
 
 #pragma region registration_macros
-
 // clang-format off
 #if !TRIAXI_CPP
 #  define TRIAXI_Test_attrs_init(...) {{0, __VA_ARGS__}}
@@ -1596,7 +1606,6 @@ TRIAXI_EXTERN_C_END
 #pragma endregion registration_macros
 
 #pragma region assert_protocol
-
 #define TRIAXI_ASSERTTYPE_ITEMS(X, PRE)                                                            \
   X(PRE##exit)                                                                                     \
   X(PRE##fault)                                                                                    \
@@ -1622,7 +1631,6 @@ enum { TRIAXI_AT_COUNT = TRIAXI_COUNT_ALL(TRIAXI_ASSERTTYPE_ITEMS) };
 
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wflexible-array-extensions"
 # pragma GCC diagnostic ignored "-Wpedantic"
 #else
 # pragma warning(push)
@@ -1638,10 +1646,10 @@ typedef struct TRIAXI_AssertHdr {
     TRIAXI_PacketPrefix is_hdr;
     uint8_t             expr_len;
   };
-  uint8_t  type;
-  uint8_t  ae;
-  uint8_t  neg;
-  uint32_t cr; // code/signal
+  uint8_t  type; // TRIAXI_AssertType
+  uint8_t  ae;   // Assert vs Expect
+  uint8_t  neg;  // Negated
+  uint32_t cr;   // code/signal
   uint32_t line;
 #if TRIAXI_PLATFORM_POSIX
   uint8_t     reserved[4];
@@ -1760,19 +1768,10 @@ typedef struct TRIAXI_Shared {
 #pragma endregion assert_protocol
 
 #pragma region exec_state
-
-#if !defined(TRIAX_MULTI_TU)
-# define TRIAXI_SHARED_LINKAGE static
-#elif defined(TRIAX_IMPL)
-# define TRIAXI_SHARED_LINKAGE
-#else
-# define TRIAXI_SHARED_LINKAGE extern
-#endif
-
 TRIAXI_EXTERN_C_BEG
-
 TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
 #if !TRIAXI_GNU_COMPAT
+// todo positive test?
 # pragma warning(push)
 // C4324: jmp_buf requires platform alignment, which may pad TRIAXI_ExecState.
 # pragma warning(disable : 4324)
@@ -1797,14 +1796,12 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
     };
   };
 } TRIAXI_exec;
-#if !TRIAXI_GNU_COMPAT
-# pragma warning(pop)
-#endif
 
 TRIAXI_EXTERN_C_END
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic pop
 #else
+# pragma warning(pop)
 # pragma warning(pop)
 #endif
 
@@ -1941,7 +1938,6 @@ static inline Triax_Str triax_read_stderr(void) {
 #pragma endregion exec_state
 
 #pragma region log_protocol
-
 static inline void triaxi_log_write(const void* buf, size_t len) {
   triaxi_file_write(TRIAXI_exec.log, buf, len);
 }
@@ -1980,16 +1976,14 @@ static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t
 
 static inline void triaxi_debug_break(void) {
 #if TRIAXI_PLATFORM_WINDOWS
-  // Use the Windows debugger API, including under clang-cl.
-  DebugBreak();
+  DebugBreak(); // Use the Windows debugger API, including under clang-cl.
+
 #elif TRIAXI_CLANG && defined(__has_builtin) && __has_builtin(__builtin_debugtrap)
-  // Use the compiler trap when available.
-  __builtin_debugtrap();
+  __builtin_debugtrap(); // Use the compiler trap when available.
 #elif TRIAXI_PLATFORM_POSIX
   raise(SIGTRAP);
 #else
-  // Best-effort trap when the target runtime supports SIGTRAP.
-  raise(SIGTRAP);
+  raise(SIGTRAP); // Best-effort trap when the target runtime supports SIGTRAP.
 #endif
 }
 
@@ -2012,7 +2006,6 @@ static inline void triaxi_log_res(TRIAXI_AR val) {
 #pragma endregion log_protocol
 
 #pragma region assertion_dispatch
-
 /// @brief Reason we jumped out of the test function?
 typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_RETURNED,
@@ -2064,33 +2057,6 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
   (TRIAXI_LOG_HDR(TRIAXI_AT_##type, 0, neg, 0, lit), triaxi_AF_##type(neg, __VA_ARGS__),           \
    (void)(TRIAXI_exec.shared->state = TRIAXI_STATE_TEST, 0))
 
-#define triaxi_assert_fault(v, ae, fault, lit, ...)                                                \
-  do {                                                                                             \
-    const Triax_Fault TRIAXI_expected_v = (Triax_Fault)(fault);                                    \
-    TRIAXI_LOG_HDR(TRIAXI_AT_fault, ae, v, TRIAXI_expected_v, lit);                                \
-    __VA_ARGS__;                                                                                   \
-    {                                                                                              \
-      if (triaxi_AF_fault(v, TRIAXI_expected_v) && ae) {                                           \
-        TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED);                                                   \
-      }                                                                                            \
-      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;                                               \
-    }                                                                                              \
-  } while (0)
-
-#define triaxi_assert_exit(v, ae, code, lit, ...)                                                  \
-  do {                                                                                             \
-    const uint32_t TRIAXI_expected_v = (uint32_t)(code);                                           \
-    if (!TRIAXI_exec.isolated) { triaxi_user_error(TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION); }  \
-    TRIAXI_LOG_HDR(TRIAXI_AT_exit, ae, v, TRIAXI_expected_v, lit);                                 \
-    __VA_ARGS__;                                                                                   \
-    {                                                                                              \
-      if (triaxi_AF_exit(v, (uint32_t)TRIAXI_expected_v) && ae) {                                  \
-        TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED);                                                   \
-      }                                                                                            \
-      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;                                               \
-    }                                                                                              \
-  } while (0)
-
 #define triaxi_sprintargs1(RES, a1, f1) ((RES).len = (uint32_t)(sprintf((RES).args, f1, a1) + 1))
 #define triaxi_sprintargs2(RES, a1, f1, a2, f2)                                                    \
   ((RES).len = (uint32_t)(sprintf((RES).args, f1 "%c" f2, a1, '\0', a2) + 1))
@@ -2111,34 +2077,6 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
              : (triaxi_sprintargs3(TRIAXI_exec.pkg, e1, f1, e2, f2, e3, f3),                       \
                 triaxi_log_res((TRIAXI_AR)(v)), 1)))
 
-#define TRIAXI_eq(v, e1, e2) ((uint8_t)((v) == ((e1) == (e2))))
-#define TRIAXI_gt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) <= (e2)) + ((e1) < (e2))) : !((e1) <= (e2))))
-#define TRIAXI_lt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) >= (e2)) + ((e1) > (e2))) : !((e1) >= (e2))))
-
-static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
-  if (!e1.str || !e2.str) { return (!e1.str && !e2.str) ? 0 : !e1.str ? -1 : 1; }
-  size_t min = TRIAXI_MIN(e1.len, e2.len);
-  int    cr  = min ? memcmp(e1.str, e2.str, min) : 0;
-  return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
-}
-
-static inline bool triaxi_AF_fault(bool v, uint32_t expected) {
-  if (v) { return 0; }
-  triaxi_sprintargs2(TRIAXI_exec.pkg, triaxi_fault_tostr(expected).str, "%s", "no fault", "%s");
-  triaxi_log_res(TRIAXI_AR_FAIL1);
-  return 1;
-}
-
-static inline bool triaxi_AF_exit(bool v, uint32_t expected) {
-  if (v) { return 0; }
-  if (expected == TRIAX_EXIT_ANY) {
-    triaxi_sprintargs2(TRIAXI_exec.pkg, "any exit", "%s", "no exit", "%s");
-  } else {
-    triaxi_sprintargs2(TRIAXI_exec.pkg, expected, "%" PRIu32, "no exit", "%s");
-  }
-  triaxi_log_res(TRIAXI_AR_FAIL1);
-  return 1;
-}
 static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
                                       const size_t* index) {
   if (!val) { return false; }
@@ -2223,6 +2161,61 @@ static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
   return true;
 }
 
+#define TRIAXI_eq(v, e1, e2) ((uint8_t)((v) == ((e1) == (e2))))
+#define TRIAXI_gt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) <= (e2)) + ((e1) < (e2))) : !((e1) <= (e2))))
+#define TRIAXI_lt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) >= (e2)) + ((e1) > (e2))) : !((e1) >= (e2))))
+
+static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
+  if (!e1.str || !e2.str) { return (!e1.str && !e2.str) ? 0 : !e1.str ? -1 : 1; }
+  size_t min = TRIAXI_MIN(e1.len, e2.len);
+  int    cr  = min ? memcmp(e1.str, e2.str, min) : 0;
+  return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
+}
+
+#define triaxi_assert_fault(v, ae, fault, lit, ...)                                                \
+  do {                                                                                             \
+    const Triax_Fault TRIAXI_expected_v = (Triax_Fault)(fault);                                    \
+    TRIAXI_LOG_HDR(TRIAXI_AT_fault, ae, v, TRIAXI_expected_v, lit);                                \
+    __VA_ARGS__;                                                                                   \
+    {                                                                                              \
+      if (triaxi_AF_fault(v, TRIAXI_expected_v) && ae) {                                           \
+        TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED);                                                   \
+      }                                                                                            \
+      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;                                               \
+    }                                                                                              \
+  } while (0)
+
+#define triaxi_assert_exit(v, ae, code, lit, ...)                                                  \
+  do {                                                                                             \
+    const uint32_t TRIAXI_expected_v = (uint32_t)(code);                                           \
+    if (!TRIAXI_exec.isolated) { triaxi_user_error(TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION); }  \
+    TRIAXI_LOG_HDR(TRIAXI_AT_exit, ae, v, TRIAXI_expected_v, lit);                                 \
+    __VA_ARGS__;                                                                                   \
+    {                                                                                              \
+      if (triaxi_AF_exit(v, (uint32_t)TRIAXI_expected_v) && ae) {                                  \
+        TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED);                                                   \
+      }                                                                                            \
+      TRIAXI_exec.shared->state = TRIAXI_STATE_TEST;                                               \
+    }                                                                                              \
+  } while (0)
+
+static inline bool triaxi_AF_fault(bool v, uint32_t expected) {
+  if (v) { return 0; }
+  triaxi_sprintargs2(TRIAXI_exec.pkg, triaxi_fault_tostr(expected).str, "%s", "no fault", "%s");
+  triaxi_log_res(TRIAXI_AR_FAIL1);
+  return 1;
+}
+
+static inline bool triaxi_AF_exit(bool v, uint32_t expected) {
+  if (v) { return 0; }
+  if (expected == TRIAX_EXIT_ANY) {
+    triaxi_sprintargs2(TRIAXI_exec.pkg, "any exit", "%s", "no exit", "%s");
+  } else {
+    triaxi_sprintargs2(TRIAXI_exec.pkg, expected, "%" PRIu32, "no exit", "%s");
+  }
+  triaxi_log_res(TRIAXI_AR_FAIL1);
+  return 1;
+}
 #if TRIAXI_GNU_COMPAT
 __attribute__((format(printf, 3, 4)))
 #endif
@@ -2995,8 +2988,10 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD_ARREQ, TRIAXI_AF_FORWARD_ARREQ_SS, TRIAXI_
 
 #pragma endregion assertion_dispatch
 
-#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU) // TRIAXI_REGION_RUNNER_ONLY
+#pragma endregion common
 
+#pragma region runner
+#if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 # pragma region runner_types
 
 typedef struct TRIAXI_Suite {
@@ -3227,12 +3222,13 @@ static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
 #  if defined(__linux__) && defined(__NR_memfd_create)
   if ((res = (int)syscall(__NR_memfd_create, base, 1)) >= 0) { return res; }
 #  endif // fallback
-  char      buf[4096 + 256], *s = buf;
-  Triax_Str tmp = {getenv("TMPDIR")};
-  if (!tmp.str || !*tmp.str) { tmp.str = getenv("TMP"); }
-  if (!tmp.str || !*tmp.str) { tmp.str = getenv("TEMP"); }
-  if (!tmp.str || !*tmp.str) { tmp.str = "/tmp"; }
-  if ((tmp.len = strlen(tmp.str)) >= sizeof(buf) - 100) { triaxi_fatal(); }
+  char        buf[4096 + 256], *s = buf;
+  const char* envtmp = getenv("TMPDIR");
+  if (!envtmp || !*envtmp) { envtmp = getenv("TMP"); }
+  if (!envtmp || !*envtmp) { envtmp = getenv("TEMP"); }
+  if (!envtmp || !*envtmp) { envtmp = "/tmp"; }
+  Triax_Str tmp = {envtmp, strlen(envtmp)};
+  if (tmp.len >= sizeof(buf) - 100) { triaxi_fatal(); }
   s = triaxi_catstr(s, tmp.str, tmp.len);
   if (tmp.str[tmp.len - 1] != '/') { *s++ = '/'; }
   tmp.str = base, tmp.len = strlen(base);
@@ -3494,10 +3490,17 @@ static inline void triaxi_register_suites(void) {
 
 # if TRIAXI_PLATFORM_POSIX
 
+static const struct {
+  int ign[3];
+  int term[3];
+  int crash[6];
+} TRIAXI_signal_lists = {
+    {SIGPIPE, SIGUSR1, SIGUSR2},
+    {SIGTERM, SIGINT, SIGHUP},
+    {SIGSEGV, SIGBUS, SIGILL, SIGABRT, SIGFPE, SIGTRAP},
+};
+
 static struct {
-  const int ign[3];
-  const int term[3];
-  const int crash[6];
   struct { struct sigaction ign, dfl, crash, term; } sas;
   struct {
     struct sigaction ign[3];
@@ -3506,9 +3509,7 @@ static struct {
     struct sigaction chld;
     stack_t          altstack;
   } old;
-} TRIAXI_signals = {{SIGPIPE, SIGUSR1, SIGUSR2},
-                    {SIGTERM, SIGINT, SIGHUP},
-                    {SIGSEGV, SIGBUS, SIGILL, SIGABRT, SIGFPE, SIGTRAP}};
+} TRIAXI_signals;
 
 #  define triaxi_sigaction(_sig, _act, _oldact)                                                    \
     (sigaction((_sig), (_act), (_oldact)) ? triaxi_fatal() : (void)0)
@@ -3683,20 +3684,22 @@ static inline void triaxi_process_control_init(size_t njobs) {
   // Preserve child exit statuses even if the caller ignores SIGCHLD or uses SA_NOCLDWAIT.
   triaxi_sigaction(SIGCHLD, &TRIAXI_signals.sas.dfl, &TRIAXI_signals.old.chld);
   static char altstack_mem[65536L]; // sized for ASAN/instrumented builds
-  stack_t     ss = {0};
+  stack_t     ss = {TRIAXI_ZINIT};
   ss.ss_sp = altstack_mem, ss.ss_size = sizeof(altstack_mem), ss.ss_flags = 0;
   if (sigaltstack(&ss, &TRIAXI_signals.old.altstack)) { triaxi_fatal(); }
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.term); ++i) {
-    triaxi_sigaction(TRIAXI_signals.term[i], &TRIAXI_signals.sas.term, &TRIAXI_signals.old.term[i]);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.term); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.term[i], &TRIAXI_signals.sas.term,
+                     &TRIAXI_signals.old.term[i]);
   }
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.ign); ++i) {
-    triaxi_sigaction(TRIAXI_signals.ign[i], &TRIAXI_signals.sas.ign, &TRIAXI_signals.old.ign[i]);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.ign); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.ign[i], &TRIAXI_signals.sas.ign,
+                     &TRIAXI_signals.old.ign[i]);
   }
 
   // Crash handlers aren't installed globally, but record what existed
   // before the run so non-isolated tests can restore them.
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.crash); ++i) {
-    triaxi_sigaction(TRIAXI_signals.crash[i], NULL, &TRIAXI_signals.old.crash[i]);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.crash[i], NULL, &TRIAXI_signals.old.crash[i]);
   }
 # elif TRIAXI_PLATFORM_WINDOWS
   if ((TRIAXI_global.old_sigabrt = signal(SIGABRT, triaxi_sighandler_abort)) == SIG_ERR) {
@@ -3711,14 +3714,14 @@ static inline void triaxi_process_control_init(size_t njobs) {
 static inline void triaxi_process_control_reset(void) {
 # if TRIAXI_PLATFORM_POSIX
   triaxi_sigaction(SIGCHLD, &TRIAXI_signals.old.chld, NULL);
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.term); ++i) {
-    triaxi_sigaction(TRIAXI_signals.term[i], &TRIAXI_signals.old.term[i], NULL);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.term); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.term[i], &TRIAXI_signals.old.term[i], NULL);
   }
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.ign); ++i) {
-    triaxi_sigaction(TRIAXI_signals.ign[i], &TRIAXI_signals.old.ign[i], NULL);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.ign); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.ign[i], &TRIAXI_signals.old.ign[i], NULL);
   }
-  for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.crash); ++i) {
-    triaxi_sigaction(TRIAXI_signals.crash[i], &TRIAXI_signals.old.crash[i], NULL);
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.crash[i], &TRIAXI_signals.old.crash[i], NULL);
   }
   stack_t ss = TRIAXI_signals.old.altstack;
   if (ss.ss_flags & SS_DISABLE) { // Darwin bug: zero size isn't ignored with SS_DISABLE
@@ -5250,8 +5253,8 @@ static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
 # if TRIAXI_PLATFORM_POSIX
 #  define triaxi_crash_handlers_impl(_h)                                                           \
     do {                                                                                           \
-      for (size_t i = 0; i < triaxi_countof(TRIAXI_signals.crash); ++i) {                          \
-        triaxi_sigaction(TRIAXI_signals.crash[i], &(_h), NULL);                                    \
+      for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {                     \
+        triaxi_sigaction(TRIAXI_signal_lists.crash[i], &(_h), NULL);                               \
       }                                                                                            \
     } while (0)
 #  define triaxi_win_try
@@ -6269,9 +6272,11 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
   return triax_run(triax_parse_argv(argc, argv, defaults));
 }
 # pragma endregion runner_cli
+#endif
 
-#endif // TRIAXI_REGION_RUNNER_ONLY
+#pragma endregion runner
 
+#pragma region cleanup
 #undef triaxi_catlit
 #undef triaxi_noreturn
 #undef triaxi_unreachable
@@ -6286,8 +6291,9 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 #else
 # pragma warning(pop)
 #endif
-
 // NOLINTEND(performance-enum-size)
+#pragma endregion cleanup
+
 #pragma endregion implementation
 #endif // TRIAXI_TEST_H
 
