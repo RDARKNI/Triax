@@ -1046,7 +1046,6 @@ typedef uint32_t Triax_Fault;
 // todo more targeted diagnostic suppression
 #if TRIAXI_GNU_COMPAT
 # pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 # pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif TRIAXI_MSVC_COMPAT
 # pragma warning(push)
