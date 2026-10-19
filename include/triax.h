@@ -3237,17 +3237,18 @@ static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
 #  if defined(__linux__) && defined(__NR_memfd_create)
   if ((res = (int)syscall(__NR_memfd_create, base, 1)) >= 0) { return res; }
 #  endif // fallback
-  char        buf[4096 + 256], *s = buf;
+  const Triax_Str basepref = {base, strlen(base)};
+  char            buf[4096 + 256], *s = buf;
+  if (basepref.len > sizeof(buf) - 8) { triaxi_fatal(); }
   const char* envtmp = getenv("TMPDIR");
   if (!envtmp || !*envtmp) { envtmp = getenv("TMP"); }
   if (!envtmp || !*envtmp) { envtmp = getenv("TEMP"); }
   if (!envtmp || !*envtmp) { envtmp = "/tmp"; }
-  Triax_Str tmp = {envtmp, strlen(envtmp)};
-  if (tmp.len >= sizeof(buf) - 100) { triaxi_fatal(); }
-  s = triaxi_catstr(s, tmp.str, tmp.len);
-  if (tmp.str[tmp.len - 1] != '/') { *s++ = '/'; }
-  tmp.str = base, tmp.len = strlen(base);
-  s = triaxi_catstr(s, tmp.str, tmp.len);
+  const Triax_Str envpref = {envtmp, strlen(envtmp)};
+  if (envpref.len > sizeof(buf) - 8 - basepref.len) { triaxi_fatal(); }
+  s = triaxi_catStr(s, envpref);
+  if (envpref.str[envpref.len - 1] != '/') { *s++ = '/'; }
+  s = triaxi_catStr(s, basepref);
   s = triaxi_catlit(s, "XXXXXX"), *s = '\0';
   if ((res = mkstemp(buf)) < 0) { triaxi_fatal(); }
   if (fcntl(res, F_SETFD, FD_CLOEXEC) == -1) { triaxi_fatal(); }
@@ -4278,7 +4279,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
     exp = pa.args[0], got = pa.args[1];
     op    = !neg ? " != " : " == ";
     post  = triaxi_catlit(post, " (tol: ");
-    post  = triaxi_catstr(post, pa.args[2].str, pa.args[2].len);
+    post  = triaxi_catStr(post, pa.args[2]);
     post  = triaxi_catlit(post, ") ");
     *post = '\0';
     break;
@@ -4288,7 +4289,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       exp  = triaxi_sprint_hex(obuf, pa.args[0]);
       got  = triaxi_sprint_hex(obuf + sizeof(obuf) / 2, pa.args[1]);
       pre  = triaxi_catlit(pre, " (byte ");
-      pre  = triaxi_catstr(pre, pa.mem_offset.str, pa.mem_offset.len);
+      pre  = triaxi_catStr(pre, pa.mem_offset);
       pre  = triaxi_catlit(pre, ") ");
       *pre = '\0';
       op   = " != ";
@@ -4301,7 +4302,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
     if (!neg) {
       exp  = triaxi_sprint_hex(obuf, pa.args[0]);
       pre  = triaxi_catlit(pre, " (byte ");
-      pre  = triaxi_catstr(pre, pa.mem_offset.str, pa.mem_offset.len);
+      pre  = triaxi_catStr(pre, pa.mem_offset);
       pre  = triaxi_catlit(pre, ") ");
       *pre = '\0';
       op   = " nonzero ";
@@ -4338,7 +4339,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       *pre = '\0';
     } else if (neg) {
       pre  = triaxi_catlit(pre, "[all ");
-      pre  = triaxi_catstr(pre, pa.index.str, pa.index.len);
+      pre  = triaxi_catStr(pre, pa.index);
       pre  = triaxi_catlit(pre, " elements equal]");
       *pre = '\0';
       q1 = q2 = "";
@@ -4346,7 +4347,7 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       exp = pa.args[0], got = pa.args[1];
       op   = " != ";
       pre  = triaxi_catlit(pre, "[index ");
-      pre  = triaxi_catstr(pre, pa.index.str, pa.index.len);
+      pre  = triaxi_catStr(pre, pa.index);
       pre  = triaxi_catlit(pre, "] ");
       *pre = '\0';
     }
@@ -4434,21 +4435,21 @@ static inline void triaxi_print_test_end_text(const TRIAXI_RunCtx*         run,
   default                    : triaxi_unreachable();
   case TRIAXI_OUTCOME_SKIP   : label = "> SKIP", color = run->out.ansi.yellow; break;
   case TRIAXI_OUTCOME_PASSED : label = "> PASS", color = run->out.ansi.green; break;
-  case TRIAXI_OUTCOME_FAIL   : label = "> FAIL", color = run->out.ansi.red; break;
-  case TRIAXI_OUTCOME_UCRASH : label = "> UCRASH", color = run->out.ansi.red; break;
-  case TRIAXI_OUTCOME_UEXIT  : label = "> UEXIT", color = run->out.ansi.red; break;
-  case TRIAXI_OUTCOME_UEXCEPT: label = "> UEXCEPTION", color = run->out.ansi.red; break;
-  case TRIAXI_OUTCOME_TIMEOUT: label = "> TIMEOUT", color = run->out.ansi.red; break;
+  case TRIAXI_OUTCOME_FAIL   : label = ">> FAIL", color = run->out.ansi.red; break;
+  case TRIAXI_OUTCOME_UCRASH : label = ">> UCRASH", color = run->out.ansi.red; break;
+  case TRIAXI_OUTCOME_UEXIT  : label = ">> UEXIT", color = run->out.ansi.red; break;
+  case TRIAXI_OUTCOME_UEXCEPT: label = ">> UEXCEPTION", color = run->out.ansi.red; break;
+  case TRIAXI_OUTCOME_TIMEOUT: label = ">> TIMEOUT", color = run->out.ansi.red; break;
   case TRIAXI_OUTCOME_ERROR:
     color = run->out.ansi.red;
     switch (r->state) {
     default                    : triaxi_unreachable();
-    case TRIAXI_STATE_SETUP    : label = "> TEST SETUP ERROR"; break;
-    case TRIAXI_STATE_INIT     : label = "> FIXTURE INIT ERROR"; break;
+    case TRIAXI_STATE_SETUP    : label = ">> TEST SETUP ERROR"; break;
+    case TRIAXI_STATE_INIT     : label = ">> FIXTURE INIT ERROR"; break;
     case TRIAXI_STATE_TEST     :
-    case TRIAXI_STATE_IN_ASSERT: label = "> TEST FUNCTION ERROR"; break;
-    case TRIAXI_STATE_FINI     : label = "> FIXTURE FINI ERROR"; break;
-    case TRIAXI_STATE_CLEANUP  : label = "> CLEANUP ERROR"; break;
+    case TRIAXI_STATE_IN_ASSERT: label = ">> TEST FUNCTION ERROR"; break;
+    case TRIAXI_STATE_FINI     : label = ">> FIXTURE FINI ERROR"; break;
+    case TRIAXI_STATE_CLEANUP  : label = ">> CLEANUP ERROR"; break;
     case TRIAXI_STATE_DONE     :
     case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
     }
