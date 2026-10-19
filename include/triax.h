@@ -934,6 +934,13 @@ typedef uint32_t Triax_Fault;
 #else
 # define TRIAXI_GNU_COMPAT 0L
 #endif
+// GCC-style diagnostic pragmas: GCC and every Clang, including clang-cl (which defines only
+// _MSC_VER and ignores MSVC's numeric warning pragmas).
+#if defined(__GNUC__) || defined(__clang__)
+# define TRIAXI_GNU_DIAG 1L
+#else
+# define TRIAXI_GNU_DIAG 0L
+#endif
 
 #ifndef __has_attribute
 # define TRIAXI_HAS_ATTRIBUTE(x) 0
@@ -969,7 +976,7 @@ typedef uint32_t Triax_Fault;
 # error "Triax: unsupported section-placement syntax"
 #endif
 
-#if TRIAXI_GNU_COMPAT
+#if TRIAXI_GNU_DIAG
 # define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 # define TRIAXI_IGNWARN_GNU_BEG(warn)                                                              \
    TRIAXI_DO_PRAGMA(GCC diagnostic push)                                                           \
@@ -1051,8 +1058,7 @@ typedef uint32_t Triax_Fault;
 #pragma endregion dependencies
 
 #pragma region common_utilities
-// todo more targeted diagnostic suppression
-#if TRIAXI_GNU_COMPAT
+#if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #elif TRIAXI_MSVC_COMPAT
@@ -1351,10 +1357,10 @@ typedef struct TRIAXI_TestConfig {
 } TRIAXI_TestConfig;
 static_assert(offsetof(TRIAXI_TestConfig, params) == sizeof(Triax_Attributes), "layout drift");
 
-#if TRIAXI_GNU_COMPAT
+#if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wpedantic" // Anonymous inner struct
-#else
+#elif TRIAXI_MSVC_COMPAT
 # pragma warning(push)
 # pragma warning(disable : 4201) // Anonymous inner struct
 #endif
@@ -1383,9 +1389,9 @@ typedef struct TRIAXI_Test {
 #endif
 } TRIAXI_Test;
 
-#if TRIAXI_GNU_COMPAT
+#if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop
-#else
+#elif TRIAXI_MSVC_COMPAT
 # pragma warning(pop)
 #endif
 
@@ -1600,18 +1606,14 @@ TRIAXI_EXTERN_C_END
        }                                                                                           \
        longjmp(TRIAXI_exec.jmp, (int)outcome);                                                     \
      }                                                                                             \
-     TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                        \
      TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                            \
                       TRIAXI_Test(#suitename, #name, __FILE__, triaxfwrapped_##suitename##_##name, \
                                   TRIAXI_Test_attrs_init(__VA_ARGS__)));                           \
-     TRIAXI_IGNWARN_GNU_END                                                                        \
    }                                                                                               \
    static void triaxf_##suitename##_##name(void)
 # define triaxi_suite(name, ...)                                                                   \
    extern "C" {                                                                                    \
-     TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                        \
      TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});      \
-     TRIAXI_IGNWARN_GNU_END                                                                        \
    }                                                                                               \
    typedef char triaxi_dummy
 
@@ -1642,14 +1644,6 @@ typedef enum TRIAXI_AssertType {
   TRIAXI_ASSERTTYPE_ITEMS(TRIAXI_COMMA_ONE, TRIAXI_AT_)
 } TRIAXI_AssertType;
 enum { TRIAXI_AT_COUNT = TRIAXI_COUNT_ALL(TRIAXI_ASSERTTYPE_ITEMS) };
-
-#if TRIAXI_GNU_COMPAT
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wpedantic"
-#else
-# pragma warning(push)
-# pragma warning(disable : 4200)
-#endif
 
 typedef uint8_t TRIAXI_PacketPrefix;
 enum { TRIAXI_RES_PREFIX = 0 };
@@ -1693,6 +1687,13 @@ typedef enum TRIAXI_AR {
   TRIAXI_AR_UEXCEPT
 } TRIAXI_AR;
 
+#if TRIAXI_GNU_DIAG
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wpedantic" // Flexible array member
+#elif TRIAXI_MSVC_COMPAT
+# pragma warning(push)
+# pragma warning(disable : 4200) // Flexible array member
+#endif
 typedef struct TRIAXI_AssertRes {
   TRIAXI_PacketPrefix is_hdr; // must be zero
   uint8_t             val;
@@ -1701,6 +1702,11 @@ typedef struct TRIAXI_AssertRes {
   uint32_t            len;
   char                args[];
 } TRIAXI_AssertRes;
+#if TRIAXI_GNU_DIAG
+# pragma GCC diagnostic pop
+#elif TRIAXI_MSVC_COMPAT
+# pragma warning(pop)
+#endif
 
 /// @brief State of the Test
 typedef enum TRIAXI_State {
@@ -1783,13 +1789,17 @@ typedef struct TRIAXI_Shared {
 #pragma region exec_state
 TRIAXI_EXTERN_C_BEG
 TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
-#if !TRIAXI_GNU_COMPAT
-// todo positive test?
+#if TRIAXI_GNU_DIAG
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wpedantic" // Anonymous struct; flexible-array struct in union
+#elif TRIAXI_MSVC_COMPAT
 # pragma warning(push)
 // C4324: jmp_buf requires platform alignment, which may pad TRIAXI_ExecState.
 # pragma warning(disable : 4324)
 // C4201: the anonymous struct aligns storage with the result payload.
 # pragma warning(disable : 4201)
+// C4200: the union embeds the flexible-array TRIAXI_AssertRes.
+# pragma warning(disable : 4200)
 #endif
 TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
@@ -1811,10 +1821,9 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
 } TRIAXI_exec;
 
 TRIAXI_EXTERN_C_END
-#if TRIAXI_GNU_COMPAT
+#if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop
-#else
-# pragma warning(pop)
+#elif TRIAXI_MSVC_COMPAT
 # pragma warning(pop)
 #endif
 
@@ -2551,7 +2560,9 @@ static inline bool triaxi_AF_arreq_Ss(bool v, size_t index, Triax_Str e1, const 
     }                                                                                              \
     if (TRIAXI_i == TRIAXI_count) {                                                                \
       TRIAXI_IGNWARN_GNU_BEG("-Wdeprecated-declarations")                                          \
+      TRIAXI_IGNWARN_MSVC_BEG(4996)                                                                \
       (void)triaxi_log_RES1(TRIAXI_AR_FAIL1, TRIAXI_count, "%zu");                                 \
+      TRIAXI_IGNWARN_MSVC_END                                                                      \
       TRIAXI_IGNWARN_GNU_END                                                                       \
       if (ae) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                         \
     }                                                                                              \
@@ -5330,13 +5341,13 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 # else
   volatile int fault = 0;
 # endif
-# if !TRIAXI_GNU_COMPAT
+# if TRIAXI_MSVC
 #  pragma warning(push)
 // C4611: longjmp can skip C++ destructors; this function has only trivial locals.
 #  pragma warning(disable : 4611)
 # endif
   switch (setjmp(TRIAXI_exec.jmp)) {
-# if !TRIAXI_GNU_COMPAT
+# if TRIAXI_MSVC
 #  pragma warning(pop)
 # endif
   default: triaxi_unreachable();
@@ -6290,9 +6301,9 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 #undef triaxi_lenof
 #undef TRIAXI_COMMA_ONE
 
-#ifdef __GNUC__
+#if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop
-#else
+#elif TRIAXI_MSVC_COMPAT
 # pragma warning(pop)
 #endif
 // NOLINTEND(performance-enum-size)
