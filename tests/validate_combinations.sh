@@ -139,7 +139,9 @@ pass4 passed"
 # One short-timeout/long-sleep test alongside three measurably-slow-but-
 # passing ones, all under --jobs=4 (one batch). If the timeout ever blocked
 # its slot instead of being reaped concurrently, wall time would grow with
-# the sum (300 + 3*200 = 900ms) instead of staying near the max (~300ms).
+# the sum (4*600 = 2400ms) instead of staying near the max (~600ms). The
+# 1500ms bound leaves ~900ms for process startup/teardown overhead, which on
+# a cold Windows runner alone pushed a 300ms concurrent run past 600ms.
 start_ms=$(($(date +%s%N) / 1000000))
 "$COMBO" --no-color --jobs=4 --json="$(native_path "$WORKDIR/timeoutjobs.json")" combo_timeoutjobs \
   >/dev/null 2>&1 || true
@@ -151,10 +153,10 @@ check_map "timeout x jobs: outcomes correct" \
 fast1 passed
 fast2 passed
 fast3 passed"
-if [ "$elapsed" -lt 600 ]; then
-  ok "timeout x jobs: total time (${elapsed}ms) shows concurrent execution, not serialized (<600ms)"
+if [ "$elapsed" -lt 1500 ]; then
+  ok "timeout x jobs: total time (${elapsed}ms) shows concurrent execution, not serialized (<1500ms)"
 else
-  fail "timeout x jobs" "took ${elapsed}ms, expected well under 600ms if slots run concurrently"
+  fail "timeout x jobs" "took ${elapsed}ms, expected well under 1500ms if slots run concurrently"
 fi
 
 # ── parameters x jobs ────────────────────────────────────────────────────────

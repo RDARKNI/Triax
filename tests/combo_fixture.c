@@ -32,12 +32,12 @@ triax_test(combo_isojobs, pass4, 0) { triax_assert_true(1); }
 // blocked its job slot instead of being reaped concurrently with the rest,
 // total wall time would grow with N instead of staying near the timeout. ───
 triax_suite(combo_timeoutjobs, .isolation = TRIAX_ISOLATION_ON);
-triax_test(combo_timeoutjobs, slow_timeout, .timeout_ms = 300) {
+triax_test(combo_timeoutjobs, slow_timeout, .timeout_ms = 600) {
   triaxi_test_sleep_ms(100000);
 }
-triax_test(combo_timeoutjobs, fast1, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
-triax_test(combo_timeoutjobs, fast2, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
-triax_test(combo_timeoutjobs, fast3, 0) { triaxi_test_sleep_ms(200); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, fast1, 0) { triaxi_test_sleep_ms(600); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, fast2, 0) { triaxi_test_sleep_ms(600); triax_assert_true(1); }
+triax_test(combo_timeoutjobs, fast3, 0) { triaxi_test_sleep_ms(600); triax_assert_true(1); }
 
 // ── parameters x jobs: one parameterized test, several elements, run under
 // --jobs=N so invocations execute concurrently across slots — verifies each
