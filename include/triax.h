@@ -1769,11 +1769,6 @@ typedef struct TRIAXI_WinLaunch {
 } TRIAXI_WinLaunch;
 #endif
 
-#if TRIAXI_MSVC_COMPAT
-# pragma warning(push)
-# pragma warning(disable : 5274)
-#endif
-
 typedef struct TRIAXI_Shared {
   triaxi_alignas(64) TRIAXI_State state;
   uint32_t    duration_ms;
@@ -1782,10 +1777,6 @@ typedef struct TRIAXI_Shared {
   TRIAXI_WinLaunch launch;
 #endif
 } TRIAXI_Shared;
-
-#if TRIAXI_MSVC_COMPAT
-# pragma warning(pop)
-#endif
 
 #pragma endregion assert_protocol
 
