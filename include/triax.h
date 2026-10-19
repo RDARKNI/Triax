@@ -969,8 +969,8 @@ typedef uint32_t Triax_Fault;
 # error "Triax: unsupported section-placement syntax"
 #endif
 
-#define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 #if TRIAXI_GNU_COMPAT
+# define TRIAXI_DO_PRAGMA(a) _Pragma(#a)
 # define TRIAXI_IGNWARN_GNU_BEG(warn)                                                              \
    TRIAXI_DO_PRAGMA(GCC diagnostic push)                                                           \
    TRIAXI_DO_PRAGMA(GCC diagnostic ignored warn)
@@ -978,6 +978,14 @@ typedef uint32_t Triax_Fault;
 #else
 # define TRIAXI_IGNWARN_GNU_BEG(warn)
 # define TRIAXI_IGNWARN_GNU_END
+#endif
+
+#if TRIAXI_MSVC
+# define TRIAXI_IGNWARN_MSVC_BEG(warn) __pragma(warning(push)) __pragma(warning(disable : warn))
+# define TRIAXI_IGNWARN_MSVC_END       __pragma(warning(pop))
+#else
+# define TRIAXI_IGNWARN_MSVC_BEG(warn)
+# define TRIAXI_IGNWARN_MSVC_END
 #endif
 
 #pragma endregion compiler_and_target
@@ -1180,11 +1188,11 @@ static inline Triax_Str triaxi_tostr(const char* cstr) {
 # define TRIAXI_STR(str) Triax_Str(str)
 #endif
 
-static inline void triaxi_flush_all(void) {
-  fflush(NULL);
-#if TRIAXI_CPP
-  std::cout.flush(), std::cerr.flush();
-#endif
+static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
+  if (!e1.str || !e2.str) { return (!e1.str && !e2.str) ? 0 : !e1.str ? -1 : 1; }
+  size_t min = TRIAXI_MIN(e1.len, e2.len);
+  int    cr  = min ? memcmp(e1.str, e2.str, min) : 0;
+  return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
 }
 
 static inline int64_t triaxi_now_ms(void) {
@@ -1205,6 +1213,13 @@ static inline int64_t triaxi_now_ms(void) {
 #endif
 }
 static inline uint32_t triaxi_elapsed_ms(int64_t t0) { return (uint32_t)(triaxi_now_ms() - t0); }
+
+static inline void     triaxi_flush_all(void) {
+  fflush(NULL);
+#if TRIAXI_CPP
+  std::cout.flush(), std::cerr.flush();
+#endif
+}
 
 #if TRIAXI_PLATFORM_POSIX
 typedef int TRIAXI_File;
@@ -1633,7 +1648,6 @@ enum { TRIAXI_AT_COUNT = TRIAXI_COUNT_ALL(TRIAXI_ASSERTTYPE_ITEMS) };
 # pragma GCC diagnostic ignored "-Wpedantic"
 #else
 # pragma warning(push)
-# pragma warning(disable : 5274)
 # pragma warning(disable : 4200)
 #endif
 
@@ -1755,6 +1769,11 @@ typedef struct TRIAXI_WinLaunch {
 } TRIAXI_WinLaunch;
 #endif
 
+#if TRIAXI_MSVC_COMPAT
+# pragma warning(push)
+# pragma warning(disable : 5274)
+#endif
+
 typedef struct TRIAXI_Shared {
   triaxi_alignas(64) TRIAXI_State state;
   uint32_t    duration_ms;
@@ -1763,6 +1782,10 @@ typedef struct TRIAXI_Shared {
   TRIAXI_WinLaunch launch;
 #endif
 } TRIAXI_Shared;
+
+#if TRIAXI_MSVC_COMPAT
+# pragma warning(pop)
+#endif
 
 #pragma endregion assert_protocol
 
@@ -2005,7 +2028,7 @@ static inline void triaxi_log_res(TRIAXI_AR val) {
 #pragma endregion log_protocol
 
 #pragma region assertion_dispatch
-/// @brief Reason we jumped out of the test function?
+/// @brief Reason we jumped out of the test function
 typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_RETURNED,
   TRIAXI_EXEC_ASSERTED,
@@ -2155,7 +2178,6 @@ static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
 #else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
-
   triaxi_log_resolved();
   return true;
 }
@@ -2163,13 +2185,6 @@ static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
 #define TRIAXI_eq(v, e1, e2) ((uint8_t)((v) == ((e1) == (e2))))
 #define TRIAXI_gt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) <= (e2)) + ((e1) < (e2))) : !((e1) <= (e2))))
 #define TRIAXI_lt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) >= (e2)) + ((e1) > (e2))) : !((e1) >= (e2))))
-
-static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
-  if (!e1.str || !e2.str) { return (!e1.str && !e2.str) ? 0 : !e1.str ? -1 : 1; }
-  size_t min = TRIAXI_MIN(e1.len, e2.len);
-  int    cr  = min ? memcmp(e1.str, e2.str, min) : 0;
-  return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
-}
 
 #define triaxi_assert_fault(v, ae, fault, lit, ...)                                                \
   do {                                                                                             \
@@ -3149,7 +3164,6 @@ static const TRIAXI_Settings TRIAXI_default_settings = {
 # pragma endregion runner_types
 
 # pragma region runner_utilities
-
 # if TRIAXI_PLATFORM_POSIX
 #  define triaxi_dup       dup
 #  define triaxi_dup2      dup2
