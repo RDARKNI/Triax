@@ -14,7 +14,7 @@
 
 #ifndef TRIAXI_TEST_H
 #define TRIAXI_TEST_H
-
+#pragma region header_prelude
 #if defined(__linux__) && !defined(_DEFAULT_SOURCE) && !defined(_GNU_SOURCE)
 # define _DEFAULT_SOURCE
 #endif
@@ -59,7 +59,9 @@
 # include <stdbool.h>
 #endif
 // NOLINTBEGIN(performance-enum-size)
+#pragma endregion header_prelude
 
+#pragma region public_api
 // ── Common API ──────────────────────────────────────────────────────────────
 /// @defgroup triax_test_commons Common Test API
 /// Shared configuration and fixtures for tests, suites, and runs.
@@ -894,15 +896,16 @@ typedef uint32_t Triax_Fault;
 #define triax_expect_nexit(...) triaxi_assert_exit(1, 0, 0, #__VA_ARGS__ " ", __VA_ARGS__)
 /// @}
 /// @} // triax_test_module
+#pragma endregion public_api
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////// Implementation//////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma region implementation
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////Implementation///////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
 #pragma region common
 
 #pragma region compiler_and_target
@@ -1080,8 +1083,10 @@ typedef uint32_t Triax_Fault;
 
 #define TRIAXI_STRINGIFY_(x)    #x
 #define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
+
 #define TRIAXI_CONCAT_(a, b)    a##b
 #define TRIAXI_CONCAT(a, b)     TRIAXI_CONCAT_(a, b)
+
 #define TRIAXI_COMMA_ONE(x)     x,
 
 // NOLINTNEXTLINE(bugprone-macro-parentheses)
@@ -1201,7 +1206,7 @@ static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
   return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
 }
 
-static inline int64_t triaxi_now_ms(void) {
+static inline int64_t triaxi_now_ms(void) { // dif1
 #if TRIAXI_PLATFORM_POSIX
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts)) { triaxi_fatal(); }
@@ -1228,7 +1233,7 @@ static inline void     triaxi_flush_all(void) {
 }
 
 #if TRIAXI_PLATFORM_POSIX
-typedef int TRIAXI_File;
+typedef int TRIAXI_File; // dif0
 # define triaxi_file_close(f) (close(f) ? triaxi_fatal() : (void)0)
 # define triaxi_file_valid(f) ((f) >= 0)
 #elif TRIAXI_PLATFORM_WINDOWS
@@ -1577,7 +1582,7 @@ TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
 TRIAXI_EXTERN_C_END
 #endif
 
-#if !TRIAXI_CPP
+#if TRIAXI_C
 # define triaxi_test(suitename, name, ...)                                                         \
    static void triaxf_##suitename##_##name(void);                                                  \
    TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                          \
@@ -1592,7 +1597,7 @@ TRIAXI_EXTERN_C_END
    TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});        \
    TRIAXI_IGNWARN_GNU_END typedef char triaxi_dummy
 
-#else
+#elif TRIAXI_CPP
 # define triaxi_test(suitename, name, ...)                                                         \
    static void triaxf_##suitename##_##name(void);                                                  \
    extern "C" {                                                                                    \
@@ -1694,6 +1699,7 @@ typedef enum TRIAXI_AR {
 # pragma warning(push)
 # pragma warning(disable : 4200) // Flexible array member
 #endif
+
 typedef struct TRIAXI_AssertRes {
   TRIAXI_PacketPrefix is_hdr; // must be zero
   uint8_t             val;
@@ -1702,6 +1708,7 @@ typedef struct TRIAXI_AssertRes {
   uint32_t            len;
   char                args[];
 } TRIAXI_AssertRes;
+
 #if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop
 #elif TRIAXI_MSVC_COMPAT
@@ -1881,7 +1888,8 @@ static inline Triax_Str triaxi_file_read(TRIAXI_File f) {
   size_t len = triaxi_file_size(f);
   if (!len) { return TRIAXI_STRLIT(""); }
   char* str = (char*)triaxi_allocate(len);
-  return triaxi_file_read_into(f, str, len), TRIAXI_T(Triax_Str){str, len};
+  triaxi_file_read_into(f, str, len);
+  return TRIAXI_T(Triax_Str){str, len};
 }
 
 // Sequential reads for user files, whose reported size need not describe their contents.
@@ -1889,11 +1897,11 @@ static inline size_t triaxi_file_read_some(TRIAXI_File f, char* dst, size_t len)
 #if TRIAXI_PLATFORM_POSIX
   ssize_t n;
   do { n = read(f, dst, TRIAXI_MIN(len, SIZE_MAX >> 1u)); } while (n < 0 && errno == EINTR);
-  if (n < 0) { triaxi_fatal(); }
+  if (n < 0) { triaxi_file_close(f), triaxi_fatal(); }
   return (size_t)n;
 #elif TRIAXI_PLATFORM_WINDOWS
   DWORD n, chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
-  if (!ReadFile(f, dst, chunk, &n, NULL)) { triaxi_fatal(); }
+  if (!ReadFile(f, dst, chunk, &n, NULL)) { triaxi_file_close(f), triaxi_fatal(); }
   return (size_t)n;
 #else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
@@ -1909,11 +1917,11 @@ static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
       // Probe before growing: empty files allocate nothing; exactly sized files need no realloc.
       char byte;
       if (!triaxi_file_read_some(f, &byte, 1)) { break; }
-      if (cap > SIZE_MAX / 2) { triaxi_fatal(); }
+      if (cap > SIZE_MAX / 2) { triaxi_file_close(f), triaxi_fatal(); }
       cap = cap ? cap * 2 : 4096;
       if (str) {
         char* grown = (char*)realloc(str, cap);
-        if (!grown) { triaxi_fatal(); }
+        if (!grown) { triaxi_file_close(f), triaxi_fatal(); }
         TRIAXI_exec.allocations.ptrs[allocation] = str = grown;
       } else {
         str = (char*)triaxi_allocate(cap);
@@ -1925,6 +1933,7 @@ static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
     if (!n) { break; }
     len += n;
   }
+  triaxi_file_close(f);
   return len ? TRIAXI_T(Triax_Str){str, len} : TRIAXI_STRLIT("");
 }
 
@@ -1939,7 +1948,6 @@ static inline Triax_Str triax_read_file(const char* path) {
   TRIAXI_File f = triaxi_file_open_r(path);
   if (!triaxi_file_valid(f)) { triaxi_user_syserror(TRIAXI_ERROR_FILE_OPEN); }
   Triax_Str res = triaxi_file_read_all(f);
-  triaxi_file_close(f);
   return res;
 }
 
@@ -2705,23 +2713,25 @@ struct TRIAXI_StaticExtentImpl<std::array<T, N>> : std::integral_constant<size_t
 template <typename T>
 struct TRIAXI_StaticExtent : TRIAXI_StaticExtentImpl<typename TRIAXI_RemoveCvRef<T>::type> {};
 
+template <bool B, typename T = int>
+using TRIAXI_EnableIf = typename std::enable_if<B, T>::type;
+
 template <typename T>
-static constexpr typename std::enable_if<TRIAXI_StaticExtent<T>::value != SIZE_MAX, size_t>::type
+static constexpr TRIAXI_EnableIf<TRIAXI_StaticExtent<T>::value != SIZE_MAX, size_t>
     triaxi_cpp_size(const T&) noexcept {
   return TRIAXI_StaticExtent<T>::value;
 }
 
 template <typename T>
-static inline typename std::enable_if<TRIAXI_StaticExtent<T>::value == SIZE_MAX, size_t>::type
+static inline TRIAXI_EnableIf<TRIAXI_StaticExtent<T>::value == SIZE_MAX, size_t>
     triaxi_cpp_size(const T& c) {
   return c.size();
 }
 
 template <typename A, typename B> // At least one runtime-sized operand.
-static inline
-    typename std::enable_if<TRIAXI_StaticExtent<A>::value == SIZE_MAX
-                                || TRIAXI_StaticExtent<B>::value == SIZE_MAX,
-                            size_t>::type triaxi_cpp_size_check(bool neq, const A& a, const B& b) {
+static inline TRIAXI_EnableIf<
+    TRIAXI_StaticExtent<A>::value == SIZE_MAX || TRIAXI_StaticExtent<B>::value == SIZE_MAX, size_t>
+    triaxi_cpp_size_check(bool neq, const A& a, const B& b) {
   const size_t s1 = triaxi_cpp_size(a), s2 = triaxi_cpp_size(b);
   if (s1 == s2) { return s1; } // Different lengths already establish inequality.
   if (!neq) { (void)triaxi_log_RES2(TRIAXI_AR_FAIL2, s1, "%zu", s2, "%zu"); }
@@ -2731,9 +2741,8 @@ static inline
 // Both operands have statically-known extents. A size mismatch is considered programmer misuse for
 // both eq and neq.
 template <typename A, typename B>
-static inline typename std::enable_if<TRIAXI_StaticExtent<A>::value != SIZE_MAX
-                                          && TRIAXI_StaticExtent<B>::value != SIZE_MAX,
-                                      size_t>::type
+static inline TRIAXI_EnableIf<
+    TRIAXI_StaticExtent<A>::value != SIZE_MAX && TRIAXI_StaticExtent<B>::value != SIZE_MAX, size_t>
     triaxi_cpp_size_check(bool, const A&, const B&) {
   static_assert(TRIAXI_StaticExtent<A>::value == TRIAXI_StaticExtent<B>::value,
                 "Arrays must have the same size");
@@ -2899,44 +2908,42 @@ struct TRIAXI_IsHandled
     : std::integral_constant<bool, std::is_arithmetic<T>::value
                                        || std::is_pointer<typename std::decay<T>::type>::value
                                        || TRIAXI_IsStr<T>::value> {};
-# define TRIAXI_FOR_i                                                                              \
-   typename std::enable_if<(std::is_integral<T>::value && std::is_signed<T>::value                 \
-                            && std::is_integral<U>::value && std::is_signed<U>::value),            \
-                           int>::type = 0
-# define TRIAXI_FOR_u                                                                              \
-   typename std::enable_if<(std::is_unsigned<T>::value && std::is_unsigned<U>::value), int>::type  \
-       = 0
-# define TRIAXI_FOR_iu                                                                             \
-   typename std::enable_if<(std::is_integral<T>::value && std::is_signed<T>::value                 \
-                            && std::is_unsigned<U>::value),                                        \
-                           int>::type = 0
-# define TRIAXI_FOR_ui                                                                             \
-   typename std::enable_if<(std::is_unsigned<T>::value && std::is_integral<U>::value               \
-                            && std::is_signed<U>::value),                                          \
-                           int>::type = 0
-# define TRIAXI_FOR_ld                                                                             \
-   typename std::enable_if<(std::is_floating_point<T>::value && std::is_floating_point<U>::value), \
-                           int>::type = 0
-# define TRIAXI_FOR_vp                                                                             \
-   typename std::enable_if<(std::is_pointer<T>::value && std::is_pointer<U>::value                 \
-                            && !(TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value)),               \
-                           int>::type = 0
-# define TRIAXI_FOR_SS                                                                             \
-   typename std::enable_if<TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value, int>::type = 0
-# define TRIAXI_FOR_unhandled                                                                      \
-   typename std::enable_if<!(TRIAXI_IsHandled<T>::value && TRIAXI_IsHandled<U>::value), int>::type \
-       = 0
+# define TRIAXI_FOR_i(T, U)                                                                        \
+   TRIAXI_EnableIf<(std::is_integral<T>::value && std::is_signed<T>::value                         \
+                    && std::is_integral<U>::value && std::is_signed<U>::value),                    \
+                   int> = 0
+# define TRIAXI_FOR_u(T, U)                                                                        \
+   TRIAXI_EnableIf<(std::is_unsigned<T>::value && std::is_unsigned<U>::value), int> = 0
+# define TRIAXI_FOR_iu(T, U)                                                                       \
+   TRIAXI_EnableIf<(std::is_integral<T>::value && std::is_signed<T>::value                         \
+                    && std::is_unsigned<U>::value),                                                \
+                   int> = 0
+# define TRIAXI_FOR_ui(T, U)                                                                       \
+   TRIAXI_EnableIf<(std::is_unsigned<T>::value && std::is_integral<U>::value                       \
+                    && std::is_signed<U>::value),                                                  \
+                   int> = 0
+# define TRIAXI_FOR_ld(T, U)                                                                       \
+   TRIAXI_EnableIf<(std::is_floating_point<T>::value && std::is_floating_point<U>::value), int> = 0
+# define TRIAXI_FOR_vp(T, U)                                                                       \
+   TRIAXI_EnableIf<(std::is_pointer<T>::value && std::is_pointer<U>::value                         \
+                    && !(TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value)),                       \
+                   int> = 0
+# define TRIAXI_FOR_SS(T, U)                                                                       \
+   TRIAXI_EnableIf<TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value, int> = 0
+# define TRIAXI_FOR_unhandled(T, U)                                                                \
+   TRIAXI_EnableIf<!(TRIAXI_IsHandled<T>::value && TRIAXI_IsHandled<U>::value), int> = 0
 
 # define TRIAXI_AF_FORWARD(OP, SUF)                                                                \
-   template <class T, class U, TRIAXI_FOR_##SUF>                                                   \
+   template <class T, class U, TRIAXI_FOR_##SUF(T, U)>                                             \
    static inline bool triaxi_AF_##OP(bool v, T e1, U e2) {                                         \
      return triaxi_AF_##OP##_##SUF(v, e1, e2);                                                     \
    }
 # define TRIAXI_AF_FORWARD_SS(OP)                                                                  \
-   template <class T, class U, TRIAXI_FOR_SS>                                                      \
+   template <class T, class U, TRIAXI_FOR_SS(T, U)>                                                \
    static inline bool triaxi_AF_##OP(bool v, const T& e1, const U& e2) {                           \
      return triaxi_AF_##OP##_SS(v, Triax_Str(e1), Triax_Str(e2));                                  \
    }
+
 // Compile-time selection instantiates only the requested custom operator. Built-in overloads
 // still take bool and retain their existing predicates and richer diagnostics.
 # define TRIAXI_CUSTOM_COMPARE(OP, V, expr)                                                        \
@@ -2953,7 +2960,7 @@ TRIAXI_CUSTOM_COMPARE(lt, false, !(a < b))
 TRIAXI_CUSTOM_COMPARE(lt, true, !(a >= b))
 # undef TRIAXI_CUSTOM_COMPARE
 # define TRIAXI_AF_FORWARD_XX(OP)                                                                  \
-   template <bool V, class T, class U, TRIAXI_FOR_unhandled>                                       \
+   template <bool V, class T, class U, TRIAXI_FOR_unhandled(T, U)>                                 \
    static inline bool triaxi_AF_##OP(std::integral_constant<bool, V> v, const T& e1,               \
                                      const U& e2) {                                                \
      uint8_t val = triaxi_compare_##OP##_XX(v, e1, e2);                                            \
@@ -2970,19 +2977,19 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD, TRIAXI_AF_FORWARD_SS, TRIAXI_AF_FORWARD_X
 TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD, TRIAXI_AF_FORWARD_SS, TRIAXI_AF_FORWARD_XX, lt)
 
 # define TRIAXI_AF_FORWARD_ARREQ(OP, SUF)                                                          \
-   template <class T, class U, TRIAXI_FOR_##SUF>                                                   \
+   template <class T, class U, TRIAXI_FOR_##SUF(T, U)>                                             \
    static inline bool triaxi_AF_##OP(bool v, size_t index, T e1, U e2) {                           \
      return triaxi_AF_##OP##_##SUF(v, index, e1, e2);                                              \
    }
 
 # define TRIAXI_AF_FORWARD_ARREQ_SS(OP)                                                            \
-   template <class T, class U, TRIAXI_FOR_SS>                                                      \
+   template <class T, class U, TRIAXI_FOR_SS(T, U)>                                                \
    static inline bool triaxi_AF_##OP(bool v, size_t index, const T& e1, const U& e2) {             \
      return triaxi_AF_##OP##_SS(v, index, Triax_Str(e1), Triax_Str(e2));                           \
    }
 
 # define TRIAXI_AF_FORWARD_ARREQ_XX(OP)                                                            \
-   template <class T, class U, TRIAXI_FOR_unhandled>                                               \
+   template <class T, class U, TRIAXI_FOR_unhandled(T, U)>                                         \
    static inline bool triaxi_AF_##OP(bool v, size_t index, const T& e1, const U& e2) {             \
      bool r = !(e1 == e2);                                                                         \
      if (!v && r) {                                                                                \
@@ -3009,7 +3016,6 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD_ARREQ, TRIAXI_AF_FORWARD_ARREQ_SS, TRIAXI_
 #pragma region runner
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 # pragma region runner_types
-
 typedef struct TRIAXI_Suite {
   const char*         name;
   Triax_Attributes    attrs;
@@ -3198,7 +3204,7 @@ static inline uintmax_t triaxi_parse_u(const char* s) {
 static inline void triaxi_mkdirp(const char* path) {
   char   buf[4096];
   size_t n = strlen(path);
-  if (n >= sizeof(buf)) { return; }
+  if (!n || n >= sizeof(buf)) { return; }
   memcpy(buf, path, n + 1);
   for (char* p = buf + 1; *p; ++p) {
 # if TRIAXI_PLATFORM_POSIX
@@ -3289,7 +3295,8 @@ static inline Triax_Str triaxi_file_read_buf(TRIAXI_File f, TRIAXI_DynBuf* buf) 
   if (len > buf->cap) {
     if (!(buf->str = (char*)realloc(buf->str, buf->cap = len))) { triaxi_fatal(); }
   }
-  return triaxi_file_read_into(f, buf->str, len), TRIAXI_T(Triax_Str){buf->str, len};
+  triaxi_file_read_into(f, buf->str, len);
+  return TRIAXI_T(Triax_Str){buf->str, len};
 }
 
 static inline void triaxi_file_clear_stream(FILE* file) {
@@ -3390,7 +3397,6 @@ static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
 # pragma endregion runner_utilities
 
 # pragma region runner_registration
-
 static inline void triaxi_sections_init(void) {
 # if TRIAXI_FORMAT_COFF
 #  if TRIAXI_CPP
@@ -3503,9 +3509,7 @@ static inline void triaxi_register_suites(void) {
 # pragma endregion runner_registration
 
 # pragma region runner_process_control
-
 # if TRIAXI_PLATFORM_POSIX
-
 static const struct {
   int ign[3];
   int term[3];
@@ -3547,7 +3551,6 @@ static inline void triaxi_sighandler_termination(int sig) {
   // only problem with this: children forked during non-isolated test runs remain
 }
 static volatile sig_atomic_t TRIAXI_crash_signal;
-
 static inline void           triaxi_sighandler_crash(int sig) {
   TRIAXI_crash_signal = sig;
   longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED); // sig must be in TRIAXI_signals_crashes
@@ -3840,10 +3843,304 @@ triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
 # endif
 }
 TRIAXI_EXTERN_C_END
+
+# if TRIAXI_PLATFORM_WINDOWS && !TRIAXI_MSVC_COMPAT
+static PVOID                 TRIAXI_veh_handle;
+// MinGW uses VEH to recover native exceptions via longjmp.
+static volatile sig_atomic_t TRIAXI_crash_signal;
+
+static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
+  if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
+  DWORD code = ep->ExceptionRecord->ExceptionCode;
+  // First-chance C++ exceptions must reach language catch handlers.
+  if (code == 0xE06D7363UL || (code & 0xFCFFFFFFUL) == 0x20474343UL) {
+    return EXCEPTION_CONTINUE_SEARCH;
+  }
+  TRIAXI_crash_signal = (sig_atomic_t)code;
+  longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED);
+}
+# endif
+
+static inline void triaxi_crash_handlers_setup(void) {
+# if TRIAXI_PLATFORM_POSIX
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.crash[i], &TRIAXI_signals.sas.crash, NULL);
+  }
+# elif TRIAXI_PLATFORM_WINDOWS && !TRIAXI_MSVC_COMPAT
+  TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);
+  if (!TRIAXI_veh_handle) { triaxi_fatal(); }
+# endif
+}
+
+static inline void triaxi_crash_handlers_teardown(void) {
+# if TRIAXI_PLATFORM_POSIX
+  for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {
+    triaxi_sigaction(TRIAXI_signal_lists.crash[i], &TRIAXI_signals.old.crash[i], NULL);
+  }
+# elif TRIAXI_PLATFORM_WINDOWS && !TRIAXI_MSVC_COMPAT
+  if (!RemoveVectoredExceptionHandler(TRIAXI_veh_handle)) { triaxi_fatal(); }
+  TRIAXI_veh_handle = NULL;
+# endif
+}
 # pragma endregion runner_process_control
 
-# pragma region runner_printing
+# pragma region runner_initialisation
+# define triaxi_config_error_f(fmt, ...) (fprintf(stderr, "Error: " fmt "\n", __VA_ARGS__), exit(2))
+# define triaxi_config_error(lit)        triaxi_config_error_f("%s", (lit))
 
+static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  config,
+                                                    const TRIAXI_StdBackup* saved) {
+  static const char* const defaults[]
+      = {TRIAX_OUTPATH_STDOUT, TRIAX_OUTPATH_NONE, TRIAX_OUTPATH_NONE, TRIAX_OUTPATH_NONE};
+  TRIAXI_OutputCtx out = {TRIAXI_ZINIT};
+  FILE** const     outfiles[]
+      = {&out.streams.text, &out.streams.json, &out.streams.tap, &out.streams.junit};
+  static const char names[][6] = {"text", "json", "tap", "junit"};
+  const char* const outpaths[] = {config->outpaths.text, config->outpaths.json,
+                                  config->outpaths.tap, config->outpaths.junit};
+  for (size_t nstdout = 0, i = 0; i < triaxi_countof(outfiles); ++i) {
+    const char* path = outpaths[i];
+    if (path == TRIAX_OUTPATH_DEFAULT) { path = defaults[i]; }
+    if (path == TRIAX_OUTPATH_NONE) {
+      *outfiles[i] = NULL;
+    } else if (path == TRIAX_OUTPATH_STDOUT) {
+      if (++nstdout > 1) {
+        triaxi_config_error_f("More than one output stream set to stdout. %s", TRIAX_HELP);
+      }
+      *outfiles[i] = saved->out.file;
+    } else {
+      if (!(triaxi_mkdirp(path), *outfiles[i] = fopen(path, "w"))) {
+        triaxi_config_error_f("Cannot open %s output '%s': %s", names[i], path, strerror(errno));
+      }
+    }
+  }
+  static const TRIAXI_AnsiColours color
+      = {"\x1b[0m",  "\x1b[1m",  "\x1b[2m",  "\x1b[31m", "\x1b[32m",
+         "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m"},
+      no_color   = {TRIAXI_ZINIT};
+  bool use_color = !config->no_color && !getenv("NO_COLOR") && out.streams.text
+                && triaxi_isatty(triaxi_fileno(out.streams.text));
+  out.ansi       = use_color ? color : no_color;
+  return out;
+}
+
+static inline void triaxi_output_close(const TRIAXI_RunCtx* run) {
+  FILE* const outfiles[] = {run->out.streams.text, run->out.streams.json, run->out.streams.tap,
+                            run->out.streams.junit};
+  for (size_t i = 0; i < triaxi_countof(outfiles); ++i) {
+    if (outfiles[i]) {
+      // A previous flush can discard unwritten bytes; fclose alone need not report that error.
+      if (ferror(outfiles[i])) { triaxi_fatal(); }
+      if (outfiles[i] == run->saved.out.file) { continue; }
+      if (fclose(outfiles[i])) { triaxi_fatal(); }
+    }
+  }
+}
+
+static inline void triaxi_junit_buffers_init(void) {
+  TRIAXI_File su = triaxi_tmpfile_create("triax_ju_su"), te = triaxi_tmpfile_create("triax_ju_te");
+  int         su_fd, te_fd;
+# if TRIAXI_PLATFORM_POSIX
+  su_fd = su, te_fd = te;
+# elif TRIAXI_PLATFORM_WINDOWS
+  if (!SetHandleInformation(su, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
+  if (!SetHandleInformation(te, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
+  if ((su_fd = _open_osfhandle((intptr_t)su, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
+  if ((te_fd = _open_osfhandle((intptr_t)te, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
+# else // triaxi_embedded
+#  error "TRIAX_NO_OS: not yet implemented for this region"
+# endif
+  if (!(TRIAXI_global.junit.suite_buf = triaxi_fdopen(su_fd, "w+b"))) { triaxi_fatal(); }
+  if (!(TRIAXI_global.junit.test_buf = triaxi_fdopen(te_fd, "w+b"))) { triaxi_fatal(); }
+}
+
+static inline void triaxi_shared_init(void) {
+  enum { size = sizeof(TRIAXI_Shared) * TRIAXI_JOBS_MAX };
+# if TRIAXI_PLATFORM_POSIX
+#  ifdef MAP_ANONYMOUS
+#   define TRIAXI_MAP_ANON MAP_ANONYMOUS
+#  elif defined(MAP_ANON)
+#   define TRIAXI_MAP_ANON MAP_ANON
+#  else
+#   error "triax.h requires anonymous mmap support"
+#  endif
+  if ((TRIAXI_global.shared = (TRIAXI_Shared*)mmap(NULL, size, PROT_READ | PROT_WRITE,
+                                                   MAP_SHARED | TRIAXI_MAP_ANON, -1, 0))
+      == MAP_FAILED) {
+    triaxi_fatal();
+  }
+#  undef TRIAXI_MAP_ANON
+# elif TRIAXI_PLATFORM_WINDOWS
+  SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
+  if (!(TRIAXI_global.shared_mapping
+        = CreateFileMappingA(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, (DWORD)size, NULL))) {
+    triaxi_fatal();
+  }
+  if (!(TRIAXI_global.shared = (TRIAXI_Shared*)MapViewOfFile(TRIAXI_global.shared_mapping,
+                                                             FILE_MAP_ALL_ACCESS, 0, 0, size))) {
+    triaxi_fatal();
+  }
+  DWORD n = GetModuleFileNameW(NULL, TRIAXI_global.executable_path,
+                               (DWORD)triaxi_countof(TRIAXI_global.executable_path));
+  if (!n || n >= (DWORD)triaxi_countof(TRIAXI_global.executable_path)) { triaxi_fatal(); }
+# else // triaxi_embedded
+#  error "TRIAX_NO_OS: not yet implemented for this region"
+# endif
+  for (size_t i = 0; i < TRIAXI_JOBS_MAX; ++i) {
+    TRIAXI_global.slots[i].shared = &TRIAXI_global.shared[i];
+  }
+}
+
+static inline TRIAXI_Settings triaxi_settings_resolve(const Triax_Attributes* attrs,
+                                                      TRIAXI_Settings         parent) {
+  if (attrs->timeout_ms != TRIAX_TIMEOUT_INHERIT) { parent.timeout_ms = attrs->timeout_ms; }
+  if (attrs->verbosity != TRIAX_VERBOSITY_INHERIT) { parent.verbosity = attrs->verbosity; }
+  if (attrs->isolation != TRIAX_ISOLATION_INHERIT) { parent.isolation = attrs->isolation; }
+  return parent;
+}
+static inline TRIAXI_RunCtx triaxi_run_ctx_make(const Triax_RunConfig* config) {
+  const TRIAXI_StdBackup saved = triaxi_stdfds_backup_create(); // needs to be here
+# if TRIAXI_PLATFORM_WINDOWS
+  for (size_t i = 0; i < TRIAXI_global.max_prev_slots; ++i) {
+    TRIAXI_global.shared[i].launch.true_stderr = TRIAXI_true_stderr;
+  }
+# endif
+  TRIAXI_Settings settings = triaxi_settings_resolve(&config->attrs, TRIAXI_default_settings);
+  size_t          njobs    = (size_t)TRIAXI_MAX(config->njobs, 1);
+  if (config->debug) {
+    settings.isolation  = TRIAX_ISOLATION_OFF;
+    settings.timeout_ms = TRIAX_TIMEOUT_NONE;
+    njobs               = 1;
+  }
+  return TRIAXI_T(TRIAXI_RunCtx){
+      settings,
+      {config->attrs.init, config->attrs.fini},
+      config->attrs.tags,
+      config->nfilters,
+      config->filters,
+      njobs,
+      config->fail_fast,
+      config->debug,
+      triaxi_output_create(config, &saved),
+      saved,
+  };
+}
+
+enum {
+  TRIAXI_PARSE_RUN,
+  TRIAXI_PARSE_HELP,
+  TRIAXI_PARSE_LIST,
+  TRIAXI_PARSE_ERR_INVALID_FLAG,
+  TRIAXI_PARSE_ERR_INVALID_OPTION,
+  TRIAXI_PARSE_ERR_TOO_MANY_FILTERS,
+  TRIAXI_PARSE_ERR_DUP_OUTPUT,
+};
+# define TRIAXI_ERRORDATA_FLAGTYPE      0
+# define TRIAXI_ERRORDATA_SEL_OPTION    1
+# define TRIAXI_ERRORDATA_AVAIL_OPTIONS 2
+static inline void triaxi_config_validate(const Triax_RunConfig* config) {
+  switch (config->kind) {
+  default               : triaxi_unreachable();
+  case TRIAXI_PARSE_RUN : break;
+  case TRIAXI_PARSE_HELP: triaxi_fputlit(TRIAX_HELP, stdout), exit(0);
+  case TRIAXI_PARSE_LIST:
+    for (const TRIAXI_Test* t = TRIAXI_global.tests.beg; t != TRIAXI_global.tests.end; ++t) {
+      if (!t->name) { continue; }
+      printf("%s::%s\n", t->suitename, t->name);
+    }
+    exit(0);
+  case TRIAXI_PARSE_ERR_INVALID_FLAG:
+    triaxi_config_error_f("unrecognized flag: '%s'\n%s", config->filters[TRIAXI_ERRORDATA_FLAGTYPE],
+                          TRIAX_HELP);
+  case TRIAXI_PARSE_ERR_INVALID_OPTION:
+    triaxi_config_error_f("%s: invalid value '%s', expected %s\n%s",
+                          config->filters[TRIAXI_ERRORDATA_FLAGTYPE],
+                          config->filters[TRIAXI_ERRORDATA_SEL_OPTION],
+                          config->filters[TRIAXI_ERRORDATA_AVAIL_OPTIONS], TRIAX_HELP);
+  case TRIAXI_PARSE_ERR_TOO_MANY_FILTERS:
+    triaxi_config_error_f("Too many filter arguments (max 255)\n%s", TRIAX_HELP);
+  case TRIAXI_PARSE_ERR_DUP_OUTPUT:
+    triaxi_config_error_f("Output stream '%s' set more than once.\n%s",
+                          config->filters[TRIAXI_ERRORDATA_FLAGTYPE], TRIAX_HELP);
+  }
+  for (size_t i = 0; i < config->nfilters; ++i) {
+    if (!config->filters[i]) { triaxi_config_error("filter strings must not be NULL"); }
+  }
+  switch (config->attrs.isolation) {
+  case TRIAX_ISOLATION_INHERIT:
+  case TRIAX_ISOLATION_ON     :
+  case TRIAX_ISOLATION_OFF    : break;
+  default:
+    triaxi_config_error("Invalid Isolation Value Selected: must be TRIAX_ISOLATION_INHERIT, "
+                        "TRIAX_ISOLATION_ON or TRIAX_ISOLATION_OFF.");
+  }
+  switch (config->attrs.verbosity) {
+  case TRIAX_VERBOSITY_INHERIT:
+  case TRIAX_VERBOSITY_ON_FAIL:
+  case TRIAX_VERBOSITY_ALWAYS :
+  case TRIAX_VERBOSITY_NEVER  : break;
+  default:
+    triaxi_config_error("Invalid Verbosity Value Selected: must be TRIAX_VERBOSITY_INHERIT, "
+                        "TRIAX_VERBOSITY_ON_FAIL, TRIAX_VERBOSITY_ALWAYS or "
+                        "TRIAX_VERBOSITY_NEVER.");
+  }
+
+  if (config->njobs > TRIAXI_JOBS_MAX) {
+    triaxi_config_error_f("--jobs: value %u exceeds maximum of %u.", (unsigned)config->njobs,
+                          (unsigned)TRIAXI_JOBS_MAX);
+  }
+  const char* const paths[] = {config->outpaths.text, config->outpaths.json, config->outpaths.tap,
+                               config->outpaths.junit};
+  for (size_t i = 0; i < triaxi_countof(paths); ++i) {
+    const char* path = paths[i];
+    if (path == TRIAX_OUTPATH_DEFAULT || path == TRIAX_OUTPATH_NONE
+        || path == TRIAX_OUTPATH_STDOUT) {
+      continue;
+    }
+    for (size_t j = 0; j < i; ++j) {
+      const char* prev = paths[j];
+      if (prev != TRIAX_OUTPATH_DEFAULT && prev != TRIAX_OUTPATH_NONE
+          && prev != TRIAX_OUTPATH_STDOUT && !strcmp(path, prev)) {
+        triaxi_config_error_f("Output formats must use distinct paths: '%s'.", path);
+      }
+    }
+  }
+}
+
+static inline void          triaxi_windows_childentry(const Triax_RunConfig* config);
+static inline TRIAXI_RunCtx triaxi_runner_init(const Triax_RunConfig* config) {
+  TRIAXI_exec.debug_break = config->debug_break || config->debug;
+  if (!TRIAXI_global.tests.beg) { triaxi_sections_init(); }
+  triaxi_windows_childentry(config);
+  triaxi_config_validate(config);
+  if (!triaxi_global_initialised()) {
+    triaxi_shared_init();
+    triaxi_register_tests();
+    triaxi_register_suites();
+    triaxi_signals_init();
+    //  setvbuf(stdout, NULL, _IONBF, 0), setvbuf(stderr, NULL, _IONBF, 0);
+    triaxi_junit_buffers_init();
+  }
+  size_t njobs = config->debug ? 1 : TRIAXI_MAX(1, config->njobs);
+  if (njobs > TRIAXI_global.max_prev_slots) {
+    triaxi_tmpfiles_create(njobs);
+    TRIAXI_global.max_prev_slots = njobs;
+  }
+  triaxi_process_control_init(njobs);
+  return triaxi_run_ctx_make(config);
+}
+
+static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
+  triaxi_flush_all();
+  triaxi_output_close(run);
+  triaxi_stdfds_restore(&run->saved);
+  triaxi_stdfds_backup_close(&run->saved);
+  triaxi_process_control_reset();
+}
+
+# pragma endregion runner_initialisation
+
+# pragma region runner_printing
 static const char* TRIAXI_assertnames[2][TRIAXI_AT_COUNT]
     = {{TRIAXI_STRINGIFY_ALL(TRIAXI_ASSERTTYPE_ITEMS)},
        {"nexit", "nfault", "false", "nonnull", "neq", "leq", "geq", "floatneq_abstol",
@@ -5009,320 +5306,21 @@ static inline void triaxi_print_run_end(const TRIAXI_RunCtx* run, const TRIAXI_R
 }
 # pragma endregion runner_printing
 
-# pragma region runner_initialisation
-# define triaxi_config_error_f(fmt, ...) (fprintf(stderr, "Error: " fmt "\n", __VA_ARGS__), exit(2))
-# define triaxi_config_error(lit)        triaxi_config_error_f("%s", (lit))
-
-static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  config,
-                                                    const TRIAXI_StdBackup* saved) {
-  static const char* const defaults[]
-      = {TRIAX_OUTPATH_STDOUT, TRIAX_OUTPATH_NONE, TRIAX_OUTPATH_NONE, TRIAX_OUTPATH_NONE};
-  TRIAXI_OutputCtx out = {TRIAXI_ZINIT};
-  FILE** const     outfiles[]
-      = {&out.streams.text, &out.streams.json, &out.streams.tap, &out.streams.junit};
-  static const char names[][6] = {"text", "json", "tap", "junit"};
-  const char* const outpaths[] = {config->outpaths.text, config->outpaths.json,
-                                  config->outpaths.tap, config->outpaths.junit};
-  for (size_t nstdout = 0, i = 0; i < triaxi_countof(outfiles); ++i) {
-    const char* path = outpaths[i];
-    if (path == TRIAX_OUTPATH_DEFAULT) { path = defaults[i]; }
-    if (path == TRIAX_OUTPATH_NONE) {
-      *outfiles[i] = NULL;
-    } else if (path == TRIAX_OUTPATH_STDOUT) {
-      if (++nstdout > 1) {
-        triaxi_config_error_f("More than one output stream set to stdout. %s", TRIAX_HELP);
-      }
-      *outfiles[i] = saved->out.file;
-    } else {
-      if (!(triaxi_mkdirp(path), *outfiles[i] = fopen(path, "w"))) {
-        triaxi_config_error_f("Cannot open %s output '%s': %s", names[i], path, strerror(errno));
-      }
-    }
-  }
-  static const TRIAXI_AnsiColours color
-      = {"\x1b[0m",  "\x1b[1m",  "\x1b[2m",  "\x1b[31m", "\x1b[32m",
-         "\x1b[33m", "\x1b[34m", "\x1b[35m", "\x1b[36m"},
-      no_color   = {TRIAXI_ZINIT};
-  bool use_color = !config->no_color && !getenv("NO_COLOR") && out.streams.text
-                && triaxi_isatty(triaxi_fileno(out.streams.text));
-  out.ansi       = use_color ? color : no_color;
-  return out;
-}
-
-static inline void triaxi_output_close(const TRIAXI_RunCtx* run) {
-  FILE* const outfiles[] = {run->out.streams.text, run->out.streams.json, run->out.streams.tap,
-                            run->out.streams.junit};
-  for (size_t i = 0; i < triaxi_countof(outfiles); ++i) {
-    if (outfiles[i]) {
-      // A previous flush can discard unwritten bytes; fclose alone need not report that error.
-      if (ferror(outfiles[i])) { triaxi_fatal(); }
-      if (outfiles[i] == run->saved.out.file) { continue; }
-      if (fclose(outfiles[i])) { triaxi_fatal(); }
-    }
-  }
-}
-
-static inline void triaxi_junit_buffers_init(void) {
-  TRIAXI_File su = triaxi_tmpfile_create("triax_ju_su"), te = triaxi_tmpfile_create("triax_ju_te");
-  int         su_fd, te_fd;
-# if TRIAXI_PLATFORM_POSIX
-  su_fd = su, te_fd = te;
-# elif TRIAXI_PLATFORM_WINDOWS
-  if (!SetHandleInformation(su, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
-  if (!SetHandleInformation(te, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
-  if ((su_fd = _open_osfhandle((intptr_t)su, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
-  if ((te_fd = _open_osfhandle((intptr_t)te, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
-# else // triaxi_embedded
-#  error "TRIAX_NO_OS: not yet implemented for this region"
-# endif
-  if (!(TRIAXI_global.junit.suite_buf = triaxi_fdopen(su_fd, "w+b"))) { triaxi_fatal(); }
-  if (!(TRIAXI_global.junit.test_buf = triaxi_fdopen(te_fd, "w+b"))) { triaxi_fatal(); }
-}
-
-static inline void triaxi_shared_init(void) {
-  enum { size = sizeof(TRIAXI_Shared) * TRIAXI_JOBS_MAX };
-# if TRIAXI_PLATFORM_POSIX
-#  ifdef MAP_ANONYMOUS
-#   define TRIAXI_MAP_ANON MAP_ANONYMOUS
-#  elif defined(MAP_ANON)
-#   define TRIAXI_MAP_ANON MAP_ANON
-#  else
-#   error "triax.h requires anonymous mmap support"
-#  endif
-  if ((TRIAXI_global.shared = (TRIAXI_Shared*)mmap(NULL, size, PROT_READ | PROT_WRITE,
-                                                   MAP_SHARED | TRIAXI_MAP_ANON, -1, 0))
-      == MAP_FAILED) {
-    triaxi_fatal();
-  }
-#  undef TRIAXI_MAP_ANON
-# elif TRIAXI_PLATFORM_WINDOWS
-  SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
-  if (!(TRIAXI_global.shared_mapping
-        = CreateFileMappingA(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0, (DWORD)size, NULL))) {
-    triaxi_fatal();
-  }
-  if (!(TRIAXI_global.shared = (TRIAXI_Shared*)MapViewOfFile(TRIAXI_global.shared_mapping,
-                                                             FILE_MAP_ALL_ACCESS, 0, 0, size))) {
-    triaxi_fatal();
-  }
-  DWORD n = GetModuleFileNameW(NULL, TRIAXI_global.executable_path,
-                               (DWORD)triaxi_countof(TRIAXI_global.executable_path));
-  if (!n || n >= (DWORD)triaxi_countof(TRIAXI_global.executable_path)) { triaxi_fatal(); }
-# else // triaxi_embedded
-#  error "TRIAX_NO_OS: not yet implemented for this region"
-# endif
-  for (size_t i = 0; i < TRIAXI_JOBS_MAX; ++i) {
-    TRIAXI_global.slots[i].shared = &TRIAXI_global.shared[i];
-  }
-}
-
-static inline TRIAXI_Settings triaxi_settings_resolve(const Triax_Attributes* attrs,
-                                                      TRIAXI_Settings         parent) {
-  if (attrs->timeout_ms != TRIAX_TIMEOUT_INHERIT) { parent.timeout_ms = attrs->timeout_ms; }
-  if (attrs->verbosity != TRIAX_VERBOSITY_INHERIT) { parent.verbosity = attrs->verbosity; }
-  if (attrs->isolation != TRIAX_ISOLATION_INHERIT) { parent.isolation = attrs->isolation; }
-  return parent;
-}
-static inline TRIAXI_RunCtx triaxi_run_ctx_make(const Triax_RunConfig* config) {
-  const TRIAXI_StdBackup saved = triaxi_stdfds_backup_create(); // needs to be here
-# if TRIAXI_PLATFORM_WINDOWS
-  for (size_t i = 0; i < TRIAXI_global.max_prev_slots; ++i) {
-    TRIAXI_global.shared[i].launch.true_stderr = TRIAXI_true_stderr;
-  }
-# endif
-  TRIAXI_Settings settings = triaxi_settings_resolve(&config->attrs, TRIAXI_default_settings);
-  size_t          njobs    = (size_t)TRIAXI_MAX(config->njobs, 1);
-  if (config->debug) {
-    settings.isolation  = TRIAX_ISOLATION_OFF;
-    settings.timeout_ms = TRIAX_TIMEOUT_NONE;
-    njobs               = 1;
-  }
-  return TRIAXI_T(TRIAXI_RunCtx){
-      settings,
-      {config->attrs.init, config->attrs.fini},
-      config->attrs.tags,
-      config->nfilters,
-      config->filters,
-      njobs,
-      config->fail_fast,
-      config->debug,
-      triaxi_output_create(config, &saved),
-      saved,
-  };
-}
-
-enum {
-  TRIAXI_PARSE_RUN,
-  TRIAXI_PARSE_HELP,
-  TRIAXI_PARSE_LIST,
-  TRIAXI_PARSE_ERR_INVALID_FLAG,
-  TRIAXI_PARSE_ERR_INVALID_OPTION,
-  TRIAXI_PARSE_ERR_TOO_MANY_FILTERS,
-  TRIAXI_PARSE_ERR_DUP_OUTPUT,
-};
-# define TRIAXI_ERRORDATA_FLAGTYPE      0
-# define TRIAXI_ERRORDATA_SEL_OPTION    1
-# define TRIAXI_ERRORDATA_AVAIL_OPTIONS 2
-static inline void triaxi_config_validate(const Triax_RunConfig* config) {
-  switch (config->kind) {
-  default               : triaxi_unreachable();
-  case TRIAXI_PARSE_RUN : break;
-  case TRIAXI_PARSE_HELP: triaxi_fputlit(TRIAX_HELP, stdout), exit(0);
-  case TRIAXI_PARSE_LIST:
-    for (const TRIAXI_Test* t = TRIAXI_global.tests.beg; t != TRIAXI_global.tests.end; ++t) {
-      if (!t->name) { continue; }
-      printf("%s::%s\n", t->suitename, t->name);
-    }
-    exit(0);
-  case TRIAXI_PARSE_ERR_INVALID_FLAG:
-    triaxi_config_error_f("unrecognized flag: '%s'\n%s", config->filters[TRIAXI_ERRORDATA_FLAGTYPE],
-                          TRIAX_HELP);
-  case TRIAXI_PARSE_ERR_INVALID_OPTION:
-    triaxi_config_error_f("%s: invalid value '%s', expected %s\n%s",
-                          config->filters[TRIAXI_ERRORDATA_FLAGTYPE],
-                          config->filters[TRIAXI_ERRORDATA_SEL_OPTION],
-                          config->filters[TRIAXI_ERRORDATA_AVAIL_OPTIONS], TRIAX_HELP);
-  case TRIAXI_PARSE_ERR_TOO_MANY_FILTERS:
-    triaxi_config_error_f("Too many filter arguments (max 255)\n%s", TRIAX_HELP);
-  case TRIAXI_PARSE_ERR_DUP_OUTPUT:
-    triaxi_config_error_f("Output stream '%s' set more than once.\n%s",
-                          config->filters[TRIAXI_ERRORDATA_FLAGTYPE], TRIAX_HELP);
-  }
-  for (size_t i = 0; i < config->nfilters; ++i) {
-    if (!config->filters[i]) { triaxi_config_error("filter strings must not be NULL"); }
-  }
-  switch (config->attrs.isolation) {
-  case TRIAX_ISOLATION_INHERIT:
-  case TRIAX_ISOLATION_ON     :
-  case TRIAX_ISOLATION_OFF    : break;
-  default:
-    triaxi_config_error("Invalid Isolation Value Selected: must be TRIAX_ISOLATION_INHERIT, "
-                        "TRIAX_ISOLATION_ON or TRIAX_ISOLATION_OFF.");
-  }
-  switch (config->attrs.verbosity) {
-  case TRIAX_VERBOSITY_INHERIT:
-  case TRIAX_VERBOSITY_ON_FAIL:
-  case TRIAX_VERBOSITY_ALWAYS :
-  case TRIAX_VERBOSITY_NEVER  : break;
-  default:
-    triaxi_config_error("Invalid Verbosity Value Selected: must be TRIAX_VERBOSITY_INHERIT, "
-                        "TRIAX_VERBOSITY_ON_FAIL, TRIAX_VERBOSITY_ALWAYS or "
-                        "TRIAX_VERBOSITY_NEVER.");
-  }
-
-  if (config->njobs > TRIAXI_JOBS_MAX) {
-    triaxi_config_error_f("--jobs: value %u exceeds maximum of %u.", (unsigned)config->njobs,
-                          (unsigned)TRIAXI_JOBS_MAX);
-  }
-  const char* const paths[] = {config->outpaths.text, config->outpaths.json, config->outpaths.tap,
-                               config->outpaths.junit};
-  for (size_t i = 0; i < triaxi_countof(paths); ++i) {
-    const char* path = paths[i];
-    if (path == TRIAX_OUTPATH_DEFAULT || path == TRIAX_OUTPATH_NONE
-        || path == TRIAX_OUTPATH_STDOUT) {
-      continue;
-    }
-    for (size_t j = 0; j < i; ++j) {
-      const char* prev = paths[j];
-      if (prev != TRIAX_OUTPATH_DEFAULT && prev != TRIAX_OUTPATH_NONE
-          && prev != TRIAX_OUTPATH_STDOUT && !strcmp(path, prev)) {
-        triaxi_config_error_f("Output formats must use distinct paths: '%s'.", path);
-      }
-    }
-  }
-}
-
-static inline void          triaxi_windows_childentry(const Triax_RunConfig* config);
-static inline TRIAXI_RunCtx triaxi_runner_init(const Triax_RunConfig* config) {
-  TRIAXI_exec.debug_break = config->debug_break || config->debug;
-  if (!TRIAXI_global.tests.beg) { triaxi_sections_init(); }
-  triaxi_windows_childentry(config);
-  triaxi_config_validate(config);
-  if (!triaxi_global_initialised()) {
-    triaxi_shared_init();
-    triaxi_register_tests();
-    triaxi_register_suites();
-    triaxi_signals_init();
-    //  setvbuf(stdout, NULL, _IONBF, 0), setvbuf(stderr, NULL, _IONBF, 0);
-    triaxi_junit_buffers_init();
-  }
-  size_t njobs = config->debug ? 1 : TRIAXI_MAX(1, config->njobs);
-  if (njobs > TRIAXI_global.max_prev_slots) {
-    triaxi_tmpfiles_create(njobs);
-    TRIAXI_global.max_prev_slots = njobs;
-  }
-  triaxi_process_control_init(njobs);
-  return triaxi_run_ctx_make(config);
-}
-
-static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
-  triaxi_flush_all();
-  triaxi_output_close(run);
-  triaxi_stdfds_restore(&run->saved);
-  triaxi_stdfds_backup_close(&run->saved);
-  triaxi_process_control_reset();
-}
-
-# pragma endregion runner_initialisation
-
 # pragma region runner_execution
 # if TRIAXI_PLATFORM_POSIX
-#  define triaxi_crash_handlers_impl(_h)                                                           \
-    do {                                                                                           \
-      for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {                     \
-        triaxi_sigaction(TRIAXI_signal_lists.crash[i], &(_h), NULL);                               \
-      }                                                                                            \
-    } while (0)
 #  define triaxi_win_try
 #  define triaxi_win_except(...) if (0)
 # elif TRIAXI_PLATFORM_WINDOWS
 #  if TRIAXI_MSVC_COMPAT
-#   define triaxi_crash_handlers_impl(_h)
 #   define triaxi_win_try         __try
 #   define triaxi_win_except(...) __except (__VA_ARGS__)
-
-static inline int triaxi_windows_exception_filter(DWORD fault) {
-  if (!TRIAXI_exec.isolated) { return EXCEPTION_EXECUTE_HANDLER; }
-  TRIAXI_exec.shared->exit.reason = (Triax_Fault)fault;
-  TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_FAULT;
-  return EXCEPTION_CONTINUE_SEARCH;
-}
 #  else
-// MinGW uses VEH to recover native exceptions, including abort(), via longjmp.
-// MSVC uses __try/__except instead.
-static volatile sig_atomic_t TRIAXI_crash_signal;
-static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
-  if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
-  DWORD code = ep->ExceptionRecord->ExceptionCode;
-  // First-chance C++ exceptions must reach language catch handlers, not longjmp.
-  if (code == 0xE06D7363UL || (code & 0xFCFFFFFFUL) == 0x20474343UL) {
-    return EXCEPTION_CONTINUE_SEARCH;
-  }
-  TRIAXI_crash_signal = (sig_atomic_t)code;
-  longjmp(TRIAXI_exec.jmp, TRIAXI_EXEC_CRASHED);
-}
-static PVOID TRIAXI_veh_handle;
-#   define triaxi_crash_handlers_impl(_h)                                                          \
-     do {                                                                                          \
-       if (TRIAXI_veh_handle) {                                                                    \
-         RemoveVectoredExceptionHandler(TRIAXI_veh_handle);                                        \
-         TRIAXI_veh_handle = NULL;                                                                 \
-       } else {                                                                                    \
-         TRIAXI_veh_handle = AddVectoredExceptionHandler(1, triaxi_veh_crash);                     \
-         if (!TRIAXI_veh_handle) { triaxi_fatal(); }                                               \
-       }                                                                                           \
-     } while (0)
 #   define triaxi_win_try
 #   define triaxi_win_except(...) if (0)
 #  endif
 # else
-// Bare-metal faults terminate execution; no portable in-process recovery is available.
-#  define triaxi_crash_handlers_impl(_h)
-#  define triaxi_win_try
-#  define triaxi_win_except(...) if (0)
+#  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
-# define triaxi_crash_handlers_setup()    triaxi_crash_handlers_impl(TRIAXI_signals.sas.crash)
-# define triaxi_crash_handlers_teardown() triaxi_crash_handlers_impl(TRIAXI_signals.old.crash[i])
 
 static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shared* shared) {
   const TRIAXI_Test* const t = inv->test;
@@ -5777,7 +5775,7 @@ static inline void triaxi_fix_testres_timeout(TRIAXI_TestSlot* h, uint32_t durat
 static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    run,
                                                         const TRIAXI_RunResult* rres,
                                                         TRIAXI_TestSlot** active, size_t* inflight,
-                                                        size_t* nreported) {
+                                                        size_t* nreported) { // dif2
   size_t n = *inflight;
   if (!n) { triaxi_unreachable(); }
   TRIAXI_RawStatus status;
@@ -6301,6 +6299,11 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 #undef TRIAXI_MAX
 #undef triaxi_lenof
 #undef TRIAXI_COMMA_ONE
+#undef TRIAXI_COUNT_ONE
+#undef TRIAXI_COUNT_ALL
+#undef TRIAXI_STRINGIFY_ONE
+#undef TRIAXI_STRINGIFY_ALL
+#undef TRIAXI_SHARED_LINKAGE
 
 #if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop
