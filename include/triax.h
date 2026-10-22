@@ -2784,11 +2784,7 @@ public:
   void add_arg(const T& val) {
     size_t mark = streambuf.begin_arg();
     if (mark == SIZE_MAX) { return; }
-# if defined(__cpp_lib_format)
     add_arg_impl<T>(val, formattable<T>{}, streamable<T>{});
-# else
-    add_arg_impl<T>(val, streamable<T>{});
-# endif
     streambuf.end_arg(mark);
   }
   void add_arg(std::nullptr_t) {
@@ -2797,45 +2793,15 @@ public:
     this->write("null", 4);
     streambuf.end_arg(mark);
   }
-  void add_arg(float val) {
-    size_t mark = streambuf.begin_arg();
-    if (mark == SIZE_MAX) { return; }
-    auto p = this->precision(9);
-    *this << val, this->precision(p);
-    streambuf.end_arg(mark);
-  }
-  void add_arg(double val) {
-    size_t mark = streambuf.begin_arg();
-    if (mark == SIZE_MAX) { return; }
-    auto p = this->precision(17);
-    *this << val, this->precision(p);
-    streambuf.end_arg(mark);
-  }
-  void add_arg(long double val) {
-    size_t mark = streambuf.begin_arg();
-    if (mark == SIZE_MAX) { return; }
-    auto p = this->precision(21);
-    *this << val, this->precision(p);
-    streambuf.end_arg(mark);
-  }
-  bool send(TRIAXI_AR val) {
-    if (streambuf.trunc && streambuf.last_arg != SIZE_MAX) {
-      // Mark content only, even if the final record is empty or no further prefix fits.
-      static constexpr char marker[] = "...[truncated]";
-      char*                 arg      = TRIAXI_exec.pkg.args + streambuf.last_arg;
-      size_t                len;
-      memcpy(&len, arg, sizeof(len));
-      size_t n = TRIAXI_MIN(len, sizeof(marker) - 1);
-      memcpy(arg + sizeof(len) + len - n, marker, n);
-    }
-    TRIAXI_exec.pkg.len  = (uint32_t)streambuf.len;
-    TRIAXI_exec.pkg.code = TRIAXI_ENCODING_BLOB;
-    triaxi_log_res((TRIAXI_AR)val);
-    return 1;
-  }
+
+  void add_arg(float val) { add_float(val, 9); }
+  void add_arg(double val) { add_float(val, 17); }
+  void add_arg(long double val) { add_float(val, 21); }
+
   void add_index(size_t index) {
     size_t mark = streambuf.begin_arg();
     if (mark == SIZE_MAX) { return; }
+
     char  buf[sizeof(size_t) * 3];
     char* buf_end = buf + sizeof(buf);
     char* p       = buf_end;
@@ -2848,19 +2814,37 @@ public:
     streambuf.end_arg(mark);
   }
 
+  bool send(TRIAXI_AR val) {
+    if (streambuf.m_trunc && streambuf.m_last_arg != SIZE_MAX) {
+      // Mark content only, even if the final record is empty or no further prefix fits.
+      static constexpr char marker[] = "...[truncated]";
+      char*                 arg      = TRIAXI_exec.pkg.args + streambuf.m_last_arg;
+      size_t                len;
+      memcpy(&len, arg, sizeof(len));
+      size_t n = TRIAXI_MIN(len, sizeof(marker) - 1);
+      memcpy(arg + sizeof(len) + len - n, marker, n);
+    }
+    TRIAXI_exec.pkg.len  = (uint32_t)streambuf.m_len;
+    TRIAXI_exec.pkg.code = TRIAXI_ENCODING_BLOB;
+    triaxi_log_res(val);
+    return true;
+  }
+
 private:
   template <typename...>
   using void_t = void;
-  template <typename T, typename U = void>
+
+  template <typename T, typename = void>
   struct streamable : std::false_type {};
+
   template <typename T>
   struct streamable<T, void_t<decltype(std::declval<std::ostream&>() << std::declval<const T&>())>>
       : std::true_type {};
 
-# if defined(__cpp_lib_format)
-  template <typename T, typename U = void>
+  template <typename T, typename = void>
   struct formattable : std::false_type {};
 
+# if defined(__cpp_lib_format)
   template <typename T>
   struct formattable<T,
                      void_t<decltype(std::formatter<typename TRIAXI_RemoveCvRef<T>::type, char>{})>>
@@ -2868,66 +2852,84 @@ private:
 
   template <class T>
   void add_arg_impl(const T& val, std::true_type, ...) {
-    const size_t avail  = streambuf.cap - streambuf.len;
-    char* const  dst    = TRIAXI_exec.pkg.args + streambuf.len;
+    const size_t avail  = streambuf.m_cap - streambuf.m_len;
+    char* const  dst    = TRIAXI_exec.pkg.args + streambuf.m_len;
     const auto   res    = std::format_to_n(dst, (ptrdiff_t)avail, "{}", val);
-    streambuf.len      += (size_t)(res.out - dst);
-    streambuf.trunc     = (size_t)res.size > avail;
+    streambuf.m_len    += (size_t)(res.out - dst);
+    streambuf.m_trunc   = (size_t)res.size > avail;
   }
+# endif
 
-  template <class T> // Fallback: operator<< streamable
+  template <class T> // Fallback: operator<< streamable.
   void add_arg_impl(const T& val, std::false_type, std::true_type) {
     *this << val;
   }
-  template <class T> // Last resort
+
+  template <class T> // Last resort.
   void add_arg_impl(const T&, std::false_type, std::false_type) {
     this->write("<?>", 3);
   }
-# else
+
   template <class T>
-  void add_arg_impl(const T& val, std::true_type) {
+  void add_float(T val, std::streamsize digits) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
+
+    const auto previous = this->precision(digits);
     *this << val;
+    this->precision(previous);
+
+    streambuf.end_arg(mark);
   }
-  template <class T>
-  void add_arg_impl(const T&, std::false_type) {
-    this->write("<?>", 3);
-  }
-# endif
+
   class TRIAX_Sbuf : public std::streambuf {
     friend TRIAXI_TestStream;
 
   protected:
-    static constexpr size_t cap{sizeof(TRIAXI_exec.storage) - 7};
-    size_t                  len{0};
-    size_t                  last_arg{SIZE_MAX}; // prefix of the last nonempty argument
-    bool                    trunc{false};
-    virtual std::streamsize xsputn(const char* s, std::streamsize n) override {
-      size_t avail = cap - len;
-      if ((size_t)n > avail) { trunc = true, n = (std::streamsize)avail; }
-      if (n) { memcpy(TRIAXI_exec.pkg.args + len, s, (size_t)n), len += (size_t)n; }
+    static constexpr size_t m_cap{sizeof(TRIAXI_exec.storage) - 7};
+    size_t                  m_len{0};
+    size_t                  m_last_arg{SIZE_MAX}; // Prefix of the last nonempty argument.
+    bool                    m_trunc{false};
+
+    std::streamsize         xsputn(const char* s, std::streamsize n) override {
+      size_t avail = m_cap - m_len;
+      if ((size_t)n > avail) {
+        m_trunc = true;
+        n       = (std::streamsize)avail;
+      }
+      if (n) {
+        memcpy(TRIAXI_exec.pkg.args + m_len, s, (size_t)n);
+        m_len += (size_t)n;
+      }
       return n;
     }
-    virtual int_type overflow(int_type ch) override {
+
+    int_type overflow(int_type ch) override {
       if (ch != traits_type::eof()) {
-        if (len == cap) { return trunc = true, traits_type::eof(); }
-        TRIAXI_exec.pkg.args[len++] = (char)ch;
+        if (m_len == m_cap) {
+          m_trunc = true;
+          return traits_type::eof();
+        }
+        TRIAXI_exec.pkg.args[m_len++] = (char)ch;
       }
       return ch;
     }
+
     // Reserve a length prefix; return SIZE_MAX if it does not fit.
     size_t begin_arg() {
-      if (trunc || cap - len < sizeof(size_t)) {
-        trunc = true;
+      if (m_trunc || m_cap - m_len < sizeof(size_t)) {
+        m_trunc = true;
         return SIZE_MAX;
       }
-      len += sizeof(size_t);
-      return len;
+      m_len += sizeof(size_t);
+      return m_len;
     }
+
     void end_arg(size_t mark) {
       if (mark == SIZE_MAX) { return; }
-      size_t content_len = len - mark;
+      size_t content_len = m_len - mark;
       memcpy(TRIAXI_exec.pkg.args + mark - sizeof(size_t), &content_len, sizeof(content_len));
-      if (content_len) { last_arg = mark - sizeof(size_t); }
+      if (content_len) { m_last_arg = mark - sizeof(size_t); }
     }
   } streambuf;
 };
@@ -4052,18 +4054,16 @@ static inline TRIAXI_RunCtx triaxi_run_ctx_make(const Triax_RunConfig* config) {
     settings.timeout_ms = TRIAX_TIMEOUT_NONE;
     njobs               = 1;
   }
-  return TRIAXI_T(TRIAXI_RunCtx){
-      settings,
-      {config->attrs.init, config->attrs.fini},
-      config->attrs.tags,
-      config->nfilters,
-      config->filters,
-      njobs,
-      config->fail_fast,
-      config->debug,
-      triaxi_output_create(config, &saved),
-      saved,
-  };
+  return TRIAXI_T(TRIAXI_RunCtx){settings,
+                                 {config->attrs.init, config->attrs.fini},
+                                 config->attrs.tags,
+                                 config->nfilters,
+                                 config->filters,
+                                 njobs,
+                                 config->fail_fast,
+                                 config->debug,
+                                 triaxi_output_create(config, &saved),
+                                 saved};
 }
 
 enum {
