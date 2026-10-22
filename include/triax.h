@@ -2026,8 +2026,8 @@ static inline void triaxi_log_hdr(uint16_t len, uint8_t type, uint8_t ae, uint8_
 }
 
 #define TRIAXI_LOG_HDR(type, ae, neg, cr, lit)                                                     \
-  triaxi_log_hdr((uint16_t)(sizeof(lit) - 1), (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg),      \
-                 (cr), (uint32_t)__LINE__, (lit), __FILE__, (uint16_t)(sizeof(__FILE__) - 1))
+  triaxi_log_hdr(sizeof(lit) - 1, (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg), (cr),            \
+                 (uint32_t)__LINE__, (lit), __FILE__, sizeof(__FILE__) - 1)
 
 static inline void triaxi_debug_break(void) {
 #if TRIAXI_PLATFORM_WINDOWS
@@ -2833,6 +2833,21 @@ public:
     triaxi_log_res((TRIAXI_AR)val);
     return 1;
   }
+  void add_index(size_t index) {
+    size_t mark = streambuf.begin_arg();
+    if (mark == SIZE_MAX) { return; }
+
+    char  buf[sizeof(size_t) * 3];
+    char* end = buf + sizeof(buf);
+    char* p   = end;
+    do {
+      *--p   = static_cast<char>('0' + index % 10);
+      index /= 10;
+    } while (index);
+
+    this->write(p, static_cast<std::streamsize>(end - p));
+    streambuf.end_arg(mark);
+  }
 
 private:
   template <typename...>
@@ -3020,7 +3035,7 @@ TRIAXI_AF_OVERLOADS(TRIAXI_AF_FORWARD, TRIAXI_AF_FORWARD_SS, TRIAXI_AF_FORWARD_X
      bool r = !(e1 == e2);                                                                         \
      if (!v && r) {                                                                                \
        TRIAXI_TestStream stream;                                                                   \
-       stream.add_arg(index), stream.add_arg(e1), stream.add_arg(e2);                              \
+       stream.add_index(index), stream.add_arg(e1), stream.add_arg(e2);                            \
        stream.send(TRIAXI_AR_FAIL1);                                                               \
      }                                                                                             \
      return r;                                                                                     \
@@ -5998,13 +6013,13 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
   if (nchars > triaxi_countof(TRIAXI_global.command_line)) { triaxi_fatal(); }
   memcpy(TRIAXI_global.command_line, cmd, nchars * sizeof(*cmd));
 
-  triaxi_alignas(void*) char attr_buf[512];
-  STARTUPINFOEXW             sia = {TRIAXI_ZINIT};
-  sia.StartupInfo.cb             = sizeof(sia);
-  sia.StartupInfo.dwFlags        = STARTF_USESTDHANDLES;
-  sia.StartupInfo.hStdOutput     = h->out;
-  sia.StartupInfo.hStdError      = h->err;
-  SECURITY_ATTRIBUTES sa         = {sizeof(sa), NULL, TRUE};
+  triaxi_alignas(MEMORY_ALLOCATION_ALIGNMENT) char attr_buf[512];
+  STARTUPINFOEXW                                   sia = {TRIAXI_ZINIT};
+  sia.StartupInfo.cb                                   = sizeof(sia);
+  sia.StartupInfo.dwFlags                              = STARTF_USESTDHANDLES;
+  sia.StartupInfo.hStdOutput                           = h->out;
+  sia.StartupInfo.hStdError                            = h->err;
+  SECURITY_ATTRIBUTES sa                               = {sizeof(sa), NULL, TRUE};
   sia.StartupInfo.hStdInput
       = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ, &sa, OPEN_EXISTING, 0, NULL);
   if (sia.StartupInfo.hStdInput == INVALID_HANDLE_VALUE) { triaxi_fatal(); }
