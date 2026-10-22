@@ -375,9 +375,8 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 /// executing the test. Calling them from fixtures is a test API error.
 /// Assertions may also be used in helper functions called by the test; diagnostics
 /// identify the source file and line containing the assertion itself.
-/// Stringified assertion expressions are reported in full without truncation.
-/// Expression and source filename literals may contain at most UINT16_MAX bytes
-/// excluding the terminator; longer literals are rejected at compile time.
+/// Stringified assertion expressions are reported in full, up to UINT16_MAX bytes;
+/// longer expressions and file names are truncated in reports.
 /// On Windows, assertion macros must be compiled into the test executable, including
 /// statically linked helpers. The code being tested may reside in DLLs.
 ///
@@ -1662,7 +1661,9 @@ typedef struct TRIAXI_AssertHdr {
   uint8_t             neg;  // Negated
   uint32_t            cr;   // code/signal
   uint32_t            line;
-  uint16_t            expr_len, file_len; // Byte counts, excluding NUL terminators.
+  // Byte counts, excluding NUL terminators. Longer literals wrap and are displayed truncated;
+  // the stored length never exceeds the literal, so it is never read past.
+  uint16_t            expr_len, file_len;
 #if TRIAXI_PLATFORM_POSIX
   const char* expr_str;
   const char* file_str;
@@ -1673,14 +1674,14 @@ typedef struct TRIAXI_AssertHdr {
 #endif
 } TRIAXI_AssertHdr;
 
-#define TRIAXI_ENCODING_MASK      0x0Fu
-#define TRIAXI_ENCODING_DEFAULT   0x00u
-#define TRIAXI_ENCODING_STRING    0x01u
-// Repeated size_t lengths followed by raw argument bytes; embedded NULs are preserved.
-#define TRIAXI_ENCODING_BLOB      0x02u
-
-#define TRIAXI_ENCODING_NULL_ARG1 0x40u
-#define TRIAXI_ENCODING_NULL_ARG2 0x80u
+enum {
+  TRIAXI_ENCODING_MASK      = 0x0Fu,
+  TRIAXI_ENCODING_DEFAULT   = 0x00u,
+  TRIAXI_ENCODING_STRING    = 0x01u,
+  TRIAXI_ENCODING_BLOB      = 0x02u,
+  TRIAXI_ENCODING_NULL_ARG1 = 0x40u,
+  TRIAXI_ENCODING_NULL_ARG2 = 0x80u
+};
 
 typedef enum TRIAXI_AR {
   TRIAXI_AR_FAIL1 = 1,
@@ -2024,12 +2025,9 @@ static inline void triaxi_log_hdr(uint16_t len, uint8_t type, uint8_t ae, uint8_
   TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;
 }
 
-// Constant array bounds reject oversized literals in both C11 and C++11.
 #define TRIAXI_LOG_HDR(type, ae, neg, cr, lit)                                                     \
-  ((void)sizeof(                                                                                   \
-       char[(sizeof(lit) - 1 <= UINT16_MAX && sizeof(__FILE__) - 1 <= UINT16_MAX) ? 1 : -1]),      \
-   triaxi_log_hdr((uint16_t)(sizeof(lit) - 1), (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg),     \
-                  (cr), (uint32_t)__LINE__, (lit), __FILE__, (uint16_t)(sizeof(__FILE__) - 1)))
+  triaxi_log_hdr((uint16_t)(sizeof(lit) - 1), (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg),      \
+                 (cr), (uint32_t)__LINE__, (lit), __FILE__, (uint16_t)(sizeof(__FILE__) - 1))
 
 static inline void triaxi_debug_break(void) {
 #if TRIAXI_PLATFORM_WINDOWS
