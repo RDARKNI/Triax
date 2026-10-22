@@ -928,6 +928,7 @@ typedef uint32_t Triax_Fault;
 #else
 # define TRIAXI_MSVC_COMPAT 0L
 #endif
+
 #ifdef __GNUC__
 # define TRIAXI_GNU_COMPAT 1L
 #else
@@ -939,12 +940,6 @@ typedef uint32_t Triax_Fault;
 # define TRIAXI_GNU_DIAG 1L
 #else
 # define TRIAXI_GNU_DIAG 0L
-#endif
-
-#ifndef __has_attribute
-# define TRIAXI_HAS_ATTRIBUTE(x) 0
-#else
-# define TRIAXI_HAS_ATTRIBUTE(x) __has_attribute(x)
 #endif
 
 // object format
@@ -1012,7 +1007,6 @@ typedef uint32_t Triax_Fault;
 #if TRIAXI_CPP
 # include <array>
 # include <iostream>
-# include <sstream>
 # include <type_traits>
 # include <utility>
 # if TRIAXI_CPP >= 202002L && defined(__has_include)
@@ -1170,7 +1164,8 @@ static inline char* triaxi_catStr(char* dst, Triax_Str src) {
 static inline void triaxi_fputStr(Triax_Str str, FILE* out) { fwrite(str.str, 1, str.len, out); }
 #define triaxi_fputlit(str, stream) fwrite(str, 1, triaxi_lenof(str), stream)
 
-TRIAXI_EXTERN_C_BEG triaxi_noreturn void triaxi_fatal_f(const char* file, int line);
+TRIAXI_EXTERN_C_BEG triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file,
+                                                                              int         line);
 TRIAXI_EXTERN_C_END
 #define triaxi_fatal() triaxi_fatal_f(__FILE__, __LINE__)
 
@@ -1206,7 +1201,7 @@ static inline Triax_Str triaxi_tostr(const char* cstr) {
 #endif
 
 static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
-  if (!e1.str || !e2.str) { return (!e1.str && !e2.str) ? 0 : !e1.str ? -1 : 1; }
+  if (!e1.str || !e2.str) { return (e1.str != NULL) - (e2.str != NULL); }
   size_t min = TRIAXI_MIN(e1.len, e2.len);
   int    cr  = min ? memcmp(e1.str, e2.str, min) : 0;
   return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
@@ -1540,13 +1535,10 @@ private:
 
 #if TRIAXI_FORMAT_COFF
 # define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
-   static const T x##_obj = __VA_ARGS__;                                                           \
-   SECTION(x)                                                                                      \
-   TRIAXI_EXTERN_FOR_CONST const T* const x = &x##_obj
+   static const T                                    x##_obj = __VA_ARGS__;                        \
+   SECTION(x) TRIAXI_EXTERN_FOR_CONST const T* const x       = &x##_obj
 #else
-# define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
-   SECTION(x)                                                                                      \
-   static const T x = __VA_ARGS__
+# define TRIAXI_MAKE_RECORD(T, SECTION, x, ...) SECTION(x) static const T x = __VA_ARGS__
 #endif
 
 #define TRIAXI_MAKE_TEST(x, ...)                                                                   \
@@ -2195,7 +2187,6 @@ static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
       remaining -= bufs[i].iov_len;
     }
   }
-
 #elif TRIAXI_PLATFORM_WINDOWS
   if (TRIAXI_exec.pkg.len + pad <= sizeof(TRIAXI_exec.storage)) {
     p = triaxi_catstr(p, e1.str, e1_len);
@@ -2950,30 +2941,32 @@ struct TRIAXI_IsHandled
     : std::integral_constant<bool, std::is_arithmetic<T>::value
                                        || std::is_pointer<typename std::decay<T>::type>::value
                                        || TRIAXI_IsStr<T>::value> {};
+template <class T>
+struct TRIAXI_IsSignedInt
+    : std::integral_constant<bool, std::is_integral<T>::value && std::is_signed<T>::value> {};
+
 # define TRIAXI_FOR_i(T, U)                                                                        \
-   TRIAXI_EnableIf<(std::is_integral<T>::value && std::is_signed<T>::value                         \
-                    && std::is_integral<U>::value && std::is_signed<U>::value),                    \
-                   int> = 0
+   TRIAXI_EnableIf<TRIAXI_IsSignedInt<T>::value && TRIAXI_IsSignedInt<U>::value> = 0
+
 # define TRIAXI_FOR_u(T, U)                                                                        \
-   TRIAXI_EnableIf<(std::is_unsigned<T>::value && std::is_unsigned<U>::value), int> = 0
+   TRIAXI_EnableIf<std::is_unsigned<T>::value && std::is_unsigned<U>::value> = 0
+
 # define TRIAXI_FOR_iu(T, U)                                                                       \
-   TRIAXI_EnableIf<(std::is_integral<T>::value && std::is_signed<T>::value                         \
-                    && std::is_unsigned<U>::value),                                                \
-                   int> = 0
-# define TRIAXI_FOR_ui(T, U)                                                                       \
-   TRIAXI_EnableIf<(std::is_unsigned<T>::value && std::is_integral<U>::value                       \
-                    && std::is_signed<U>::value),                                                  \
-                   int> = 0
+   TRIAXI_EnableIf<TRIAXI_IsSignedInt<T>::value && std::is_unsigned<U>::value> = 0
+
+# define TRIAXI_FOR_ui(T, U) TRIAXI_FOR_iu(U, T)
+
 # define TRIAXI_FOR_ld(T, U)                                                                       \
-   TRIAXI_EnableIf<(std::is_floating_point<T>::value && std::is_floating_point<U>::value), int> = 0
+   TRIAXI_EnableIf<std::is_floating_point<T>::value && std::is_floating_point<U>::value> = 0
+
 # define TRIAXI_FOR_vp(T, U)                                                                       \
-   TRIAXI_EnableIf<(std::is_pointer<T>::value && std::is_pointer<U>::value                         \
-                    && !(TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value)),                       \
-                   int> = 0
-# define TRIAXI_FOR_SS(T, U)                                                                       \
-   TRIAXI_EnableIf<TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value, int> = 0
+   TRIAXI_EnableIf<std::is_pointer<T>::value && std::is_pointer<U>::value                          \
+                   && !(TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value)> = 0
+
+# define TRIAXI_FOR_SS(T, U) TRIAXI_EnableIf<TRIAXI_IsStr<T>::value && TRIAXI_IsStr<U>::value> = 0
+
 # define TRIAXI_FOR_unhandled(T, U)                                                                \
-   TRIAXI_EnableIf<!(TRIAXI_IsHandled<T>::value && TRIAXI_IsHandled<U>::value), int> = 0
+   TRIAXI_EnableIf<!TRIAXI_IsHandled<T>::value || !TRIAXI_IsHandled<U>::value> = 0
 
 # define TRIAXI_AF_FORWARD(OP, SUF)                                                                \
    template <class T, class U, TRIAXI_FOR_##SUF(T, U)>                                             \
@@ -3164,7 +3157,6 @@ typedef struct TRIAXI_TestSlot {
 # if TRIAXI_PLATFORM_WINDOWS
   WCHAR* environment;
 # endif
-
   // Current invocation state.
 # if TRIAXI_PLATFORM_POSIX
   pid_t process;
@@ -3802,7 +3794,7 @@ static inline void triaxi_process_control_reset(void) {
 # endif
 }
 TRIAXI_EXTERN_C_BEG
-triaxi_noreturn void triaxi_fatal_f(const char* file, int line) {
+triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file, int line) {
   // A framework failure must never satisfy a user's expected crash/exit.
   if (TRIAXI_exec.in_test) {
     TRIAXI_exec.shared->exit.code = triaxi_error_pack(TRIAXI_ERROR_INTERNAL, 0);
@@ -4120,9 +4112,9 @@ static inline void triaxi_config_validate(const Triax_RunConfig* config) {
   case TRIAX_VERBOSITY_ALWAYS :
   case TRIAX_VERBOSITY_NEVER  : break;
   default:
-    triaxi_config_error("Invalid Verbosity Value Selected: must be TRIAX_VERBOSITY_INHERIT, "
-                        "TRIAX_VERBOSITY_ON_FAIL, TRIAX_VERBOSITY_ALWAYS or "
-                        "TRIAX_VERBOSITY_NEVER.");
+    triaxi_config_error(
+        "Invalid Verbosity Value Selected: must be TRIAX_VERBOSITY_INHERIT, "
+        "TRIAX_VERBOSITY_ON_FAIL, TRIAX_VERBOSITY_ALWAYS or TRIAX_VERBOSITY_NEVER.");
   }
 
   if (config->njobs > TRIAXI_JOBS_MAX) {
@@ -5342,7 +5334,7 @@ static inline void triaxi_print_assert(const TRIAXI_RunCtx* run, const TRIAXI_Te
                                        const TRIAXI_TestResult* tr, const TRIAXI_AssertHdr* hdr,
                                        const TRIAXI_AssertRes* res) {
   Triax_Verbosity v = inv->settings.verbosity;
-  if (v != TRIAX_VERBOSITY_NEVER && !(v != TRIAX_VERBOSITY_ALWAYS && !res)) {
+  if (v != TRIAX_VERBOSITY_NEVER && (v == TRIAX_VERBOSITY_ALWAYS || res)) {
     triaxi_print_assert_text(run, hdr, res);
   }
   triaxi_print_assert_json(run, tr, hdr, res);
@@ -6333,10 +6325,9 @@ static inline Triax_RunConfig triaxi_parse_argv(int argc, const char* const* arg
         *outtypes[type] = val;
       }
       // text is stdout by default, turns off when other is set to stdout
-      if (*outtypes[type] == TRIAX_OUTPATH_STDOUT) {
-        if (type != 0 && *outtypes[0] == TRIAX_OUTPATH_DEFAULT) {
-          *outtypes[0] = TRIAX_OUTPATH_NONE;
-        }
+      if (*outtypes[type] == TRIAX_OUTPATH_STDOUT && type != 0
+          && *outtypes[0] == TRIAX_OUTPATH_DEFAULT) {
+        *outtypes[0] = TRIAX_OUTPATH_NONE;
       }
       out_set[type] = 1;
     }
