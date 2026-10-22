@@ -313,9 +313,43 @@ if(BUILD_TESTING)
         PRIVATE
             tests
     )
+# The C self-tests compiled again as C++, so the C++ registration path
+# (builder, exception wrapper) runs the full C suite too. Options use
+# tests/triax_opt.h to stay valid in both languages. Each source gets a
+# generated one-line .cpp wrapper, since a source file's LANGUAGE property
+# would also switch it for triax-selftest-c.
+    get_target_property(TRIAX_SELFTEST_C_SOURCES triax-selftest-c SOURCES)
+    set(TRIAX_SELFTEST_C_AS_CPP_SOURCES)
+    foreach(src IN LISTS TRIAX_SELFTEST_C_SOURCES)
+        get_filename_component(name "${src}" NAME_WE)
+        set(wrapper "${CMAKE_CURRENT_BINARY_DIR}/c_as_cpp/${name}.cpp")
+        file(CONFIGURE OUTPUT "${wrapper}"
+             CONTENT "#include \"${CMAKE_CURRENT_SOURCE_DIR}/${src}\"\n")
+        list(APPEND TRIAX_SELFTEST_C_AS_CPP_SOURCES "${wrapper}")
+    endforeach()
+    add_executable(triax-selftest-c-as-cpp ${TRIAX_SELFTEST_C_AS_CPP_SOURCES})
+    target_link_libraries(
+        triax-selftest-c-as-cpp
+        PRIVATE
+            Triax::Triax
+            triax-warnings
+    )
+    target_include_directories(
+        triax-selftest-c-as-cpp
+        PRIVATE
+            tests
+    )
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties(
+            "${CMAKE_CURRENT_BINARY_DIR}/c_as_cpp/messages.cpp"
+            PROPERTIES
+                COMPILE_OPTIONS "-Werror=format-zero-length;-Wno-pedantic"
+        )
+    endif()
     if(TARGET triax-sanitizers)
         target_link_libraries(triax-selftest-c PRIVATE triax-sanitizers)
         target_link_libraries(triax-selftest-cpp PRIVATE triax-sanitizers)
+        target_link_libraries(triax-selftest-c-as-cpp PRIVATE triax-sanitizers)
     endif()
     add_test(
         NAME triax-c
@@ -324,6 +358,14 @@ if(BUILD_TESTING)
     add_test(
         NAME triax-c-parallel
         COMMAND triax-selftest-c --no-color --jobs=2
+    )
+    add_test(
+        NAME triax-c-as-cpp
+        COMMAND triax-selftest-c-as-cpp --no-color
+    )
+    add_test(
+        NAME triax-c-as-cpp-parallel
+        COMMAND triax-selftest-c-as-cpp --no-color --jobs=2
     )
     add_test(
         NAME triax-cpp

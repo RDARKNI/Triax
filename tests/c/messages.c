@@ -5,7 +5,7 @@
 #include "triax.h"
 #include "triax_selfverify.h"
 
-triax_suite(messages, 0);
+triax_suite(messages, );
 
 triaxi_validate(messages, check_without_message_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect(1);

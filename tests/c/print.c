@@ -12,11 +12,13 @@
 // verification is real coverage on its own, just narrower than the original.
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 
 #include "portable.h"
 
-triax_suite(print, .verbosity = TRIAX_VERBOSITY_DEFAULT, .isolation = TRIAX_ISOLATION_ON);
+triax_suite(print,
+            triax_opt(verbosity, TRIAX_VERBOSITY_DEFAULT) triax_opt(isolation, TRIAX_ISOLATION_ON));
 triaxi_validate(print, test_pass_stdout_noprint, TRIAXI_VALIDATE_PASSED) {
   printf("SHANT PRINT"); // nolint
   triax_expect_true(1);
@@ -61,8 +63,8 @@ triaxi_validate(print, test_crash_stderr_print, TRIAXI_VALIDATE_UCRASHED) {
 }
 
 // ── test-level verbosity: never ─────────────────────────────────────────────
-triax_suite(print_verbosity_testlevel_never, .verbosity = TRIAX_VERBOSITY_ALWAYS,
-            .isolation = TRIAX_ISOLATION_ON);
+triax_suite(print_verbosity_testlevel_never,
+            triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS) triax_opt(isolation, TRIAX_ISOLATION_ON));
 triaxi_validate(print_verbosity_testlevel_never, test_fail_stdout_print_never,
                 TRIAXI_VALIDATE_FAILED) {
   printf("SHANT PRINT\n"); // nolint
@@ -158,7 +160,7 @@ triaxi_validate_opts(print_always, test_print_to_err_e_always, TRIAXI_VALIDATE_U
 }
 
 // ── always, suite-level ─────────────────────────────────────────────────────
-triax_suite(print_always_suitelevel, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+triax_suite(print_always_suitelevel, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 triaxi_validate(print_always_suitelevel, test_pass_stdout_print_always_suitelevel,
                 TRIAXI_VALIDATE_PASSED) {
   printf("SHALL PRINT\n"); // nolint
@@ -215,7 +217,7 @@ triaxi_validate_opts(print_always_suitelevel, test_print_to_err_e_always_suitele
 }
 
 // ── never, suite-level ──────────────────────────────────────────────────────
-triax_suite(print_never_suitelevel, .verbosity = TRIAX_VERBOSITY_NEVER);
+triax_suite(print_never_suitelevel, triax_opt(verbosity, TRIAX_VERBOSITY_NEVER));
 triaxi_validate(print_never_suitelevel, test_pass_stdout_noprint2_suitelevel,
                 TRIAXI_VALIDATE_PASSED) {
   printf("SHANT PRINT\n"); // nolint

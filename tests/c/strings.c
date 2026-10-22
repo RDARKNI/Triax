@@ -5,9 +5,11 @@
 // separate, unverified demo binary.
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 
-triax_suite(strings, .verbosity = TRIAX_VERBOSITY_ALWAYS, .isolation = TRIAX_ISOLATION_ON);
+triax_suite(strings,
+            triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS) triax_opt(isolation, TRIAX_ISOLATION_ON));
 
 triaxi_validate(strings, streq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_streq("hello", "hello");

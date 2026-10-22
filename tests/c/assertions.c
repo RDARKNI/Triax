@@ -5,10 +5,14 @@
 // PASS in ctest instead of needing a separate, unverified demo binary.
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 #include <float.h>
+#if !defined(LDBL_TRUE_MIN) && defined(__LDBL_DENORM_MIN__)
+# define LDBL_TRUE_MIN __LDBL_DENORM_MIN__ // missing from C++ before C++17
+#endif
 
-triax_suite(assertions, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+triax_suite(assertions, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 // triaxi_print_unpack_args' default encoding treats every NUL byte in a logged message as a
 // one-argument separator, with a fixed 5-slot array to unpack into. A message that legitimately
@@ -68,7 +72,7 @@ triaxi_validate(assertions, eq_neq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_neq(0.1f, 0.1);         // genuinely different representations
 
   const char *hello1 = "hello", *hello2 = "hello";
-  char *      world1 = "world", *world2 = "world";
+  char        world1[] = "world", world2[] = "world"; // decay to (non-const) char*
   triax_expect_eq(hello1, hello2);
   triax_expect_eq(hello2, hello1);
   triax_expect_eq(world1, world2);
@@ -159,7 +163,7 @@ triaxi_validate(assertions, true_false_null_fail, TRIAXI_VALIDATE_FAILED) {
 
 // ── ordering — lt, leq, gt, geq for ints, floats, strings ──────────────────
 
-triax_suite(ordering, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+triax_suite(ordering, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 triaxi_validate(ordering, int_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_lt(1, 2);
@@ -212,7 +216,8 @@ triaxi_validate(ordering, float_fail, TRIAXI_VALIDATE_FAILED) {
 triaxi_validate(ordering, str_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_lt("apple", "banana");
   triax_expect_lt("", "a");
-  triax_expect_lt(NULL, "");    // NULL < empty string
+  const char* null_str = NULL;
+  triax_expect_lt(null_str, ""); // NULL < empty string
   triax_expect_lt("ab", "abc"); // prefix: shorter < longer
   triax_expect_leq("apple", "apple");
   triax_expect_leq("apple", "banana");
@@ -228,7 +233,7 @@ triaxi_validate(ordering, str_fail, TRIAXI_VALIDATE_FAILED) {
 // ── float tolerance — floateq_abstol / floatneq_abstol ─────────────────────
 // Note: the old suite named these "_tol"; the current API is "_abstol".
 
-triax_suite(float_tol, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+triax_suite(float_tol, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 triaxi_validate(float_tol, floateq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_floateq_abstol(1.0, 1.0 + 9e-5, 1e-4); // within tolerance

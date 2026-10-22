@@ -8,6 +8,7 @@
 // triaxi_validate, so a test can't pass by tripping the wrong error path.
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 
 // Isolated: skip_in_fixture/assertion_in_fixture abort() the process (see
@@ -15,7 +16,7 @@
 // the normal longjmp/throw unwind), so this suite runs them the same way
 // exits.c runs its crash tests: as their own child process, matching the
 // safe/tested path rather than relying on the in-process SIGABRT handler.
-triax_suite(errors, .isolation = TRIAX_ISOLATION_ON);
+triax_suite(errors, triax_opt(isolation, TRIAX_ISOLATION_ON));
 
 triaxi_validate_user_error(errors, param_access_without_params, "parameter_access") {
   // Not registered with .params — triax_param() has nothing to point at.
@@ -26,7 +27,7 @@ static void errors_skip_in_fixture_init(void) {
   if (triaxi_validate_is_child()) { triax_skip(); }
 }
 triaxi_validate_user_error_attrs(errors, skip_in_fixture, "skip_in_fixture",
-                                 .init = errors_skip_in_fixture_init) {
+                                 triax_opt(init, errors_skip_in_fixture_init)) {
   // Unreached: the fixture above aborts before this body ever runs.
 }
 
@@ -34,7 +35,7 @@ static void errors_assertion_in_fixture_init(void) {
   if (triaxi_validate_is_child()) { triax_assert_true(1); }
 }
 triaxi_validate_user_error_attrs(errors, assertion_in_fixture, "assertion_in_fixture",
-                                 .init = errors_assertion_in_fixture_init) {
+                                 triax_opt(init, errors_assertion_in_fixture_init)) {
   // Unreached: the fixture above aborts before this body ever runs.
 }
 
@@ -70,7 +71,7 @@ static void errors_fini_proves_it_ran(void) {
   if (triaxi_validate_is_child()) { triax_skip(); }
 }
 triaxi_validate_user_error_attrs(errors, body_error_still_runs_fini, "skip_in_fixture",
-                                 .fini = errors_fini_proves_it_ran) {
+                                 triax_opt(fini, errors_fini_proves_it_ran)) {
   (void)triax_read_file("/nonexistent/triax-selftest-path/does-not-exist");
 }
 
@@ -81,9 +82,9 @@ triaxi_validate_user_error_attrs(errors, body_error_still_runs_fini, "skip_in_fi
 // overwrite that with a generic TRIAXI_EXIT_FAULT, reporting a bare
 // "Aborted" instead. Reusing errors_skip_in_fixture_init non-isolated proves
 // the recorded reason now survives that abort.
-triax_suite(errors_noniso, .isolation = TRIAX_ISOLATION_OFF);
+triax_suite(errors_noniso, triax_opt(isolation, TRIAX_ISOLATION_OFF));
 triaxi_validate_user_error_attrs(errors_noniso, skip_in_fixture, "skip_in_fixture",
-                                 .init = errors_skip_in_fixture_init) {
+                                 triax_opt(init, errors_skip_in_fixture_init)) {
   // Unreached: the fixture above aborts before this body ever runs.
 }
 
@@ -112,7 +113,7 @@ triaxi_validate_user_error(errors_noniso, framework_error_not_expected_fault, "i
 // triaxi_validate_opts_user_error below are what actually reach the
 // resolved settings triaxi_test_start checks. The `errors` suite above
 // can't be reused here since its .isolation = ON would otherwise win.
-triax_suite(errors_config, 0);
+triax_suite(errors_config, );
 
 triaxi_validate_opts_user_error(errors_config, timeout_without_isolation,
                                 "timeout_without_isolation", 500,

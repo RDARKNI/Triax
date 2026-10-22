@@ -5,9 +5,10 @@
 // separate, unverified demo binary.
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 
-triax_suite(memory, .verbosity = TRIAX_VERBOSITY_ALWAYS);
+triax_suite(memory, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 triaxi_validate(memory, memeq_pass, TRIAXI_VALIDATE_PASSED) {
   char a[4] = {1, 2, 3, 4}, b[4] = {1, 2, 3, 4};

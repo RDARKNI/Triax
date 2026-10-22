@@ -61,14 +61,16 @@ triaxi_validate(invalid_inputs, ptr_ptr_leq_pass, TRIAXI_VALIDATE_PASSED) {
 
 triaxi_validate(invalid_inputs, wrong_string_comparison, TRIAXI_VALIDATE_FAILED) {
   const char* s = "Hello, this is fine!";
-  void*       p = (void*)"This is garbage";
+  static char garbage[] = "This is garbage";
+  void*       p         = garbage;
   triax_expect_eq(p, s); // pointer comparison - correct
   triax_expect_eq(s, p); // string comparison - dangerous?
 
   triax_expect_eq(s, s); // string comparison - dangerous
 }
 triaxi_validate(invalid_inputs, ptr_str, TRIAXI_VALIDATE_PASSED) {
-  void* p = (void*)"hello";
+  static char hello[] = "hello";
+  void*       p       = hello;
   triax_expect_eq(p, p);
   char*       str  = (char*)p;
   const char* cstr = str;

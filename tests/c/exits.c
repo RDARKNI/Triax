@@ -10,11 +10,12 @@
 // would also bound the outer meta-check's own fork+exec+wait+read work).
 #define TRIAX_MULTI_TU
 #include "triax.h"
+#include "triax_opt.h"
 #include "triax_selfverify.h"
 
 #include "portable.h"
 
-triax_suite(exits, .isolation = TRIAX_ISOLATION_ON);
+triax_suite(exits, triax_opt(isolation, TRIAX_ISOLATION_ON));
 
 triaxi_validate(exits, skip, TRIAXI_VALIDATE_SKIPPED) { triax_skip(); }
 triaxi_validate(exits, pass, TRIAXI_VALIDATE_PASSED) { triax_assert_true(1); }
@@ -94,7 +95,7 @@ static inline int spin_forever(void) {
   while (keep_going) {}
   return 0;
 }
-triax_suite(timeout, .isolation = TRIAX_ISOLATION_ON);
+triax_suite(timeout, triax_opt(isolation, TRIAX_ISOLATION_ON));
 triaxi_validate_opts(timeout, timeout_in_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
   triax_expect_true(spin_forever());

@@ -373,6 +373,13 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 ///
 /// Use assertion macros and @ref triax_skip only in the test body, on the thread
 /// executing the test. Calling them from fixtures is a test API error.
+/// Assertions may also be used in helper functions called by the test; diagnostics
+/// identify the source file and line containing the assertion itself.
+/// Stringified assertion expressions are reported in full without truncation.
+/// Expression and source filename literals may contain at most UINT16_MAX bytes
+/// excluding the terminator; longer literals are rejected at compile time.
+/// On Windows, assertion macros must be compiled into the test executable, including
+/// statically linked helpers. The code being tested may reside in DLLs.
 ///
 /// Fault and exit checks have the same variants, but actual process termination
 /// ends the invocation: code after the check and fixture teardown do not run.
@@ -380,16 +387,6 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 /// being created for each check. See @ref triax_assert_fault and
 /// @ref triax_assert_exit.
 /// @{
-
-/// @brief Maximum number of bytes recorded for a stringified assertion expression.
-/// Longer expressions are truncated in diagnostics; evaluation is unaffected.
-#if TRIAXI_PLATFORM_POSIX
-# define TRIAX_EXPR_MAX UINT8_MAX
-#elif TRIAXI_PLATFORM_WINDOWS
-# define TRIAX_EXPR_MAX 116
-#else // triaxi_embedded
-# error "TRIAX_NO_OS: not yet implemented for this region"
-#endif
 
 /// @brief Stops the current test and records it as skipped.
 /// Fixture teardown still runs. In C++, test-local objects are unwound.
@@ -1154,6 +1151,16 @@ typedef uint32_t Triax_Fault;
 #define TRIAXI_MIN(x, y)    ((x) <= (y) ? (x) : (y))
 #define TRIAXI_MAX(x, y)    ((x) >= (y) ? (x) : (y))
 
+#if defined(__SIZEOF_INT128__)
+# define TRIAXI_HAS_INT128        1
+# define TRIAXI_IFHAS_INT128(...) __VA_ARGS__
+__extension__ typedef __int128          TRIAXI_Int128;
+__extension__ typedef unsigned __int128 TRIAXI_UInt128;
+#else
+# define TRIAXI_HAS_INT128 0
+# define TRIAXI_IFHAS_INT128(...)
+#endif
+
 static inline char* triaxi_catstr(char* dst, const void* src, size_t len) {
   return memcpy(dst, src, len), dst + len;
 }
@@ -1408,16 +1415,10 @@ typedef struct TRIAXI_SuiteReg {
 #pragma endregion common_types
 
 #pragma region registration_macros
-// clang-format off
 #if !TRIAXI_CPP
-#  define TRIAXI_Test_attrs_init(...) {{0, __VA_ARGS__}}
-#  define TRIAXI_Suite_attrs_init(...) {0, __VA_ARGS__}
-#  define TRIAXI_as_params(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
-#   else
-#  define TRIAXI_Test_attrs_init(...) TRIAXI_TestConfigBuilder{} __VA_ARGS__
-#  define TRIAXI_Suite_attrs_init(...) TRIAXI_AttributeBuilder{} __VA_ARGS__
-#  define TRIAXI_as_params(arr) arr
-// clang-format on
+# define TRIAXI_as_params(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
+#else
+# define TRIAXI_as_params(arr) arr
 template <typename D>
 struct TRIAXI_AttributeBuilderBase {
   constexpr D skip(bool v = true) const {
@@ -1586,15 +1587,15 @@ TRIAXI_EXTERN_C_END
 # define triaxi_test(suitename, name, ...)                                                         \
    static void triaxf_##suitename##_##name(void);                                                  \
    TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                          \
-   TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                              \
-                    {#suitename, #name, __FILE__, triaxf_##suitename##_##name,                     \
-                     TRIAXI_Test_attrs_init(__VA_ARGS__)});                                        \
+   TRIAXI_MAKE_TEST(                                                                               \
+       TRIAXI_test_##suitename##_##name,                                                           \
+       {#suitename, #name, __FILE__, triaxf_##suitename##_##name, {.config = {0, __VA_ARGS__}}});  \
    TRIAXI_IGNWARN_GNU_END                                                                          \
    static void triaxf_##suitename##_##name(void)
 
 # define triaxi_suite(name, ...)                                                                   \
    TRIAXI_IGNWARN_GNU_BEG("-Wmissing-field-initializers")                                          \
-   TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});        \
+   TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, {0, __VA_ARGS__}});                            \
    TRIAXI_IGNWARN_GNU_END typedef char triaxi_dummy
 
 #elif TRIAXI_CPP
@@ -1612,13 +1613,14 @@ TRIAXI_EXTERN_C_END
        longjmp(TRIAXI_exec.jmp, (int)outcome);                                                     \
      }                                                                                             \
      TRIAXI_MAKE_TEST(TRIAXI_test_##suitename##_##name,                                            \
-                      TRIAXI_Test(#suitename, #name, __FILE__, triaxfwrapped_##suitename##_##name, \
-                                  TRIAXI_Test_attrs_init(__VA_ARGS__)));                           \
+                      TRIAXI_Test(                                                                 \
+                          #suitename, #name, __FILE__, triaxfwrapped_##suitename##_##name,         \
+                          TRIAXI_TestConfigBuilder {} __VA_ARGS__));                               \
    }                                                                                               \
    static void triaxf_##suitename##_##name(void)
 # define triaxi_suite(name, ...)                                                                   \
    extern "C" {                                                                                    \
-     TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_Suite_attrs_init(__VA_ARGS__)});      \
+     TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_AttributeBuilder{} __VA_ARGS__});     \
    }                                                                                               \
    typedef char triaxi_dummy
 
@@ -1651,23 +1653,21 @@ typedef enum TRIAXI_AssertType {
 enum { TRIAXI_AT_COUNT = TRIAXI_COUNT_ALL(TRIAXI_ASSERTTYPE_ITEMS) };
 
 typedef uint8_t TRIAXI_PacketPrefix;
-enum { TRIAXI_RES_PREFIX = 0 };
+enum { TRIAXI_RES_PREFIX = 0, TRIAXI_HDR_PREFIX = 1 };
 
 typedef struct TRIAXI_AssertHdr {
-  union {
-    TRIAXI_PacketPrefix is_hdr;
-    uint8_t             expr_len;
-  };
-  uint8_t  type; // TRIAXI_AssertType
-  uint8_t  ae;   // Assert vs Expect
-  uint8_t  neg;  // Negated
-  uint32_t cr;   // code/signal
-  uint32_t line;
+  TRIAXI_PacketPrefix is_hdr;
+  uint8_t             type; // TRIAXI_AssertType
+  uint8_t             ae;   // Assert vs Expect
+  uint8_t             neg;  // Negated
+  uint32_t            cr;   // code/signal
+  uint32_t            line;
+  uint16_t            expr_len, file_len; // Byte counts, excluding NUL terminators.
 #if TRIAXI_PLATFORM_POSIX
-  uint8_t     reserved[4];
   const char* expr_str;
+  const char* file_str;
 #elif TRIAXI_PLATFORM_WINDOWS
-  char expr_str[TRIAX_EXPR_MAX];
+  uint32_t expr_rva, file_rva; // Literal offsets within the executable image.
 #else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
@@ -1739,7 +1739,8 @@ typedef enum TRIAXI_Error {
   TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION,
 
   TRIAXI_ERROR_FILE_OPEN,
-  TRIAXI_ERROR_INTERNAL
+  TRIAXI_ERROR_INTERNAL,
+  TRIAXI_ERROR_ASSERT_OUTSIDE_EXECUTABLE
 } TRIAXI_Error;
 
 enum {
@@ -1814,6 +1815,10 @@ TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
   const void*             param;
   jmp_buf                 jmp;
   volatile TRIAXI_Shared* shared; // volatile to ensure write before _exit()
+#if TRIAXI_PLATFORM_WINDOWS
+  uintptr_t image_base;
+  uint32_t  image_size;
+#endif
   struct {
     void** ptrs;
     size_t cap, count;
@@ -1833,6 +1838,49 @@ TRIAXI_EXTERN_C_END
 #elif TRIAXI_MSVC_COMPAT
 # pragma warning(pop)
 #endif
+
+#if TRIAXI_PLATFORM_WINDOWS
+// Both processes run the same image; RVAs are independent of its ASLR load address.
+static inline uint32_t triaxi_literal_rva(const char* str, size_t len) {
+  uintptr_t offset = (uintptr_t)str - TRIAXI_exec.image_base;
+  if (offset >= TRIAXI_exec.image_size || len >= TRIAXI_exec.image_size - offset) {
+    triaxi_user_error(TRIAXI_ERROR_ASSERT_OUTSIDE_EXECUTABLE);
+  }
+  return (uint32_t)offset;
+}
+#endif
+
+static inline const char* triaxi_assert_file(const TRIAXI_AssertHdr* hdr) {
+#if TRIAXI_PLATFORM_POSIX
+  return hdr->file_str;
+#elif TRIAXI_PLATFORM_WINDOWS
+  return (const char*)(TRIAXI_exec.image_base + hdr->file_rva);
+#endif
+}
+
+static inline const char* triaxi_assert_expr(const TRIAXI_AssertHdr* hdr) {
+#if TRIAXI_PLATFORM_POSIX
+  return hdr->expr_str;
+#elif TRIAXI_PLATFORM_WINDOWS
+  return (const char*)(TRIAXI_exec.image_base + hdr->expr_rva);
+#endif
+}
+
+// Validate offsets before resolving source locations in the reporting process.
+static inline void triaxi_assert_hdr_validate(const TRIAXI_AssertHdr* hdr) {
+  if (hdr->is_hdr != TRIAXI_HDR_PREFIX) { triaxi_fatal(); }
+#if TRIAXI_PLATFORM_WINDOWS
+  uint32_t size = TRIAXI_exec.image_size;
+  if (hdr->expr_rva >= size || hdr->expr_len >= size - hdr->expr_rva || hdr->file_rva >= size
+      || hdr->file_len >= size - hdr->file_rva) {
+    triaxi_fatal();
+  }
+  if (triaxi_assert_expr(hdr)[hdr->expr_len] != '\0'
+      || triaxi_assert_file(hdr)[hdr->file_len] != '\0') {
+    triaxi_fatal();
+  }
+#endif
+}
 
 static inline void* triaxi_allocate(size_t nbytes) {
   if (!nbytes) { return NULL; }
@@ -1972,24 +2020,16 @@ static inline void triaxi_log_write(const void* buf, size_t len) {
   triaxi_file_write(TRIAXI_exec.log, buf, len);
 }
 
-// Back up to a complete UTF-8 character boundary. s[cap] must be readable.
-// Malformed input is handled separately by the report writers.
-static inline size_t triaxi_utf8_safe_trunc_len(const char* s, size_t cap) {
-  if (((unsigned char)s[cap] & 0xC0) != 0x80) { return cap; }
-  size_t i = cap;
-  while (i > 0 && ((unsigned char)s[i - 1] & 0xC0) == 0x80) { --i; }
-  if (i > 0) { --i; }
-  return i;
-}
-
-static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t neg, uint32_t cr,
-                                  uint32_t line, const char* str) {
-  len = (uint8_t)triaxi_utf8_safe_trunc_len(str, len);
+static inline void triaxi_log_hdr(uint16_t len, uint8_t type, uint8_t ae, uint8_t neg, uint32_t cr,
+                                  uint32_t line, const char* str, const char* file,
+                                  uint16_t file_len) {
 #if TRIAXI_PLATFORM_POSIX
-  TRIAXI_AssertHdr hdr = {{len}, type, ae, neg, cr, line, {0}, str};
+  TRIAXI_AssertHdr hdr = {TRIAXI_HDR_PREFIX, type, ae, neg, cr, line, len, file_len, str, file};
 #elif TRIAXI_PLATFORM_WINDOWS
-  TRIAXI_AssertHdr hdr = {{len}, type, ae, neg, cr, line, {0}};
-  memcpy(hdr.expr_str, str, hdr.expr_len);
+  uint32_t         expr_rva = triaxi_literal_rva(str, len);
+  uint32_t         file_rva = triaxi_literal_rva(file, file_len);
+  TRIAXI_AssertHdr hdr
+      = {TRIAXI_HDR_PREFIX, type, ae, neg, cr, line, len, file_len, expr_rva, file_rva};
 #else // triaxi_embedded
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
@@ -2000,9 +2040,12 @@ static inline void triaxi_log_hdr(uint8_t len, uint8_t type, uint8_t ae, uint8_t
   TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;
 }
 
+// Constant array bounds reject oversized literals in both C11 and C++11.
 #define TRIAXI_LOG_HDR(type, ae, neg, cr, lit)                                                     \
-  triaxi_log_hdr((uint8_t)(sizeof(lit) - 1 <= TRIAX_EXPR_MAX ? sizeof(lit) - 1 : TRIAX_EXPR_MAX),  \
-                 (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg), (cr), (uint32_t)__LINE__, (lit))
+  ((void)sizeof(                                                                                   \
+       char[(sizeof(lit) - 1 <= UINT16_MAX && sizeof(__FILE__) - 1 <= UINT16_MAX) ? 1 : -1]),      \
+   triaxi_log_hdr((uint16_t)(sizeof(lit) - 1), (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg),     \
+                  (cr), (uint32_t)__LINE__, (lit), __FILE__, (uint16_t)(sizeof(__FILE__) - 1)))
 
 static inline void triaxi_debug_break(void) {
 #if TRIAXI_PLATFORM_WINDOWS
@@ -2656,6 +2699,7 @@ void triaxi_int_float_error(int, ...); // linker error on MSVC
 # define triaxi_SELFUN_S(F, E)                                                                     \
    _Generic(E, char*: F##_sS, const char*: F##_sS, Triax_Str: F##_SS, default: F##_vp)
 
+// todo int128 support
 // clang-format off
 #  define triaxi_SELFUN(F, E1, E2)                                                                 \
      _Generic(E2,                                                                                  \
@@ -4107,9 +4151,26 @@ static inline void triaxi_config_validate(const Triax_RunConfig* config) {
   }
 }
 
+# if TRIAXI_PLATFORM_WINDOWS
+static inline void triaxi_windows_image_init(void) {
+  HMODULE module = GetModuleHandleW(NULL);
+  if (!module) { triaxi_fatal(); }
+  const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)(const void*)module;
+  if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew <= 0) { triaxi_fatal(); }
+  const IMAGE_NT_HEADERS* nt
+      = (const IMAGE_NT_HEADERS*)(const void*)((const char*)module + dos->e_lfanew);
+  if (nt->Signature != IMAGE_NT_SIGNATURE || !nt->OptionalHeader.SizeOfImage) { triaxi_fatal(); }
+  TRIAXI_exec.image_base = (uintptr_t)module;
+  TRIAXI_exec.image_size = nt->OptionalHeader.SizeOfImage;
+}
+# endif
+
 static inline void          triaxi_windows_childentry(const Triax_RunConfig* config);
 static inline TRIAXI_RunCtx triaxi_runner_init(const Triax_RunConfig* config) {
   TRIAXI_exec.debug_break = config->debug_break || config->debug;
+# if TRIAXI_PLATFORM_WINDOWS
+  if (!TRIAXI_exec.image_base) { triaxi_windows_image_init(); }
+# endif
   if (!TRIAXI_global.tests.beg) { triaxi_sections_init(); }
   triaxi_windows_childentry(config);
   triaxi_config_validate(config);
@@ -4265,9 +4326,10 @@ static inline Triax_Str triaxi_error_name(TRIAXI_Error error) {
   case TRIAXI_ERROR_ASSERT_IN_FIXTURE        : return TRIAXI_STRLIT("assertion_in_fixture");
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION:
     return TRIAXI_STRLIT("exit_assert_without_isolation");
-  case TRIAXI_ERROR_FILE_OPEN: return TRIAXI_STRLIT("file_open");
-  case TRIAXI_ERROR_INTERNAL : return TRIAXI_STRLIT("internal_error");
-  default                    : triaxi_unreachable();
+  case TRIAXI_ERROR_FILE_OPEN                : return TRIAXI_STRLIT("file_open");
+  case TRIAXI_ERROR_INTERNAL                 : return TRIAXI_STRLIT("internal_error");
+  case TRIAXI_ERROR_ASSERT_OUTSIDE_EXECUTABLE: return TRIAXI_STRLIT("assertion_outside_executable");
+  default                                    : triaxi_unreachable();
   }
 }
 static inline Triax_Str triaxi_error_tostr(TRIAXI_Error error) {
@@ -4285,7 +4347,9 @@ static inline Triax_Str triaxi_error_tostr(TRIAXI_Error error) {
     return TRIAXI_STRLIT("exit assertions require process isolation");
   case TRIAXI_ERROR_FILE_OPEN: return TRIAXI_STRLIT("could not open file");
   case TRIAXI_ERROR_INTERNAL : return TRIAXI_STRLIT("internal framework error");
-  default                    : triaxi_unreachable();
+  case TRIAXI_ERROR_ASSERT_OUTSIDE_EXECUTABLE:
+    return TRIAXI_STRLIT("Windows assertion literals must reside in the test executable");
+  default: triaxi_unreachable();
   }
 }
 static inline Triax_Str triaxi_syserror_tostr(uint32_t syserr) {
@@ -4467,8 +4531,7 @@ static inline Triax_Str triaxi_sprint_hex(char* buf, Triax_Str s) {
   }
   return TRIAXI_T(Triax_Str){buf, (size_t)(out - buf)};
 }
-static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIAXI_Test* t,
-                                            const TRIAXI_AssertHdr* hdr,
+static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIAXI_AssertHdr* hdr,
                                             const TRIAXI_AssertRes* res) {
   FILE* out = run->out.streams.text;
   if (!out) { return; }
@@ -4491,9 +4554,10 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       case TRIAXI_AR_UEXCEPT : more = 0, l = "[X]"; break;
       }
     }
-    fprintf(out, "%s%s%s %s:%" PRIu32 " %s_%s(%.*s)%c", c, l, run->out.ansi.reset, t->file,
-            hdr->line, hdr->ae ? "assert" : "expect", TRIAXI_assertnames[neg][atype],
-            (int)hdr->expr_len, hdr->expr_str, more ? ' ' : '\n');
+    fprintf(out, "%s%s%s %.*s:%" PRIu32 " %s_%s(%.*s)%c", c, l, run->out.ansi.reset,
+            (int)hdr->file_len, triaxi_assert_file(hdr), hdr->line, hdr->ae ? "assert" : "expect",
+            TRIAXI_assertnames[neg][atype], (int)hdr->expr_len, triaxi_assert_expr(hdr),
+            more ? ' ' : '\n');
     if (!more) { return; }
   }
   TRIAXI_PrintArgs pa = triaxi_print_unpack_args(atype, res);
@@ -4898,9 +4962,12 @@ static inline void triaxi_print_assert_json(const TRIAXI_RunCtx* run, const TRIA
   fprintf(out,
           "%s\n            {"
           "\n              \"line\": %" PRIu32 ","
-          "\n              \"expression\": \"%s_%s(",
-          pref, hdr->line, hdr->ae ? "assert" : "expect", TRIAXI_assertnames[hdr->neg][atype]);
-  triaxi_print_json_escape(out, TRIAXI_T(Triax_Str){hdr->expr_str, hdr->expr_len});
+          "\n              \"file\": \"",
+          pref, hdr->line);
+  triaxi_print_json_escape(out, TRIAXI_T(Triax_Str){triaxi_assert_file(hdr), hdr->file_len});
+  fprintf(out, "\",\n              \"expression\": \"%s_%s(", hdr->ae ? "assert" : "expect",
+          TRIAXI_assertnames[hdr->neg][atype]);
+  triaxi_print_json_escape(out, TRIAXI_T(Triax_Str){triaxi_assert_expr(hdr), hdr->expr_len});
   triaxi_fputlit(")\"", out);
   switch (res->val) {
   case TRIAXI_AR_TIMEOUT: triaxi_fputlit(",\n              \"kind\": \"timeout\"", out); break;
@@ -5109,10 +5176,12 @@ static inline void triaxi_print_assert_junit(const TRIAXI_RunCtx* run, const TRI
   FILE* out = TRIAXI_global.junit.test_buf;
   if (!out) { return; }
   if (!res) { return; }
-  fprintf(out, "        %s_%s(", hdr->ae ? "assert" : "expect",
+  triaxi_fputlit("        ", out);
+  triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){triaxi_assert_file(hdr), hdr->file_len});
+  fprintf(out, ":%" PRIu32 ": %s_%s(", hdr->line, hdr->ae ? "assert" : "expect",
           TRIAXI_assertnames[hdr->neg][(TRIAXI_AssertType)hdr->type]);
   // Encode invalid XML bytes as hex, including malformed source encodings.
-  triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){hdr->expr_str, (size_t)hdr->expr_len});
+  triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){triaxi_assert_expr(hdr), hdr->expr_len});
   triaxi_fputlit(")\n", out);
 }
 static inline void triaxi_print_copy_file_range(FILE* dst, FILE* src) {
@@ -5278,7 +5347,7 @@ static inline void triaxi_print_assert(const TRIAXI_RunCtx* run, const TRIAXI_Te
                                        const TRIAXI_AssertRes* res) {
   Triax_Verbosity v = inv->settings.verbosity;
   if (v != TRIAX_VERBOSITY_NEVER && !(v != TRIAX_VERBOSITY_ALWAYS && !res)) {
-    triaxi_print_assert_text(run, inv->test, hdr, res);
+    triaxi_print_assert_text(run, hdr, res);
   }
   triaxi_print_assert_json(run, tr, hdr, res);
   triaxi_print_assert_junit(run, hdr, res);
@@ -5486,7 +5555,8 @@ static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run
   const char*             b          = log.str;
   size_t                  left       = log.len;
   while (left >= sizeof(TRIAXI_AssertHdr)) {
-    const TRIAXI_AssertHdr* hdr  = (const TRIAXI_AssertHdr*)(const void*)b;
+    const TRIAXI_AssertHdr* hdr = (const TRIAXI_AssertHdr*)(const void*)b;
+    triaxi_assert_hdr_validate(hdr);
     b += sizeof(*hdr), left -= sizeof(*hdr);
     ++r.nasserts;
     unfinished                  = hdr;
