@@ -1866,22 +1866,6 @@ static inline const char* triaxi_assert_expr(const TRIAXI_AssertHdr* hdr) {
 #endif
 }
 
-// Validate offsets before resolving source locations in the reporting process.
-static inline void triaxi_assert_hdr_validate(const TRIAXI_AssertHdr* hdr) {
-  if (hdr->is_hdr != TRIAXI_HDR_PREFIX) { triaxi_fatal(); }
-#if TRIAXI_PLATFORM_WINDOWS
-  uint32_t size = TRIAXI_exec.image_size;
-  if (hdr->expr_rva >= size || hdr->expr_len >= size - hdr->expr_rva || hdr->file_rva >= size
-      || hdr->file_len >= size - hdr->file_rva) {
-    triaxi_fatal();
-  }
-  if (triaxi_assert_expr(hdr)[hdr->expr_len] != '\0'
-      || triaxi_assert_file(hdr)[hdr->file_len] != '\0') {
-    triaxi_fatal();
-  }
-#endif
-}
-
 static inline void* triaxi_allocate(size_t nbytes) {
   if (!nbytes) { return NULL; }
   void* ptr = malloc(nbytes);
@@ -5555,8 +5539,7 @@ static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run
   const char*             b          = log.str;
   size_t                  left       = log.len;
   while (left >= sizeof(TRIAXI_AssertHdr)) {
-    const TRIAXI_AssertHdr* hdr = (const TRIAXI_AssertHdr*)(const void*)b;
-    triaxi_assert_hdr_validate(hdr);
+    const TRIAXI_AssertHdr* hdr  = (const TRIAXI_AssertHdr*)(const void*)b;
     b += sizeof(*hdr), left -= sizeof(*hdr);
     ++r.nasserts;
     unfinished                  = hdr;

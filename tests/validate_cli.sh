@@ -16,7 +16,9 @@ fi
 
 BIN="$1"
 WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+# Fail if the script stops before its final exit, e.g. on a bash parse error.
+completed=0
+trap 'rm -rf "$WORKDIR"; [ "$completed" = 1 ] || { echo "FAIL: script ended early" >&2; exit 70; }' EXIT
 
 # Native (non-MSYS) Windows executables can't resolve Git Bash's POSIX-style
 # temp paths (e.g. /tmp/tmp.XXXX) the way bash/python can — passing one
@@ -320,4 +322,5 @@ check "too many filters (256 > max 255)" 2 "$LAST_EXIT" "Too many filter" "$WORK
 
 echo
 echo "$check_num checks run"
+completed=1
 exit "$status"

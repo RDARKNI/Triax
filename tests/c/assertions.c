@@ -145,18 +145,18 @@ triaxi_validate_opts(assertions, assert_stops_early, TRIAXI_VALIDATE_FAILED, 200
 
 // true / false / null / nonnull
 triaxi_validate(assertions, true_false_null_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_expect_true(1);
-  triax_expect_true(42);
-  triax_expect_true(-1);
-  triax_expect_false(0);
+  triax_expect_true((bool)1);
+  triax_expect_true((bool)42);
+  triax_expect_true((bool)-1);
+  triax_expect_false((bool)0);
   triax_expect_null(NULL);
   triax_expect_nonnull((void*)1);
   triax_expect_nonnull("hello");
 }
 triaxi_validate(assertions, true_false_null_fail, TRIAXI_VALIDATE_FAILED) {
-  triax_expect_true(0);
-  triax_expect_false(1);
-  triax_expect_false(-1);
+  triax_expect_true((bool)0);
+  triax_expect_false((bool)1);
+  triax_expect_false((bool)-1);
   triax_expect_null((void*)1);
   triax_expect_nonnull(NULL);
 }
@@ -218,7 +218,7 @@ triaxi_validate(ordering, str_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_lt("", "a");
   const char* null_str = NULL;
   triax_expect_lt(null_str, ""); // NULL < empty string
-  triax_expect_lt("ab", "abc"); // prefix: shorter < longer
+  triax_expect_lt("ab", "abc");  // prefix: shorter < longer
   triax_expect_leq("apple", "apple");
   triax_expect_leq("apple", "banana");
   triax_expect_gt("banana", "apple");
@@ -263,8 +263,8 @@ triaxi_validate(float_tol, floatneq_fail, TRIAXI_VALIDATE_FAILED) {
 // wrongly rejects every tolerance, even one exactly matching the true ratio
 // (comparing an unrecoverable Infinity <= tol).
 triaxi_validate(float_tol, reltol_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_expect_floateq_reltol(1.0, 1.0 + 1e-10, 1e-9); // within tolerance
-  triax_expect_floateq_reltol(100.0, 100.0, 0.0);      // exact, zero tolerance
+  triax_expect_floateq_reltol(1.0, 1.0 + 1e-10, 1e-9);    // within tolerance
+  triax_expect_floateq_reltol(100.0, 100.0, 0.0);         // exact, zero tolerance
   triax_expect_floateq_reltol(LDBL_MAX, -LDBL_MAX, 2.0L); // true ratio == tol, exactly
 }
 triaxi_validate(float_tol, reltol_fail, TRIAXI_VALIDATE_FAILED) {

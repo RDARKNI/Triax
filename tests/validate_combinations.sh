@@ -20,7 +20,9 @@ COMBO_CPP="$2"
 MULTITU_C="$3"
 MULTITU_CPP="$4"
 WORKDIR="$(mktemp -d)"
-trap 'rm -rf "$WORKDIR"' EXIT
+# Fail if the script stops before its final exit, e.g. on a bash parse error.
+completed=0
+trap 'rm -rf "$WORKDIR"; [ "$completed" = 1 ] || { echo "FAIL: script ended early" >&2; exit 70; }' EXIT
 
 # Native (non-MSYS) Windows executables can't resolve Git Bash's POSIX-style
 # temp paths (e.g. /tmp/tmp.XXXX) the way bash/python can — passing one
@@ -481,6 +483,7 @@ for jobs in 1 2; do
   "$COMBO" --text=none --no-color --jobs=$jobs --junit="$(native_path "$WORKDIR/stale_$jobs.xml")" \
     combo_junit_stale >/dev/null 2>&1 || true
   stale_result="$(python3 - "$(native_path "$WORKDIR/stale_$jobs.xml")" <<'PY' | tr -d '\r'
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -488,7 +491,13 @@ sys.stdout.reconfigure(newline="\n")
 for tc in ET.parse(sys.argv[1]).getroot().iter("testcase"):
     failure = tc.find("failure")
     if failure is not None:
-        print(tc.get("name"), " ".join((failure.text or "").split()))
+        # Drop the "file:line: " prefix of every assertion; the line list still catches stale entries.
+        lines = [
+            re.sub(r"^.*?:\d+: ", "", line.strip())
+            for line in (failure.text or "").splitlines()
+            if line.strip()
+        ]
+        print(tc.get("name"), " ".join(lines))
 PY
 )"
   if [ "$stale_result" = "b_fails expect_true(2 == 3)" ]; then
@@ -500,4 +509,5 @@ done
 
 echo
 echo "$check_num checks run"
+completed=1
 exit "$status"
