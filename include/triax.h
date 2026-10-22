@@ -2836,16 +2836,15 @@ public:
   void add_index(size_t index) {
     size_t mark = streambuf.begin_arg();
     if (mark == SIZE_MAX) { return; }
-
     char  buf[sizeof(size_t) * 3];
-    char* end = buf + sizeof(buf);
-    char* p   = end;
+    char* buf_end = buf + sizeof(buf);
+    char* p       = buf_end;
     do {
       *--p   = static_cast<char>('0' + index % 10);
       index /= 10;
     } while (index);
 
-    this->write(p, static_cast<std::streamsize>(end - p));
+    this->write(p, static_cast<std::streamsize>(buf_end - p));
     streambuf.end_arg(mark);
   }
 
