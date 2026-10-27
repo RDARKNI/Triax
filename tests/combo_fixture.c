@@ -167,5 +167,5 @@ triax_test(combo_junit_stale, b_fails, 0) { triax_expect_true(2 == 3); }
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
-  return triax_run_argv(argc, argv, cfg);
+  return triax_run_main(argc, argv, cfg);
 }

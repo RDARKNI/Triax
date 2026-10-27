@@ -42,5 +42,5 @@ triax_test(combo_exceptions_cpp, caught_noniso, .isolation(TRIAX_ISOLATION_OFF))
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg{};
-  return triax_run_argv(argc, argv, cfg);
+  return triax_run_main(argc, argv, cfg);
 }

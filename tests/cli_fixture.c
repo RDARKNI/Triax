@@ -60,5 +60,5 @@ triax_test(fx_d, arreq_fail, 0) {
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
-  return triax_run_argv(argc, argv, cfg);
+  return triax_run_main(argc, argv, cfg);
 }

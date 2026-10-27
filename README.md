@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
     Triax_RunConfig config = {0};
     config.njobs = 4;
 
-    return triax_run_argv(argc, argv, config);
+    return triax_run_main(argc, argv, config);
 }
 ```
 

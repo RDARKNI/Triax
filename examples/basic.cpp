@@ -35,5 +35,5 @@ triax_test(io, capture, .isolation(TRIAX_ISOLATION_ON)) {
 
 int main(int argc, char** argv) {
   Triax_RunConfig config = {};
-  return triax_run_argv(argc, argv, config);
+  return triax_run_main(argc, argv, config);
 }

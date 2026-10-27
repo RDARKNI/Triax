@@ -9,5 +9,5 @@ triax_test(multitu_cpp, from_a_pass, .skip(false)) { triax_assert_true(1); }
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg{};
-  return triax_run_argv(argc, argv, cfg);
+  return triax_run_main(argc, argv, cfg);
 }

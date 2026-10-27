@@ -88,5 +88,5 @@ triax_suite(demo_tests, .tags = "all");
 
 int main(int argc, char** argv) {
   Triax_RunConfig config = {0};
-  return triax_run_argv(argc, argv, config);
+  return triax_run_main(argc, argv, config);
 }

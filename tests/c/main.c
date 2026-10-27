@@ -6,5 +6,5 @@
 int main(int argc, char** argv) {
   triaxi_validate_init(argv[0]);
   Triax_RunConfig cfg = {TRIAXI_ZINIT};
-  return triax_run_argv(argc, argv, cfg);
+  return triax_run_main(argc, argv, cfg);
 }

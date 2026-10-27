@@ -14,6 +14,7 @@
 
 #ifndef TRIAXI_TEST_H
 #define TRIAXI_TEST_H
+
 #pragma region header_prelude
 #if defined(__linux__) && !defined(_DEFAULT_SOURCE) && !defined(_GNU_SOURCE)
 # define _DEFAULT_SOURCE
@@ -183,6 +184,8 @@ typedef struct Triax_RunConfig {
 /// - Calls `abort()` on internal framework errors.
 static inline int triax_run(Triax_RunConfig config);
 
+/// @brief Null-terminated help string listing all recognised CLI flags. Printed by `--help`; may
+/// also be embedded in a host program's own usage output.
 # define TRIAX_HELP                                                                                \
    "Usage: triax [options] [filters...]\n"                                                         \
    "\n"                                                                                            \
@@ -227,49 +230,46 @@ static inline int triax_run(Triax_RunConfig config);
 /// ```
 static inline Triax_RunConfig triax_parse_argv(int argc, char* argv[], Triax_RunConfig defaults);
 
-/// @brief Null-terminated help string listing all recognised CLI flags. Printed by `--help`; may
-/// also be embedded in a host program's own usage output.
-///
-/// @brief Parses @p argv then immediately runs all matching tests.
-/// Convenience wrapper equivalent to `triax_run(triax_parse_argv(argc, argv, defaults))`.
-///
-/// @param argc      Argument count from `main`.
-/// @param argv      Argument vector from `main`.
-/// @param defaults  Base @ref Triax_RunConfig; overridden by any parsed flags.
+/// @brief Runs Triax using the process's native command-line arguments.
+/// On POSIX, parses the supplied @p argc and @p argv. On Windows, ignores them and reads
+/// the original UTF-16 command line, converting arguments to UTF-8 without loss.
+/// Use this in a custom main() to get the same behavior as @ref TRIAX_MAIN.
+/// @param argc Argument count from main() (unused on Windows).
+/// @param argv Argument vector from main() (unused on Windows).
+/// @param defaults Base configuration; overridden by command-line options.
 /// @return Same exit codes as @ref triax_run.
-static inline int             triax_run_argv(int argc, char* argv[], Triax_RunConfig defaults);
+static inline int             triax_run_main(int argc, char* argv[], Triax_RunConfig defaults);
 
-/// @brief Defines a default `main()` function for a Triax test executable.
+/// @brief Defines a default `main()` for the test executable.
 ///
-/// Expands to a complete `main()` definition that creates a zero-initialised @ref Triax_RunConfig
-/// and runs all registered tests through @ref triax_run_argv.
-///
-/// Use this macro when no custom runner configuration or application startup logic is required.
-/// Define it exactly once in the test executable.
+/// Expands to a `main()` that runs all registered tests through @ref triax_run_main with a
+/// zero-initialised @ref Triax_RunConfig. Define it exactly once in the test executable.
+/// On Windows, arguments are read from the native UTF-16 command line and converted to UTF-8.
 ///
 /// Usage:
-/// `c
+/// ```c
 /// #include "triax.h"
 ///
 /// triax_test(math, addition, .skip = false) {
-///     triax_assert_eq(2 + 2, 4);
+///   triax_assert_eq(2 + 2, 4);
 /// }
 ///
 /// TRIAX_MAIN()
-/// `
+/// ```
 ///
-/// For custom runner configuration, define `main()` manually and call @ref triax_run_argv directly
-/// instead.
+/// For a custom configuration, write `main()` yourself and call @ref triax_run_main with the
+/// desired defaults. To pass an argument vector other than main's, use
+/// `triax_run(triax_parse_argv(argc, argv, defaults))`.
 # define TRIAX_MAIN()                                                                              \
    int main(int argc, char* argv[]) {                                                              \
      Triax_RunConfig config = {TRIAXI_ZINIT};                                                      \
-     return triax_run_argv(argc, argv, config);                                                    \
+     return triax_run_main(argc, argv, config);                                                    \
    }
 
 #else
 # define triax_run(...)        TRIAXI_WRONGMODULE_ERR(triax_run)
 # define triax_parse_argv(...) TRIAXI_WRONGMODULE_ERR(triax_parse_argv)
-# define triax_run_argv(...)   TRIAXI_WRONGMODULE_ERR(triax_run_argv)
+# define triax_run_main(...)   TRIAXI_WRONGMODULE_ERR(triax_run_main)
 # define TRIAX_MAIN()          TRIAXI_WRONGMODULE_ERR(TRIAX_MAIN);
 #endif
 
@@ -339,7 +339,7 @@ static inline int             triax_run_argv(int argc, char* argv[], Triax_RunCo
 ///     triax_assert_gt(0, *triax_param(int));
 /// }
 /// ```
-#define triax_as_params(arr)         TRIAXI_as_params(arr)
+#define triax_as_params(arr)         TRIAXI_AS_PARAMS(arr)
 
 /// @brief Casts the current parameter pointer to a typed pointer.
 /// Only valid inside a parameterized test registered with @ref triax_as_params.
@@ -700,6 +700,7 @@ static inline Triax_Str triax_str(const char* ptr, size_t len);
 /// the invocation. Contents are read until EOF; the reported size is only an
 /// allocation hint, so pseudo-files reporting zero or an upper bound work too.
 /// The file must remain stable while it is being read and eventually reach EOF.
+/// On Windows, @p path is decoded as UTF-8, or as the ANSI code page if it is not valid UTF-8.
 static inline Triax_Str triax_read_file(const char* path);
 
 /// @brief Returns a snapshot of stdout captured so far in the current invocation.
@@ -820,7 +821,7 @@ typedef uint32_t Triax_Fault;
 # define TRIAX_FAULT_ILLEGAL_OP ((Triax_Fault)EXCEPTION_ILLEGAL_INSTRUCTION)
 # define TRIAX_FAULT_ARITHMETIC ((Triax_Fault)EXCEPTION_INT_DIVIDE_BY_ZERO)
 # define TRIAX_FAULT_BREAKPOINT ((Triax_Fault)EXCEPTION_BREAKPOINT)
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 
@@ -1051,57 +1052,47 @@ typedef uint32_t Triax_Fault;
 #pragma endregion dependencies
 
 #pragma region common_utilities
-#if TRIAXI_GNU_DIAG
-# pragma GCC diagnostic push
-# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#elif TRIAXI_MSVC_COMPAT
-# pragma warning(push)
-# pragma warning(disable : 4996) // deprecated functions like strcpy
-#endif
+
+#define TRIAXI_STRINGIFY_(x)    #x
+#define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
+
+#define TRIAXI_COMMA_ONE(x)     x,
+
+// NOLINTNEXTLINE(bugprone-macro-parentheses)
+#define TRIAXI_COUNT_ONE(X)     +1
+#define TRIAXI_COUNT_ALL(X)     (0 X(TRIAXI_COUNT_ONE, ))
+
+#define TRIAXI_STRINGIFY_ONE(x) #x,
+#define TRIAXI_STRINGIFY_ALL(X) X(TRIAXI_STRINGIFY_ONE, )
 
 #define TRIAXI_WRONGMODULE_ERR(FNAME)                                                              \
   static_assert(0, #FNAME " cannot be used in a non-runner translation unit — define TRIAX_IMPL "  \
                           "in exactly one translation unit or disable TRIAX_MULTI_TU.")
 
 #if !defined(TRIAX_MULTI_TU)
-# define TRIAXI_SHARED_LINKAGE static
+# define TRIAXI_LINKAGE_SHARED static
 #elif defined(TRIAX_IMPL)
-# define TRIAXI_SHARED_LINKAGE
+# define TRIAXI_LINKAGE_SHARED
 #else
-# define TRIAXI_SHARED_LINKAGE extern
+# define TRIAXI_LINKAGE_SHARED extern
 #endif
 
-#define TRIAXI_STRINGIFY_(x)    #x
-#define TRIAXI_STRINGIFY(x)     TRIAXI_STRINGIFY_(x)
-
-#define TRIAXI_CONCAT_(a, b)    a##b
-#define TRIAXI_CONCAT(a, b)     TRIAXI_CONCAT_(a, b)
-
-#define TRIAXI_COMMA_ONE(x)     x,
-
-// NOLINTNEXTLINE(bugprone-macro-parentheses)
-#define TRIAXI_COUNT_ONE(X)     +1
-#define TRIAXI_COUNT_ALL(X)     (0 + X(TRIAXI_COUNT_ONE, ))
-
-#define TRIAXI_STRINGIFY_ONE(x) #x,
-#define TRIAXI_STRINGIFY_ALL(X) X(TRIAXI_STRINGIFY_ONE, )
-
 #if TRIAXI_CPP
-# define triaxi_alignof(T)       alignof(T)
-# define triaxi_alignas(x)       alignas(x)
 # define TRIAXI_EXTERN_FOR_CONST extern
 # define TRIAXI_EXTERN_C_BEG     extern "C" {
 # define TRIAXI_EXTERN_C_END     }
 # define TRIAXI_ZINIT
-# define TRIAXI_T(T) T
+# define TRIAXI_T(T)       T
+# define triaxi_alignof(T) alignof(T)
+# define triaxi_alignas(x) alignas(x)
 #else
-# define triaxi_alignof(T) _Alignof(T)
-# define triaxi_alignas(x) _Alignas(x)
 # define TRIAXI_EXTERN_FOR_CONST
 # define TRIAXI_EXTERN_C_BEG
 # define TRIAXI_EXTERN_C_END
-# define TRIAXI_ZINIT 0
-# define TRIAXI_T(T)  (T)
+# define TRIAXI_ZINIT      0
+# define TRIAXI_T(T)       (T)
+# define triaxi_alignof(T) _Alignof(T)
+# define triaxi_alignas(x) _Alignas(x)
 #endif
 
 #ifdef unreachable
@@ -1128,16 +1119,6 @@ typedef uint32_t Triax_Fault;
 # define triaxi_noreturn
 #endif
 
-#if TRIAXI_MSVC_COMPAT
-# define triaxi_restrict __restrict
-#elif TRIAXI_GNU_COMPAT
-# define triaxi_restrict __restrict__
-#elif TRIAXI_C >= 199901L
-# define triaxi_restrict restrict
-#else
-# define triaxi_restrict
-#endif
-
 #define triaxi_countof(...) (sizeof(__VA_ARGS__) / sizeof((__VA_ARGS__)[0]))
 #define triaxi_lenof(lit)   (sizeof("" lit "") - 1)
 
@@ -1154,35 +1135,44 @@ __extension__ typedef unsigned __int128 TRIAXI_UInt128;
 # define TRIAXI_IFHAS_INT128(...)
 #endif
 
+#if TRIAXI_GNU_DIAG
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif TRIAXI_MSVC_COMPAT
+# pragma warning(push)
+# pragma warning(disable : 4996) // deprecated functions like strcpy
+#endif
+
+TRIAXI_EXTERN_C_BEG triaxi_noreturn TRIAXI_LINKAGE_SHARED void triaxi_fatal_f(const char* file,
+                                                                              int         line);
+TRIAXI_EXTERN_C_END
+#define triaxi_fatal() triaxi_fatal_f(__FILE__, __LINE__)
+
+triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t syserr);
+#define triaxi_user_error(error) triaxi_user_error_f(error, 0)
+#if TRIAXI_PLATFORM_POSIX
+# define triaxi_user_syserror(error) triaxi_user_error_f(error, (uint32_t)errno)
+#elif TRIAXI_PLATFORM_WINDOWS
+# define triaxi_user_syserror(error) triaxi_user_error_f(error, (uint32_t)GetLastError())
+#else
+# error "TRIAX_NO_OS: not yet implemented for this region"
+#endif
+
 static inline char* triaxi_catstr(char* dst, const void* src, size_t len) {
   return memcpy(dst, src, len), dst + len;
 }
 static inline char* triaxi_catStr(char* dst, Triax_Str src) {
   return triaxi_catstr(dst, src.str, src.len);
 }
-#define triaxi_catlit(dst, lit) triaxi_catstr(dst, lit, triaxi_lenof(lit))
 static inline void triaxi_fputStr(Triax_Str str, FILE* out) { fwrite(str.str, 1, str.len, out); }
+
+#define triaxi_catlit(dst, lit)     triaxi_catstr(dst, lit, triaxi_lenof(lit))
 #define triaxi_fputlit(str, stream) fwrite(str, 1, triaxi_lenof(str), stream)
 
-TRIAXI_EXTERN_C_BEG triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file,
-                                                                              int         line);
-TRIAXI_EXTERN_C_END
-#define triaxi_fatal() triaxi_fatal_f(__FILE__, __LINE__)
-
-triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t syserr);
-#define triaxi_user_error(error) triaxi_user_error_f((error), 0)
-#if TRIAXI_PLATFORM_POSIX
-# define triaxi_user_syserror(error) triaxi_user_error_f((error), (uint32_t)errno)
-#elif TRIAXI_PLATFORM_WINDOWS
-# define triaxi_user_syserror(error) triaxi_user_error_f((error), (uint32_t)GetLastError())
-#else // triaxi_embedded
-# error "TRIAX_NO_OS: not yet implemented for this region"
-#endif
-
-static inline Triax_Str triax_str(const char* ptr, size_t len) {
+static inline Triax_Str triax_str(const char* ptr, size_t len) { // todo maybe rename?
   return TRIAXI_T(Triax_Str){ptr, len};
 }
-static inline Triax_Str triaxi_tostr(const char* cstr) {
+static inline Triax_Str triaxi_str_from_cstr(const char* cstr) {
   return triax_str(cstr, cstr ? strlen(cstr) : 0);
 }
 #define TRIAXI_STRLIT(lit)                                                                         \
@@ -1194,8 +1184,8 @@ static inline Triax_Str triaxi_tostr(const char* cstr) {
 # define TRIAXI_STR(str)                                                                           \
    _Generic(str,                                                                                   \
        Triax_Str: TRIAXI_CONTRAV(Triax_Str, str),                                                  \
-       char*: triaxi_tostr(TRIAXI_CONTRAV(char*, str)),                                            \
-       const char*: triaxi_tostr(TRIAXI_CONTRAV(const char*, str)))
+       char*: triaxi_str_from_cstr(TRIAXI_CONTRAV(char*, str)),                                    \
+       const char*: triaxi_str_from_cstr(TRIAXI_CONTRAV(const char*, str)))
 #else
 # define TRIAXI_STR(str) Triax_Str(str)
 #endif
@@ -1207,7 +1197,7 @@ static inline int triaxi_strcmp(Triax_Str e1, Triax_Str e2) {
   return cr ? cr : (e1.len > e2.len) - (e1.len < e2.len);
 }
 
-static inline int64_t triaxi_now_ms(void) { // dif1
+static inline int64_t triaxi_now_ms(void) {
 #if TRIAXI_PLATFORM_POSIX
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts)) { triaxi_fatal(); }
@@ -1220,7 +1210,7 @@ static inline int64_t triaxi_now_ms(void) { // dif1
   // Divide first: multiplying the uptime counter can overflow after only days.
   return (counter.QuadPart / freq.QuadPart) * 1000LL
        + (counter.QuadPart % freq.QuadPart) * 1000LL / freq.QuadPart;
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1234,24 +1224,96 @@ static inline void     triaxi_flush_all(void) {
 }
 
 #if TRIAXI_PLATFORM_POSIX
-typedef int TRIAXI_File; // dif0
+typedef int TRIAXI_File;
 # define triaxi_file_close(f) (close(f) ? triaxi_fatal() : (void)0)
 # define triaxi_file_valid(f) ((f) >= 0)
 #elif TRIAXI_PLATFORM_WINDOWS
 typedef HANDLE TRIAXI_File;
 # define triaxi_file_close(f) (!CloseHandle(f) ? triaxi_fatal() : (void)0)
 # define triaxi_file_valid(f) ((f) != INVALID_HANDLE_VALUE)
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
+#endif
+
+#if TRIAXI_PLATFORM_WINDOWS
+// Narrow paths are decoded as UTF-8; text that is not valid UTF-8 falls back to the ANSI code
+// page, which is what CRT argv and (without /utf-8) MSVC string literals use.
+// Caller frees the result. On failure, both errno and GetLastError are set.
+static inline WCHAR* triaxi_win_wpath(const char* path) {
+  if (!path) {
+    errno = EINVAL;
+    SetLastError(ERROR_INVALID_PARAMETER);
+    return NULL;
+  }
+  size_t bytes = strlen(path) + 1;
+  if (bytes > INT_MAX) {
+    errno = ENAMETOOLONG;
+    SetLastError(ERROR_FILENAME_EXCED_RANGE);
+    return NULL;
+  }
+  UINT  cp    = CP_UTF8;
+  DWORD flags = MB_ERR_INVALID_CHARS;
+  int   n     = MultiByteToWideChar(cp, flags, path, (int)bytes, NULL, 0);
+  if (!n) {
+    cp = CP_ACP, flags = 0;
+    if (!(n = MultiByteToWideChar(cp, flags, path, (int)bytes, NULL, 0))) {
+      errno = EILSEQ;
+      return NULL;
+    }
+  }
+  WCHAR* wide = (WCHAR*)malloc((size_t)n * sizeof(*wide));
+  if (!wide) {
+    errno = ENOMEM;
+    SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+    return NULL;
+  }
+  if (!MultiByteToWideChar(cp, flags, path, (int)bytes, wide, n)) {
+    DWORD error = GetLastError();
+    free(wide);
+    errno = EILSEQ;
+    SetLastError(error);
+    return NULL;
+  }
+  return wide;
+}
+#endif
+
+#if TRIAXI_PLATFORM_WINDOWS
+// Format a Win32/NTSTATUS message as NUL-terminated UTF-8 into dst; no heap allocation.
+// Messages longer than cap - 1 bytes are truncated at a UTF-8 character boundary.
+static inline DWORD triaxi_win_message_utf8(DWORD flags, HMODULE module, DWORD code, char* dst,
+                                            size_t cap) {
+  if (!cap) { return 0; }
+  WCHAR wide[1024];
+  DWORD n = FormatMessageW(flags | FORMAT_MESSAGE_IGNORE_INSERTS | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+                           module, code, 0, wide, (DWORD)triaxi_countof(wide), NULL);
+  if (!n) { return 0; }
+  char utf8[triaxi_countof(wide) * 3]; // one UTF-16 unit never needs more than 3 UTF-8 bytes
+  int  bytes = WideCharToMultiByte(CP_UTF8, 0, wide, (int)n, utf8, (int)sizeof(utf8), NULL, NULL);
+  if (bytes <= 0) { return 0; }
+  size_t len = TRIAXI_MIN((size_t)bytes, cap - 1);
+  if (len < (size_t)bytes) {
+    while (len && ((unsigned char)utf8[len] & 0xC0) == 0x80) { --len; }
+  }
+  memcpy(dst, utf8, len);
+  dst[len] = '\0';
+  return (DWORD)len;
+}
 #endif
 
 static inline TRIAXI_File triaxi_file_open_r(const char* path) {
 #if TRIAXI_PLATFORM_POSIX
   return open(path, O_RDONLY);
 #elif TRIAXI_PLATFORM_WINDOWS
-  return CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
-                     FILE_ATTRIBUTE_NORMAL, NULL);
-#else // triaxi_embedded
+  WCHAR* wide = triaxi_win_wpath(path);
+  if (!wide) { return INVALID_HANDLE_VALUE; }
+  TRIAXI_File f     = CreateFileW(wide, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                                  FILE_ATTRIBUTE_NORMAL, NULL);
+  DWORD       error = GetLastError();
+  free(wide);
+  SetLastError(error);
+  return f;
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1269,10 +1331,11 @@ static inline size_t triaxi_file_size(TRIAXI_File f) {
   if (size64.QuadPart < 0) { triaxi_fatal(); }
   if ((uintmax_t)size64.QuadPart > SIZE_MAX) { triaxi_fatal(); }
   return (size_t)size64.QuadPart;
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
+
 static inline void triaxi_file_read_into(TRIAXI_File f, char* str, size_t len) {
 #if TRIAXI_PLATFORM_POSIX
   const size_t max_chunk = (size_t)(SIZE_MAX >> 1u);
@@ -1299,27 +1362,27 @@ static inline void triaxi_file_read_into(TRIAXI_File f, char* str, size_t len) {
     pos += r;
   }
   if (!SetFilePointerEx(f, orig, NULL, FILE_BEGIN)) { triaxi_fatal(); }
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
+
 static inline Triax_Str triaxi_fault_tostr(Triax_Fault reason) {
 #define TRIAXI_FAULT_NONE 0
   if (reason == TRIAXI_FAULT_NONE) { return TRIAXI_STRLIT("No fault"); }
   if (reason == TRIAX_FAULT_ANY) { return TRIAXI_STRLIT("Any fault"); }
 #if TRIAXI_PLATFORM_POSIX
   const char* s = strsignal((int)reason);
-  return triaxi_tostr(s ? s : "unknown signal");
+  return triaxi_str_from_cstr(s ? s : "unknown signal");
 #elif TRIAXI_PLATFORM_WINDOWS
   char        buf[512];
   static char resbuf[sizeof(buf) + sizeof("NTSTATUS: ")];
   DWORD       code = (DWORD)reason;
   DWORD       len;
   // Fault codes are NTSTATUS values — try ntdll first, Win32 as fallback.
-  HMODULE     ntdll = GetModuleHandleA("ntdll.dll");
+  HMODULE     ntdll = GetModuleHandleW(L"ntdll.dll");
   if (ntdll) {
-    len = FormatMessageA(FORMAT_MESSAGE_FROM_HMODULE | FORMAT_MESSAGE_IGNORE_INSERTS, ntdll, code,
-                         0, buf, sizeof(buf), NULL);
+    len = triaxi_win_message_utf8(FORMAT_MESSAGE_FROM_HMODULE, ntdll, code, buf, sizeof(buf));
     if (len) {
       while (len > 0 && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) { --len; }
       int n = snprintf(resbuf, sizeof(resbuf), "NTSTATUS: %.*s", (int)len, buf);
@@ -1327,8 +1390,7 @@ static inline Triax_Str triaxi_fault_tostr(Triax_Fault reason) {
       return TRIAXI_T(Triax_Str){resbuf, (size_t)n};
     }
   }
-  len = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, code, 0,
-                       buf, sizeof(buf), NULL);
+  len = triaxi_win_message_utf8(FORMAT_MESSAGE_FROM_SYSTEM, NULL, code, buf, sizeof(buf));
   if (len) {
     while (len > 0 && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) { --len; }
     int n = snprintf(resbuf, sizeof(resbuf), "Win32: %.*s", (int)len, buf);
@@ -1338,7 +1400,7 @@ static inline Triax_Str triaxi_fault_tostr(Triax_Fault reason) {
   int n = snprintf(resbuf, sizeof(resbuf), "Unknown fault code: 0x%08" PRIX32, (uint32_t)code);
   if (n < 0) { triaxi_fatal(); }
   return TRIAXI_T(Triax_Str){resbuf, (size_t)n};
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1386,12 +1448,12 @@ typedef struct TRIAXI_Test {
 #if TRIAXI_CPP
   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   constexpr TRIAXI_Test(const char* suitename_, const char* name_, const char* file_,
-                        void (*func_)(void), TRIAXI_TestConfig config_) noexcept
+                        void (*func_)(void), TRIAXI_TestConfig cfg) noexcept
       : suitename{suitename_}, name{name_}, file{file_}, func{func_},
-        attrs{config_.triaxi_dummy, config_.skip, config_.verbosity, config_.isolation,
-              config_.timeout_ms,   config_.tags, config_.init,      config_.fini},
-        params{config_.params} {}
-  constexpr TRIAXI_Test() noexcept : suitename{}, name{}, file{}, func{}, attrs{}, params{} {}
+        attrs{cfg.triaxi_dummy, cfg.skip, cfg.verbosity, cfg.isolation,
+              cfg.timeout_ms,   cfg.tags, cfg.init,      cfg.fini},
+        params{cfg.params} {}
+  TRIAXI_Test() noexcept = default;
 #endif
 } TRIAXI_Test;
 
@@ -1409,10 +1471,13 @@ typedef struct TRIAXI_SuiteReg {
 #pragma endregion common_types
 
 #pragma region registration_macros
+
 #if !TRIAXI_CPP
-# define TRIAXI_as_params(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
+# define TRIAXI_AS_PARAMS(arr) {sizeof(*(arr)), triaxi_countof(arr), (arr)}
+
 #else
-# define TRIAXI_as_params(arr) arr
+# define TRIAXI_AS_PARAMS(arr) arr
+
 template <typename D>
 struct TRIAXI_AttributeBuilderBase {
   constexpr D skip(bool v = true) const {
@@ -1537,6 +1602,7 @@ private:
 # define TRIAXI_MAKE_RECORD(T, SECTION, x, ...)                                                    \
    static const T                                    x##_obj = __VA_ARGS__;                        \
    SECTION(x) TRIAXI_EXTERN_FOR_CONST const T* const x       = &x##_obj
+
 #else
 # define TRIAXI_MAKE_RECORD(T, SECTION, x, ...) SECTION(x) static const T x = __VA_ARGS__
 #endif
@@ -1547,9 +1613,9 @@ private:
 #define TRIAXI_MAKE_SUITEREG(x, ...)                                                               \
   TRIAXI_MAKE_RECORD(TRIAXI_SuiteReg, TRIAXI_SUITE_SECTION, x, __VA_ARGS__)
 
-// Boundaries and section-existence placeholders.
 #if defined(TRIAX_IMPL) || !defined(TRIAX_MULTI_TU)
 TRIAXI_EXTERN_C_BEG
+
 # if TRIAXI_FORMAT_COFF
 #  if TRIAXI_SECTION_DECLSPEC
 #   pragma section("TRXTST$a", read)
@@ -1557,20 +1623,15 @@ TRIAXI_EXTERN_C_BEG
 #   pragma section("TRXSUT$a", read)
 #   pragma section("TRXSUT$z", read)
 #  endif
-TRIAXI_OBJECT_SECTION("TRXTST$a", void*)
-static const TRIAXI_Test* const TRIAXI_Test_a = NULL;
-TRIAXI_OBJECT_SECTION("TRXTST$z", void*)
-static const TRIAXI_Test* const TRIAXI_Test_z = NULL;
-TRIAXI_OBJECT_SECTION("TRXSUT$a", void*)
-static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = NULL;
-TRIAXI_OBJECT_SECTION("TRXSUT$z", void*)
-static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = NULL;
-
+TRIAXI_OBJECT_SECTION("TRXTST$a", void*) static const TRIAXI_Test* const TRIAXI_Test_a         = 0;
+TRIAXI_OBJECT_SECTION("TRXTST$z", void*) static const TRIAXI_Test* const TRIAXI_Test_z         = 0;
+TRIAXI_OBJECT_SECTION("TRXSUT$a", void*) static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_a = 0;
+TRIAXI_OBJECT_SECTION("TRXSUT$z", void*) static const TRIAXI_SuiteReg* const TRIAXI_SuiteReg_z = 0;
 # elif TRIAXI_FORMAT_ELF
 TRIAXI_MAKE_TEST(TRIAXI_Test_sentinel, {TRIAXI_ZINIT});
 TRIAXI_MAKE_SUITEREG(TRIAXI_SuiteReg_sentinel, {TRIAXI_ZINIT});
-
 # endif
+
 TRIAXI_EXTERN_C_END
 #endif
 
@@ -1609,6 +1670,7 @@ TRIAXI_EXTERN_C_END
                           TRIAXI_TestConfigBuilder {} __VA_ARGS__));                               \
    }                                                                                               \
    static void triaxf_##suitename##_##name(void)
+
 # define triaxi_suite(name, ...)                                                                   \
    extern "C" {                                                                                    \
      TRIAXI_MAKE_SUITEREG(TRIAXI_scfg_##name, {#name, TRIAXI_AttributeBuilder{} __VA_ARGS__});     \
@@ -1661,7 +1723,7 @@ typedef struct TRIAXI_AssertHdr {
   const char* file_str;
 #elif TRIAXI_PLATFORM_WINDOWS
   uint32_t expr_rva, file_rva; // Literal offsets within the executable image.
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 } TRIAXI_AssertHdr;
@@ -1789,7 +1851,7 @@ typedef struct TRIAXI_Shared {
 
 #pragma region exec_state
 TRIAXI_EXTERN_C_BEG
-TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
+TRIAXI_LINKAGE_SHARED TRIAXI_File TRIAXI_true_stderr;
 #if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wpedantic" // Anonymous struct; flexible-array struct in union
@@ -1802,7 +1864,7 @@ TRIAXI_SHARED_LINKAGE TRIAXI_File TRIAXI_true_stderr;
 // C4200: the union embeds the flexible-array TRIAXI_AssertRes.
 # pragma warning(disable : 4200)
 #endif
-TRIAXI_SHARED_LINKAGE struct TRIAXI_ExecState { // per-test execution state
+TRIAXI_LINKAGE_SHARED struct TRIAXI_ExecState { // per-test execution state
   TRIAXI_File             log, out, err;        // files where logs, stdout, stderr are written to
   bool                    isolated, in_test, debug_break;
   const void*             param;
@@ -1904,7 +1966,7 @@ static inline void triaxi_file_write(TRIAXI_File f, const void* buf, size_t len)
     DWORD chunk = (len > 0xFFFFFFFFu) ? 0xFFFFFFFFu : (DWORD)len;
     if (!WriteFile(f, ptr, chunk, &w, 0) || !w) { triaxi_fatal(); }
   }
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -1928,7 +1990,7 @@ static inline size_t triaxi_file_read_some(TRIAXI_File f, char* dst, size_t len)
   DWORD n, chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
   if (!ReadFile(f, dst, chunk, &n, NULL)) { triaxi_file_close(f), triaxi_fatal(); }
   return (size_t)n;
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
 }
@@ -2003,11 +2065,10 @@ static inline void triaxi_log_hdr(uint16_t len, uint8_t type, uint8_t ae, uint8_
 #if TRIAXI_PLATFORM_POSIX
   TRIAXI_AssertHdr hdr = {TRIAXI_HDR_PREFIX, type, ae, neg, cr, line, len, file_len, str, file};
 #elif TRIAXI_PLATFORM_WINDOWS
-  uint32_t         expr_rva = triaxi_literal_rva(str, len);
-  uint32_t         file_rva = triaxi_literal_rva(file, file_len);
+  uint32_t expr_rva = triaxi_literal_rva(str, len), file_rva = triaxi_literal_rva(file, file_len);
   TRIAXI_AssertHdr hdr
       = {TRIAXI_HDR_PREFIX, type, ae, neg, cr, line, len, file_len, expr_rva, file_rva};
-#else // triaxi_embedded
+#else
 # error "TRIAX_NO_OS: not yet implemented for this region"
 #endif
   if (TRIAXI_exec.shared->state != TRIAXI_STATE_TEST) {
@@ -2127,7 +2188,6 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
 static inline bool triaxi_log_strings(uint8_t val, Triax_Str e1, Triax_Str e2,
                                       const size_t* index) {
   if (!val) { return false; }
-
   const bool null1 = !e1.str, null2 = !e2.str;
   TRIAXI_exec.pkg.val  = val;
   TRIAXI_exec.pkg.code = TRIAXI_ENCODING_STRING | (null1 ? TRIAXI_ENCODING_NULL_ARG1 : 0)
@@ -2359,31 +2419,31 @@ static inline bool triaxi_AF_lt_SS(bool v, Triax_Str e1, Triax_Str e2) {
 }
 #if !TRIAXI_CPP
 static inline bool triaxi_AF_eq_ss(bool v, const char* e1, const char* e2) {
-  return triaxi_AF_eq_SS(v, triaxi_tostr(e1), triaxi_tostr(e2));
+  return triaxi_AF_eq_SS(v, triaxi_str_from_cstr(e1), triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_gt_ss(bool v, const char* e1, const char* e2) {
-  return triaxi_AF_gt_SS(v, triaxi_tostr(e1), triaxi_tostr(e2));
+  return triaxi_AF_gt_SS(v, triaxi_str_from_cstr(e1), triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_lt_ss(bool v, const char* e1, const char* e2) {
-  return triaxi_AF_lt_SS(v, triaxi_tostr(e1), triaxi_tostr(e2));
+  return triaxi_AF_lt_SS(v, triaxi_str_from_cstr(e1), triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_eq_Ss(bool v, Triax_Str e1, const char* e2) {
-  return triaxi_AF_eq_SS(v, e1, triaxi_tostr(e2));
+  return triaxi_AF_eq_SS(v, e1, triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_gt_Ss(bool v, Triax_Str e1, const char* e2) {
-  return triaxi_AF_gt_SS(v, e1, triaxi_tostr(e2));
+  return triaxi_AF_gt_SS(v, e1, triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_lt_Ss(bool v, Triax_Str e1, const char* e2) {
-  return triaxi_AF_lt_SS(v, e1, triaxi_tostr(e2));
+  return triaxi_AF_lt_SS(v, e1, triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_eq_sS(bool v, const char* e1, Triax_Str e2) {
-  return triaxi_AF_eq_SS(v, triaxi_tostr(e1), e2);
+  return triaxi_AF_eq_SS(v, triaxi_str_from_cstr(e1), e2);
 }
 static inline bool triaxi_AF_gt_sS(bool v, const char* e1, Triax_Str e2) {
-  return triaxi_AF_gt_SS(v, triaxi_tostr(e1), e2);
+  return triaxi_AF_gt_SS(v, triaxi_str_from_cstr(e1), e2);
 }
 static inline bool triaxi_AF_lt_sS(bool v, const char* e1, Triax_Str e2) {
-  return triaxi_AF_lt_SS(v, triaxi_tostr(e1), e2);
+  return triaxi_AF_lt_SS(v, triaxi_str_from_cstr(e1), e2);
 }
 #endif
 static inline bool triaxi_AF_streq(bool v, Triax_Str e1, Triax_Str e2) {
@@ -2552,13 +2612,13 @@ static inline bool triaxi_AF_arreq_SS(bool v, size_t index, Triax_Str e1, Triax_
 }
 
 static inline bool triaxi_AF_arreq_ss(bool v, size_t index, const char* e1, const char* e2) {
-  return triaxi_AF_arreq_SS(v, index, triaxi_tostr(e1), triaxi_tostr(e2));
+  return triaxi_AF_arreq_SS(v, index, triaxi_str_from_cstr(e1), triaxi_str_from_cstr(e2));
 }
 static inline bool triaxi_AF_arreq_sS(bool v, size_t index, const char* e1, Triax_Str e2) {
-  return triaxi_AF_arreq_SS(v, index, triaxi_tostr(e1), e2);
+  return triaxi_AF_arreq_SS(v, index, triaxi_str_from_cstr(e1), e2);
 }
 static inline bool triaxi_AF_arreq_Ss(bool v, size_t index, Triax_Str e1, const char* e2) {
-  return triaxi_AF_arreq_SS(v, index, e1, triaxi_tostr(e2));
+  return triaxi_AF_arreq_SS(v, index, e1, triaxi_str_from_cstr(e2));
 }
 
 #define triaxi_ARREQ_N_(ae, arr1, arr2, N)                                                         \
@@ -3100,7 +3160,7 @@ typedef struct TRIAXI_RunResult {
 #  define TRIAXI_PROC_NONE ((pid_t)0)
 # elif TRIAXI_PLATFORM_WINDOWS
 #  define TRIAXI_PROC_NONE NULL
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3115,9 +3175,7 @@ typedef struct TRIAXI_OutputCtx {
   TRIAXI_AnsiColours ansi;
 } TRIAXI_OutputCtx;
 
-typedef struct TRIAXI_StdBackup {
-  struct { FILE* file; } out, err;
-} TRIAXI_StdBackup;
+typedef struct TRIAXI_StdBackup { FILE *out, *err; } TRIAXI_StdBackup;
 
 typedef struct TRIAXI_Settings {
   uint32_t        timeout_ms;
@@ -3163,7 +3221,7 @@ typedef struct TRIAXI_TestSlot {
 # elif TRIAXI_PLATFORM_WINDOWS
   HANDLE process;
   HANDLE job;
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   TRIAXI_TestInvocation invocation;
@@ -3222,7 +3280,7 @@ static const TRIAXI_Settings TRIAXI_default_settings = {
 #  define triaxi_isatty    _isatty
 #  define triaxi_ftruncate _chsize_s
 #  define triaxi_lseek     _lseeki64
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3236,26 +3294,44 @@ static inline uintmax_t triaxi_parse_u(const char* s) {
 }
 
 static inline void triaxi_mkdirp(const char* path) {
+# if TRIAXI_PLATFORM_POSIX
   char   buf[4096];
   size_t n = strlen(path);
   if (!n || n >= sizeof(buf)) { return; }
   memcpy(buf, path, n + 1);
   for (char* p = buf + 1; *p; ++p) {
-# if TRIAXI_PLATFORM_POSIX
     if (*p != '/') { continue; }
     char c = *p;
     *p     = '\0';
-    mkdir(buf, 0755); // error handling via fopen in caller
-# elif TRIAXI_PLATFORM_WINDOWS
-    if (*p != '/' && *p != '\\') { continue; }
-    char c = *p;
-    *p     = '\0';
-    CreateDirectoryA(buf, NULL);
-# else // triaxi_embedded
-#  error "TRIAX_NO_OS: not yet implemented for this region"
-# endif
+    mkdir(buf, 0755); // caller reports failure when opening output
     *p = c;
   }
+# elif TRIAXI_PLATFORM_WINDOWS
+  WCHAR* buf = triaxi_win_wpath(path);
+  if (!buf) { return; } // caller reports failure when opening output
+  // Don't attempt to create a drive root or the server/share components of a UNC path.
+  WCHAR* p = buf;
+  if ((p[0] == L'\\' || p[0] == L'/') && (p[1] == L'\\' || p[1] == L'/')) {
+    p += 2;
+    while (*p && *p != L'\\' && *p != L'/') { ++p; } // server
+    if (*p) { ++p; }
+    while (*p && *p != L'\\' && *p != L'/') { ++p; } // share
+  } else if (p[0] && p[1] == L':') {
+    p += 2;
+  } else if (*p == L'\\' || *p == L'/') {
+    ++p;
+  }
+  for (; *p; ++p) {
+    if (*p != L'\\' && *p != L'/') { continue; }
+    WCHAR c = *p;
+    *p      = L'\0';
+    if (*buf) { CreateDirectoryW(buf, NULL); }
+    *p = c;
+  }
+  free(buf);
+# else
+#  error "TRIAX_NO_OS: not yet implemented for this region"
+# endif
 }
 static inline TRIAXI_File triaxi_file_from_stream(FILE* f) {
 # if TRIAXI_PLATFORM_POSIX
@@ -3266,7 +3342,7 @@ static inline TRIAXI_File triaxi_file_from_stream(FILE* f) {
   intptr_t h = _get_osfhandle(triaxi_fileno(f));
   if (h == -1 || h == -2) { return 0; }
   return (HANDLE)h;
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3295,17 +3371,52 @@ static inline TRIAXI_File triaxi_tmpfile_create(const char* base) {
   if (unlink(buf)) { triaxi_fatal(); }
   return res;
 # elif TRIAXI_PLATFORM_WINDOWS
-  char  temp_path[MAX_PATH];
-  DWORD temp_path_len = GetTempPathA((DWORD)sizeof(temp_path), temp_path);
-  if (!temp_path_len || temp_path_len >= sizeof(temp_path)) { triaxi_fatal(); }
-  SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
-  char                temp_name[MAX_PATH];
-  if (!GetTempFileNameA(temp_path, base, 0, temp_name)) { triaxi_fatal(); }
-  res = CreateFileA(temp_name, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                    &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+  // GetTempPathW provides the directory, but does not check its existence or access rights.
+  DWORD needed = GetTempPathW(0, NULL);
+  if (!needed || needed > 32767) { triaxi_fatal(); }
+  // Make room for a unique ASCII suffix, including the terminating NUL.
+  size_t cap = (size_t)needed + strlen(base) + 64;
+  if (cap > 32767 || cap > SIZE_MAX / sizeof(WCHAR)) { triaxi_fatal(); }
+  WCHAR* path = (WCHAR*)malloc(cap * sizeof(*path));
+  if (!path) { triaxi_fatal(); }
+  DWORD prefix = GetTempPathW(needed, path);
+  if (!prefix || prefix >= needed) {
+    free(path);
+    triaxi_fatal();
+  }
+  // CREATE_NEW atomically avoids collisions and eliminates GetTempFileName's
+  // create/close/reopen sequence. All call sites use internal ASCII prefixes.
+  SECURITY_ATTRIBUTES sa   = {sizeof(sa), NULL, TRUE};
+  DWORD               pid  = GetCurrentProcessId();
+  ULONGLONG           tick = GetTickCount64();
+  res                      = INVALID_HANDLE_VALUE;
+  for (unsigned attempt = 0; attempt < 1024; ++attempt) {
+    size_t at = prefix;
+    for (const unsigned char* b = (const unsigned char*)base; *b; ++b) {
+      if (*b > 0x7f || *b == '/' || *b == '\\') {
+        free(path);
+        triaxi_fatal();
+      }
+      path[at++] = (WCHAR)*b;
+    }
+    int n = swprintf(path + at, cap - at, L"_%08lx_%016llx_%04x.tmp", (unsigned long)pid,
+                     (unsigned long long)tick, attempt);
+    if (n < 0 || (size_t)n >= cap - at) {
+      free(path);
+      triaxi_fatal();
+    }
+    res = CreateFileW(path, GENERIC_READ | GENERIC_WRITE,
+                      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, &sa, CREATE_NEW,
+                      FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE, NULL);
+    if (res != INVALID_HANDLE_VALUE) { break; }
+    if (GetLastError() != ERROR_FILE_EXISTS && GetLastError() != ERROR_ALREADY_EXISTS) { break; }
+  }
+  DWORD error = GetLastError();
+  free(path);
+  SetLastError(error);
   if (res == INVALID_HANDLE_VALUE) { triaxi_fatal(); }
   return res;
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3351,7 +3462,7 @@ static inline void triaxi_file_clear_handle(HANDLE handle) {
   if (!SetEndOfFile(handle)) { triaxi_fatal(); }
 }
 #  define triaxi_file_clear triaxi_file_clear_handle
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -3359,10 +3470,10 @@ static inline TRIAXI_StdBackup triaxi_stdfds_backup_create(void) {
   TRIAXI_StdBackup r;
   int              fd;
   if ((fd = triaxi_dup(1)) < 0) { triaxi_fatal(); }
-  if (!(r.out.file = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
+  if (!(r.out = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
   if ((fd = triaxi_dup(2)) < 0) { triaxi_fatal(); }
-  if (!(r.err.file = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
-  TRIAXI_true_stderr = triaxi_file_from_stream(r.err.file);
+  if (!(r.err = triaxi_fdopen(fd, "w"))) { triaxi_fatal(); }
+  TRIAXI_true_stderr = triaxi_file_from_stream(r.err);
   if (!TRIAXI_true_stderr) { triaxi_fatal(); }
 # if TRIAXI_PLATFORM_WINDOWS
   if (!SetHandleInformation(TRIAXI_true_stderr, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
@@ -3373,7 +3484,7 @@ static inline TRIAXI_StdBackup triaxi_stdfds_backup_create(void) {
 }
 
 static inline void triaxi_stdfds_backup_close(const TRIAXI_StdBackup* backup) {
-  FILE *const out = backup->out.file, *const err = backup->err.file;
+  FILE *const out = backup->out, *const err = backup->err;
   if (fclose(out)) { triaxi_fatal(); }
   TRIAXI_true_stderr = 0; // todo better sentinel value
   if (fclose(err)) { triaxi_fatal(); }
@@ -3410,15 +3521,15 @@ static inline void triaxi_stdfds_redirect(TRIAXI_TestSlot* h) {
       TRIAXI_exec.err = (HANDLE)osfh;
     }
     if (!SetStdHandle(stdhandle, (HANDLE)osfh)) { triaxi_fatal(); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   }
 }
 
 static inline void triaxi_stdfds_restore(const TRIAXI_StdBackup* saved) {
-  if (triaxi_dup2(triaxi_fileno(saved->out.file), 1) < 0) { triaxi_fatal(); }
-  if (triaxi_dup2(triaxi_fileno(saved->err.file), 2) < 0) { triaxi_fatal(); }
+  if (triaxi_dup2(triaxi_fileno(saved->out), 1) < 0) { triaxi_fatal(); }
+  if (triaxi_dup2(triaxi_fileno(saved->err), 2) < 0) { triaxi_fatal(); }
 # if TRIAXI_PLATFORM_WINDOWS
   intptr_t out = _get_osfhandle(1), err = _get_osfhandle(2);
   if (out == -1 || out == -2) { triaxi_fatal(); }
@@ -3595,24 +3706,30 @@ static inline void           triaxi_sighandler_crash(int sig) {
 static inline void triaxi_sighandler_abort(int sig) {
   (void)sig, RaiseException(TRIAX_FAULT_ABORT, EXCEPTION_NONCONTINUABLE, 0, NULL);
 }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
 static inline void triaxi_signals_init(void) {
 # if TRIAXI_PLATFORM_POSIX
+  TRIAXI_signals.sas.ign.sa_handler = SIG_IGN;
   sigemptyset(&TRIAXI_signals.sas.ign.sa_mask);
+  TRIAXI_signals.sas.ign.sa_flags   = 0;
+
+  TRIAXI_signals.sas.dfl.sa_handler = SIG_DFL;
   sigemptyset(&TRIAXI_signals.sas.dfl.sa_mask);
-  TRIAXI_signals.sas.ign.sa_handler   = SIG_IGN;
-  TRIAXI_signals.sas.dfl.sa_handler   = SIG_DFL;
+  TRIAXI_signals.sas.dfl.sa_flags     = 0;
 
   TRIAXI_signals.sas.crash.sa_handler = triaxi_sighandler_crash;
   sigemptyset(&TRIAXI_signals.sas.crash.sa_mask);
   TRIAXI_signals.sas.crash.sa_flags  = (int)(SA_ONSTACK | SA_RESETHAND | SA_NODEFER);
+
   TRIAXI_signals.sas.term.sa_handler = triaxi_sighandler_termination;
   sigfillset(&TRIAXI_signals.sas.term.sa_mask);
+  TRIAXI_signals.sas.term.sa_flags = 0;
+
 # elif TRIAXI_PLATFORM_WINDOWS
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3749,8 +3866,8 @@ static inline void triaxi_process_control_init(size_t njobs) {
                      &TRIAXI_signals.old.ign[i]);
   }
 
-  // Crash handlers aren't installed globally, but record what existed
-  // before the run so non-isolated tests can restore them.
+  // Crash handlers aren't installed globally, but record what existed before the run so
+  // non-isolated tests can restore them.
   for (size_t i = 0; i < triaxi_countof(TRIAXI_signal_lists.crash); ++i) {
     triaxi_sigaction(TRIAXI_signal_lists.crash[i], NULL, &TRIAXI_signals.old.crash[i]);
   }
@@ -3759,7 +3876,7 @@ static inline void triaxi_process_control_init(size_t njobs) {
     triaxi_fatal();
   }
   triaxi_windows_environments_init(njobs);
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3789,25 +3906,30 @@ static inline void triaxi_process_control_reset(void) {
     TRIAXI_global.slots[i].environment = NULL;
   }
   if (signal(SIGABRT, TRIAXI_global.old_sigabrt) == SIG_ERR) { triaxi_fatal(); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
 TRIAXI_EXTERN_C_BEG
-triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file, int line) {
+triaxi_noreturn TRIAXI_LINKAGE_SHARED void triaxi_fatal_f(const char* file, int line) {
   // A framework failure must never satisfy a user's expected crash/exit.
+# if TRIAXI_PLATFORM_POSIX
+  int error = errno;
+# elif TRIAXI_PLATFORM_WINDOWS
+  DWORD error = GetLastError();
+# endif
   if (TRIAXI_exec.in_test) {
     TRIAXI_exec.shared->exit.code = triaxi_error_pack(TRIAXI_ERROR_INTERNAL, 0);
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
   }
 # if TRIAXI_PLATFORM_POSIX
-  int         error = errno;
-  TRIAXI_File err   = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
+  TRIAXI_File err = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
   if (err) {
     int    nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
                            "%s:%d - triax framework error: %s\n", file, line,
                            error ? strerror(error) : "(not provided)");
     size_t len  = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, sizeof(TRIAXI_exec.storage) - 1) : 0;
+
     for (const char* ptr = TRIAXI_exec.storage; len;) {
       ssize_t n = write(err, ptr, len);
       if (n < 0) {
@@ -3818,12 +3940,13 @@ triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file, int 
       ptr += (size_t)n, len -= (size_t)n;
     }
   }
+
   if (TRIAXI_exec.in_test) {
     if (TRIAXI_exec.isolated) {
       sigaction(SIGTERM, &TRIAXI_signals.sas.ign, NULL);
       kill(0, SIGTERM);
     }
-    abort(); // non-isolated: SIGABRT handler -> longjmp -> test error
+    abort(); // Non-isolated: SIGABRT handler -> longjmp -> test error
   } else {
     if (!TRIAXI_exec.isolated) {
       for (size_t i = 0; i < triaxi_countof(TRIAXI_global.slots); ++i) {
@@ -3832,32 +3955,37 @@ triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file, int 
     }
     abort();
   }
+
 # elif TRIAXI_PLATFORM_WINDOWS
-  DWORD       error = GetLastError();
-  TRIAXI_File err   = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
-  int         nfmt;
-  if (error) {
-    char* sysbuf = NULL;
-    DWORD syslen = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM
-                                      | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                  NULL, error, 0, (LPSTR)&sysbuf, 0, NULL);
-    if (syslen && sysbuf) {
-      while (syslen && (sysbuf[syslen - 1] == '\n' || sysbuf[syslen - 1] == '\r')) { --syslen; }
-      nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
-                      "%s:%d - triax framework error: %.*s\n", file, line, (int)syslen, sysbuf);
-      LocalFree(sysbuf);
-    } else {
-      nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
-                      "%s:%d - triax framework error: Windows error %lu\n", file, line,
-                      (unsigned long)error);
+  TRIAXI_File err  = TRIAXI_true_stderr ? TRIAXI_true_stderr : triaxi_file_from_stream(stderr);
+  char*       buf  = TRIAXI_exec.storage;
+  size_t      cap  = sizeof(TRIAXI_exec.storage);
+
+  int         nfmt = snprintf(buf, cap, "%s:%d - triax framework error", file, line);
+  size_t      len  = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, cap - 1) : 0;
+
+  if (error && len < cap - 1) {
+    size_t rem  = cap - len;
+    int    n    = snprintf(buf + len, rem, ": ");
+    len        += n > 0 ? TRIAXI_MIN((size_t)n, rem - 1) : 0;
+
+    if (len < cap - 1) {
+      DWORD syslen
+          = triaxi_win_message_utf8(FORMAT_MESSAGE_FROM_SYSTEM, NULL, error, buf + len, cap - len);
+      if (syslen) {
+        len += syslen;
+        while (len && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) { --len; }
+      } else {
+        n    = snprintf(buf + len, cap - len, "Windows error %lu", (unsigned long)error);
+        len += n > 0 ? TRIAXI_MIN((size_t)n, cap - len - 1) : 0;
+      }
     }
-  } else {
-    nfmt = snprintf(TRIAXI_exec.storage, sizeof(TRIAXI_exec.storage),
-                    "%s:%d - triax framework error\n", file, line);
   }
-  size_t len = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, sizeof(TRIAXI_exec.storage) - 1) : 0;
+  if (len < cap - 1) { buf[len++] = '\n'; }
+  buf[len] = '\0';
+
   if (err) {
-    for (const char* ptr = TRIAXI_exec.storage; len;) {
+    for (const char* ptr = buf; len;) {
       DWORD chunk = (DWORD)TRIAXI_MIN(len, (size_t)0xFFFFFFFFu);
       DWORD n;
       if (!WriteFile(err, ptr, chunk, &n, NULL) || !n) { break; }
@@ -3872,7 +4000,8 @@ triaxi_noreturn TRIAXI_SHARED_LINKAGE void triaxi_fatal_f(const char* file, int 
     }
   }
   abort();
-# else // triaxi_embedded
+
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -3880,7 +4009,6 @@ TRIAXI_EXTERN_C_END
 
 # if TRIAXI_PLATFORM_WINDOWS && !TRIAXI_MSVC_COMPAT
 static PVOID                 TRIAXI_veh_handle;
-// MinGW uses VEH to recover native exceptions via longjmp.
 static volatile sig_atomic_t TRIAXI_crash_signal;
 
 static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
@@ -3941,9 +4069,20 @@ static inline TRIAXI_OutputCtx triaxi_output_create(const Triax_RunConfig*  conf
       if (++nstdout > 1) {
         triaxi_config_error_f("More than one output stream set to stdout. %s", TRIAX_HELP);
       }
-      *outfiles[i] = saved->out.file;
+      *outfiles[i] = saved->out;
     } else {
-      if (!(triaxi_mkdirp(path), *outfiles[i] = fopen(path, "w"))) {
+# if TRIAXI_PLATFORM_WINDOWS
+      triaxi_mkdirp(path);
+      WCHAR* wide    = triaxi_win_wpath(path);
+      *outfiles[i]   = wide ? _wfopen(wide, L"w") : NULL;
+      int open_errno = errno;
+      free(wide);
+      errno = open_errno;
+# else
+      triaxi_mkdirp(path);
+      *outfiles[i] = fopen(path, "w");
+# endif
+      if (!*outfiles[i]) {
         triaxi_config_error_f("Cannot open %s output '%s': %s", names[i], path, strerror(errno));
       }
     }
@@ -3965,7 +4104,7 @@ static inline void triaxi_output_close(const TRIAXI_RunCtx* run) {
     if (outfiles[i]) {
       // A previous flush can discard unwritten bytes; fclose alone need not report that error.
       if (ferror(outfiles[i])) { triaxi_fatal(); }
-      if (outfiles[i] == run->saved.out.file) { continue; }
+      if (outfiles[i] == run->saved.out) { continue; }
       if (fclose(outfiles[i])) { triaxi_fatal(); }
     }
   }
@@ -3981,7 +4120,7 @@ static inline void triaxi_junit_buffers_init(void) {
   if (!SetHandleInformation(te, HANDLE_FLAG_INHERIT, 0)) { triaxi_fatal(); }
   if ((su_fd = _open_osfhandle((intptr_t)su, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
   if ((te_fd = _open_osfhandle((intptr_t)te, _O_RDWR | _O_BINARY)) < 0) { triaxi_fatal(); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   if (!(TRIAXI_global.junit.suite_buf = triaxi_fdopen(su_fd, "w+b"))) { triaxi_fatal(); }
@@ -4017,7 +4156,7 @@ static inline void triaxi_shared_init(void) {
   DWORD n = GetModuleFileNameW(NULL, TRIAXI_global.executable_path,
                                (DWORD)triaxi_countof(TRIAXI_global.executable_path));
   if (!n || n >= (DWORD)triaxi_countof(TRIAXI_global.executable_path)) { triaxi_fatal(); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   for (size_t i = 0; i < TRIAXI_JOBS_MAX; ++i) {
@@ -4077,8 +4216,7 @@ static inline void triaxi_config_validate(const Triax_RunConfig* config) {
   case TRIAXI_PARSE_HELP: triaxi_fputlit(TRIAX_HELP, stdout), exit(0);
   case TRIAXI_PARSE_LIST:
     for (const TRIAXI_Test* t = TRIAXI_global.tests.beg; t != TRIAXI_global.tests.end; ++t) {
-      if (!t->name) { continue; }
-      printf("%s::%s\n", t->suitename, t->name);
+      if (t->name) { printf("%s::%s\n", t->suitename, t->name); }
     }
     exit(0);
   case TRIAXI_PARSE_ERR_INVALID_FLAG:
@@ -4347,8 +4485,8 @@ static inline Triax_Str triaxi_syserror_tostr(uint32_t syserr) {
   return TRIAXI_T(Triax_Str){err, strlen(err)};
 # elif TRIAXI_PLATFORM_WINDOWS
   static char buf[256];
-  DWORD       n = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-                                 (DWORD)syserr, 0, buf, sizeof(buf), NULL);
+  DWORD       n
+      = triaxi_win_message_utf8(FORMAT_MESSAGE_FROM_SYSTEM, NULL, (DWORD)syserr, buf, sizeof(buf));
   if (!n) {
     int r = snprintf(buf, sizeof(buf), "Windows error %" PRIu32, syserr);
     n     = r > 0 ? (DWORD)r : 0;
@@ -4357,7 +4495,7 @@ static inline Triax_Str triaxi_syserror_tostr(uint32_t syserr) {
     while (n && (buf[n - 1] == '\r' || buf[n - 1] == '\n')) { buf[--n] = '\0'; }
   }
   return TRIAXI_T(Triax_Str){buf, (size_t)n};
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -4814,8 +4952,7 @@ static inline void triaxi_print_test_end_text(const TRIAXI_RunCtx*         run,
   case TRIAXI_OUTCOME_PASSED: break;
   case TRIAXI_OUTCOME_FAIL  : break;
   case TRIAXI_OUTCOME_UCRASH:
-    triaxi_fputlit("; crash: ", out);
-    triaxi_fputStr(triaxi_fault_tostr(r->exit.reason), out);
+    triaxi_fputlit("; crash: ", out), triaxi_fputStr(triaxi_fault_tostr(r->exit.reason), out);
     break;
 
   case TRIAXI_OUTCOME_UEXIT  : fprintf(out, "; exit code: %u", r->exit.code); break;
@@ -4936,7 +5073,7 @@ static inline void triaxi_print_suite_beg_json(const TRIAXI_RunCtx* run, const T
   triaxi_fputlit("\n    {"
                  "\n      \"name\": \"",
                  out);
-  triaxi_print_json_escape(out, triaxi_tostr(s->name));
+  triaxi_print_json_escape(out, triaxi_str_from_cstr(s->name));
   triaxi_fputlit("\",\n      \"tests\": [", out);
 }
 static inline void triaxi_print_assert_json(const TRIAXI_RunCtx* run, const TRIAXI_TestResult* tr,
@@ -5014,11 +5151,11 @@ static inline void triaxi_print_test_beg_json(const TRIAXI_RunCtx*         run,
           "\n          \"name\": \"%s\","
           "\n          \"file\": \"",
           t->name);
-  triaxi_print_json_escape(out, triaxi_tostr(t->file)), putc('\"', out);
+  triaxi_print_json_escape(out, triaxi_str_from_cstr(t->file)), putc('\"', out);
   if (t->params.elcount) { fprintf(out, ",\n          \"invocation\": %zu", inv->idx); }
   if (t->attrs.tags) {
     triaxi_fputlit(",\n          \"tags\": \"", out);
-    triaxi_print_json_escape(out, triaxi_tostr(t->attrs.tags));
+    triaxi_print_json_escape(out, triaxi_str_from_cstr(t->attrs.tags));
     putc('\"', out);
   }
 }
@@ -5191,10 +5328,10 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
   FILE*              out = TRIAXI_global.junit.suite_buf;
 
   triaxi_fputlit("    <testcase classname=\"", out);
-  triaxi_print_xml_escape(out, triaxi_tostr(t->suitename));
+  triaxi_print_xml_escape(out, triaxi_str_from_cstr(t->suitename));
 
   triaxi_fputlit("\" name=\"", out);
-  triaxi_print_xml_escape(out, triaxi_tostr(t->name));
+  triaxi_print_xml_escape(out, triaxi_str_from_cstr(t->name));
   if (t->params.elcount) { fprintf(out, "[%zu]", inv->idx); }
 
   putc('"', out);
@@ -5292,7 +5429,7 @@ static inline void triaxi_print_suite_end_junit(const TRIAXI_RunCtx* run, const 
   size_t tests = 0;
   for (size_t i = 0; i < triaxi_countof(sr->outcomes); ++i) { tests += sr->outcomes[i]; }
   triaxi_fputlit("  <testsuite name=\"", out);
-  triaxi_print_xml_escape(out, triaxi_tostr(s->name));
+  triaxi_print_xml_escape(out, triaxi_str_from_cstr(s->name));
   fprintf(out,
           "\" tests=\"%zu\" failures=\"%zu\" errors=\"%zu\" skipped=\"%zu\" "
           "time=\"%" PRIu32 ".%03" PRIu32 "\">\n",
@@ -5683,7 +5820,7 @@ static inline void triaxi_windows_childentry(const Triax_RunConfig* config) {
   triaxi_stdfds_redirect(&h);
   triaxi_run_func(&h.invocation, h.shared);
   _exit(0);
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -5735,7 +5872,7 @@ static inline bool triaxi_tags_match(const TRIAXI_RunCtx* run, const TRIAXI_Suit
 typedef int TRIAXI_RawStatus;
 # elif TRIAXI_PLATFORM_WINDOWS
 typedef DWORD TRIAXI_RawStatus;
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -5754,7 +5891,7 @@ static inline TRIAXI_Exit triaxi_exit_from_status(TRIAXI_RawStatus status) {
   } else {
     return TRIAXI_T(TRIAXI_Exit){TRIAXI_EXIT_EXIT, {status}};
   }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -5776,7 +5913,7 @@ static inline void triaxi_terminate_group(pid_t pgid) {
   if (kill(-pgid, SIGKILL) && errno != ESRCH) { triaxi_fatal(); }
 }
 # elif TRIAXI_PLATFORM_WINDOWS
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -5790,7 +5927,7 @@ static inline TRIAXI_Outcome triaxi_collect_active_at(const TRIAXI_RunCtx*    ru
   if (h->process != TRIAXI_PROC_NONE) { triaxi_terminate_group(h->process); }
 # elif TRIAXI_PLATFORM_WINDOWS
   if (h->process != TRIAXI_PROC_NONE) { triaxi_windows_slot_process_finish(h, false); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
   TRIAXI_Outcome o  = triaxi_test_collect_slot(run, rres, h, nreported);
@@ -5806,7 +5943,7 @@ static inline pid_t triaxi_waitpid(pid_t pid, int* status, int flags) {
   return res;
 }
 # elif TRIAXI_PLATFORM_WINDOWS
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 
@@ -5966,7 +6103,7 @@ static inline TRIAXI_Outcome triaxi_collect_from_active(const TRIAXI_RunCtx*    
     if (rr == WAIT_TIMEOUT) { continue; }
     triaxi_fatal();
   }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -6064,7 +6201,7 @@ static inline void triaxi_test_exec_isolation(TRIAXI_TestSlot* h) {
 
   DeleteProcThreadAttributeList(sia.lpAttributeList);
   if (!CloseHandle(sia.StartupInfo.hStdInput)) { triaxi_fatal(); }
-# else // triaxi_embedded
+# else
 #  error "TRIAX_NO_OS: not yet implemented for this region"
 # endif
 }
@@ -6202,10 +6339,10 @@ static inline int triax_run(Triax_RunConfig config) {
   return res.invocations.cnts[TRIAXI_OUTCOME_PASSED] + res.invocations.cnts[TRIAXI_OUTCOME_SKIP]
       != res.invocations.selected;
 }
-
 # pragma endregion runner_execution
 
 # pragma region runner_cli
+
 static inline const char* triaxi_parse_flag_val(const char* arg, const char* flag) {
   size_t n = strlen(flag);
   if (strncmp(arg, flag, n) != 0) { return NULL; }
@@ -6338,19 +6475,134 @@ static inline Triax_RunConfig triaxi_parse_argv(int argc, const char* const* arg
 static inline Triax_RunConfig triax_parse_argv(int argc, char* argv[], Triax_RunConfig defaults) {
   return triaxi_parse_argv(argc, (const char* const*)argv, defaults);
 }
-static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig defaults) {
+# if TRIAXI_PLATFORM_WINDOWS
+// Parse the native command line using the CRT quoting rules, including special argv[0].
+// Compacts the argument strings in-place; each is terminated by a NUL.
+static inline int triaxi_windows_split_command_line(WCHAR* cmd) {
+  const WCHAR* src  = cmd;
+  WCHAR*       dst  = cmd;
+  int          argc = 0;
+
+  // The executable name has different quoting rules from ordinary arguments.
+  if (*src) {
+    bool quoted = false;
+    ++argc;
+    while (*src) {
+      if (*src == L'"') {
+        quoted = !quoted;
+        ++src;
+        continue;
+      }
+      if (!quoted && (*src == L' ' || *src == L'\t')) { break; }
+      *dst++ = *src++;
+    }
+    while (*src == L' ' || *src == L'\t') { ++src; }
+    *dst++ = 0;
+  }
+
+  while (*src) {
+    if (argc == INT_MAX) { triaxi_fatal(); }
+    ++argc;
+    bool quoted = false;
+    for (;;) {
+      unsigned slashes = 0;
+      while (*src == L'\\') {
+        ++slashes;
+        ++src;
+      }
+      if (*src == L'"') {
+        for (unsigned j = 0; j < slashes / 2; ++j) { *dst++ = L'\\'; }
+        if (slashes & 1u) {
+          *dst++ = L'"';
+          ++src;
+        } else if (quoted && src[1] == L'"') {
+          *dst++  = L'"';
+          src    += 2;
+        } else {
+          quoted = !quoted;
+          ++src;
+        }
+      } else {
+        for (unsigned j = 0; j < slashes; ++j) { *dst++ = L'\\'; }
+        if (!*src || (!quoted && (*src == L' ' || *src == L'\t'))) { break; }
+        *dst++ = *src++;
+      }
+    }
+    while (*src == L' ' || *src == L'\t') { ++src; }
+    *dst++ = 0;
+  }
+  return argc;
+}
+
+// The parsed run configuration borrows argv strings: retain until triax_run returns.
+static inline int triax_run_main(int main_argc, char* main_argv[], Triax_RunConfig defaults) {
+  (void)main_argc; // Windows reads the native UTF-16 command line instead of the CRT's argv.
+  (void)main_argv;
+  const WCHAR* cmd    = GetCommandLineW();
+  size_t       nchars = wcslen(cmd) + 1;
+  if (nchars > SIZE_MAX / sizeof(WCHAR)) { triaxi_fatal(); }
+  WCHAR* wide = (WCHAR*)malloc(nchars * sizeof(WCHAR));
+  if (!wide) { triaxi_fatal(); }
+  memcpy(wide, cmd, nchars * sizeof(WCHAR));
+  int argc = triaxi_windows_split_command_line(wide);
+
+  if ((size_t)argc > SIZE_MAX / sizeof(char*) - 1) {
+    free(wide);
+    triaxi_fatal();
+  }
+  size_t total = ((size_t)argc + 1) * sizeof(char*);
+  WCHAR* arg   = wide;
+  for (int i = 0; i < argc; ++i) {
+    int n = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, arg, -1, NULL, 0, NULL, NULL);
+    if (!n || (size_t)n > SIZE_MAX - total) {
+      free(wide);
+      triaxi_fatal();
+    }
+    total += (size_t)n;
+    arg   += wcslen(arg) + 1;
+  }
+  char** argv = (char**)malloc(total);
+  if (!argv) {
+    free(wide);
+    triaxi_fatal();
+  }
+  char* next = (char*)(argv + argc + 1);
+  arg        = wide;
+  for (int i = 0; i < argc; ++i) {
+    int n = WideCharToMultiByte(
+        CP_UTF8, WC_ERR_INVALID_CHARS, arg, -1, next,
+        (int)TRIAXI_MIN((size_t)INT_MAX, total - (size_t)(next - (char*)argv)), NULL, NULL);
+    if (!n) {
+      free(argv);
+      free(wide);
+      triaxi_fatal();
+    }
+    argv[i]  = next;
+    next    += n;
+    arg     += wcslen(arg) + 1;
+  }
+  argv[argc] = NULL;
+  free(wide);
+  int result = triax_run(triaxi_parse_argv(argc, (const char* const*)argv, defaults));
+  free(argv);
+  return result;
+}
+# endif
+
+# if TRIAXI_PLATFORM_POSIX
+static inline int triax_run_main(int argc, char* argv[], Triax_RunConfig defaults) {
   return triax_run(triax_parse_argv(argc, argv, defaults));
 }
+# endif
 # pragma endregion runner_cli
 #endif
-
 #pragma endregion runner
 
 #pragma region cleanup
+
 #undef triaxi_catlit
 #undef triaxi_noreturn
 #undef triaxi_unreachable
-#undef triaxi_restrict
 #undef TRIAXI_MIN
 #undef TRIAXI_MAX
 #undef triaxi_lenof
@@ -6359,7 +6611,7 @@ static inline int triax_run_argv(int argc, char* argv[], Triax_RunConfig default
 #undef TRIAXI_COUNT_ALL
 #undef TRIAXI_STRINGIFY_ONE
 #undef TRIAXI_STRINGIFY_ALL
-#undef TRIAXI_SHARED_LINKAGE
+#undef TRIAXI_LINKAGE_SHARED
 
 #if TRIAXI_GNU_DIAG
 # pragma GCC diagnostic pop

@@ -9,9 +9,9 @@
  * convention as triax.h itself: if you spread triaxi_validate() tests across
  * multiple .c files, define TRIAX_MULTI_TU in all of them and TRIAX_IMPL in
  * exactly one (the same file that calls triaxi_validate_init and
- * triax_run_argv) — otherwise triaxi_validate_executable would end up as a
+ * triax_run_main) — otherwise triaxi_validate_executable would end up as a
  * separate, independently-NULL static in each translation unit.
- * Call triaxi_validate_init(argv[0]) once from main before triax_run_argv().
+ * Call triaxi_validate_init(argv[0]) once from main before triax_run_main().
  *
  * This file deliberately does not modify Triax registration or runner state.
  * A triaxi_validate() case is one ordinary registered Triax test. In the outer
