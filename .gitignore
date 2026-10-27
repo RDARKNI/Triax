@@ -1,9 +1,40 @@
+# Build trees (out-of-source builds, CLion) and stray in-source CMake output
 /build*/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+/Testing/
+compile_commands.json
+
+# Compiler and linker output
 *.o
 *.obj
 *.exe
 *.out
-internal.c
-.DS_Store
+*.pdb
+*.ilk
+*.dSYM/
+
+# Python (benchmark and experiment scripts)
+__pycache__/
+*.pyc
+
+# Editors and tools
 .vscode/
+.idea/
+.cache/
+*.swp
+*~
+.claude/settings.local.json
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local scratch
+internal.c
 /trash*/
+
+# Local benchmark and experiment work (not tracked for now)
+/benchmarks/
+/experiments/

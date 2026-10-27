@@ -1719,8 +1719,7 @@ typedef struct TRIAXI_AssertHdr {
   // the stored length never exceeds the literal, so it is never read past.
   uint16_t            expr_len, file_len;
 #if TRIAXI_PLATFORM_POSIX
-  const char* expr_str;
-  const char* file_str;
+  const char *expr_str, *file_str;
 #elif TRIAXI_PLATFORM_WINDOWS
   uint32_t expr_rva, file_rva; // Literal offsets within the executable image.
 #else
