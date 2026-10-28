@@ -21,8 +21,8 @@ import tempfile
 
 # Match exact source fragments; fail loudly after protocol refactors.
 PUBLICATION_ANCHOR = "  ++TRIAXI_exec.shared->nasserts;\n  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;"
-FAILURE_ANCHOR = ("  triaxi_log_header(TRIAXI_FAILURE_HDR_PREFIX);\n"
-                  "  triaxi_log_write(&TRIAXI_exec.pkg, record_size);")
+FAILURE_ANCHOR = ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
+                  "  triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, record_size);")
 
 # Most cases inject at assertion ten; boundary cases override that count.
 # Earlier completed assertions are untouched.
@@ -48,9 +48,9 @@ CASES = {
     },
     "during_failure_record": {
         "anchor": FAILURE_ANCHOR,
-        "replacement": ("  triaxi_log_header(TRIAXI_FAILURE_HDR_PREFIX);\n"
+        "replacement": ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
                         "  if (TRIAXI_exec.shared->nasserts == 10) { abort(); }\n"
-                        "  triaxi_log_write(&TRIAXI_exec.pkg, record_size);"),
+                        "  triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, record_size);"),
         "test": "triax_expect_eq(1234, 5678);",
         "expression": "expect_eq(1234, 5678)",
         "kind": "unexpected_crash",
@@ -59,12 +59,12 @@ CASES = {
     },
     "partial_result_header": {
         "anchor": FAILURE_ANCHOR,
-        "replacement": ("  triaxi_log_header(TRIAXI_FAILURE_HDR_PREFIX);\n"
+        "replacement": ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
                         "  if (TRIAXI_exec.shared->nasserts == 10) {\n"
-                        "    triaxi_log_write(&TRIAXI_exec.pkg, sizeof(TRIAXI_AssertRes) / 2);\n"
+                        "    triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, sizeof(TRIAXI_AssertRes) / 2);\n"
                         "    abort();\n"
                         "  }\n"
-                        "  triaxi_log_write(&TRIAXI_exec.pkg, record_size);"),
+                        "  triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, record_size);"),
         "test": "triax_expect_eq(1234, 5678);",
         "expression": "expect_eq(1234, 5678)",
         "kind": "unexpected_crash",
@@ -73,8 +73,8 @@ CASES = {
     },
     "completed_failure_then_abort": {
         "anchor": FAILURE_ANCHOR,
-        "replacement": ("  triaxi_log_header(TRIAXI_FAILURE_HDR_PREFIX);\n"
-                        "  triaxi_log_write(&TRIAXI_exec.pkg, record_size);\n"
+        "replacement": ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
+                        "  triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, record_size);\n"
                         "  if (TRIAXI_exec.shared->nasserts == 10) { abort(); }"),
         "test": "triax_expect_eq(1234, 5678);",
         "expression": "expect_eq(1234, 5678)",

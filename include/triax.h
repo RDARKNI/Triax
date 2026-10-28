@@ -2173,7 +2173,7 @@ static inline void triaxi_assert_fail(TRIAXI_AR val) {
 static inline void triaxi_assert_fail_strings(TRIAXI_AR val, Triax_Str e1, Triax_Str e2,
                                               const size_t* index) {
   const bool null1 = !e1.str, null2 = !e2.str;
-  TRIAXI_exec.pkg.val  = val;
+  TRIAXI_exec.pkg.val  = (uint8_t)val;
   TRIAXI_exec.pkg.code = TRIAXI_ENCODING_STRING | (null1 ? TRIAXI_ENCODING_NULL_ARG1 : 0)
                        | (null2 ? TRIAXI_ENCODING_NULL_ARG2 : 0);
   if (null1) { e1 = TRIAXI_STRLIT(""); }
