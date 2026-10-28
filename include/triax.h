@@ -407,9 +407,9 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// triax_expect(count > 0);
 /// triax_expect(count > 0, "count was %d", count);
 /// @endcode
-#define triax_expect(cond, ...)       triaxi_E1(check, 0, #cond, !(cond), " " __VA_ARGS__)
+#define triax_expect(cond, ...)       TRIAXI_E(check, 0, #cond, !(cond), " " __VA_ARGS__)
 /// @copydoc triax_expect
-#define triax_assert(cond, ...)       triaxi_A1(check, 0, #cond, !(cond), " " __VA_ARGS__)
+#define triax_assert(cond, ...)       TRIAXI_A(check, 0, #cond, !(cond), " " __VA_ARGS__)
 
 // ── Booleans and pointers ─────────────────────────────────────────────────────
 
@@ -418,25 +418,25 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// Unlike the generic condition check, no custom failure message is accepted.
 /// In C++, a type with only an explicit bool conversion can be tested with
 /// @ref triax_expect or an explicit cast to bool.
-#define triax_expect_true(expr)       triaxi_E1(true, 0, #expr, expr)
+#define triax_expect_true(expr)       TRIAXI_E(true, 0, #expr, expr)
 /// @copydoc triax_expect_true
-#define triax_assert_true(expr)       triaxi_A1(true, 0, #expr, expr)
+#define triax_assert_true(expr)       TRIAXI_A(true, 0, #expr, expr)
 /// @brief Passes if @p expr converts to false.
 /// @copydetails triax_expect_true
-#define triax_expect_false(expr)      triaxi_E1(true, 1, #expr, expr)
+#define triax_expect_false(expr)      TRIAXI_E(true, 1, #expr, expr)
 /// @copydoc triax_expect_false
-#define triax_assert_false(expr)      triaxi_A1(true, 1, #expr, expr)
+#define triax_assert_false(expr)      TRIAXI_A(true, 1, #expr, expr)
 
 /// @brief Passes if @p ptr is a null pointer.
 /// @param ptr Pointer to check.
-#define triax_expect_null(ptr)        triaxi_E1(null, 0, #ptr, ptr)
+#define triax_expect_null(ptr)        TRIAXI_E(null, 0, #ptr, ptr)
 /// @copydoc triax_expect_null
-#define triax_assert_null(ptr)        triaxi_A1(null, 0, #ptr, ptr)
+#define triax_assert_null(ptr)        TRIAXI_A(null, 0, #ptr, ptr)
 /// @brief Passes if @p ptr is not a null pointer.
 /// @param ptr Pointer to check.
-#define triax_expect_nonnull(ptr)     triaxi_E1(null, 1, #ptr, ptr)
+#define triax_expect_nonnull(ptr)     TRIAXI_E(null, 1, #ptr, ptr)
 /// @copydoc triax_expect_nonnull
-#define triax_assert_nonnull(ptr)     triaxi_A1(null, 1, #ptr, ptr)
+#define triax_assert_nonnull(ptr)     TRIAXI_A(null, 1, #ptr, ptr)
 
 // ── Equality ──────────────────────────────────────────────────────────────────
 
@@ -466,14 +466,14 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// triax_expect_neq((const void*)a, (const void*)b); // pointer identity
 /// triax_expect_eq(triax_str(a, 2), triax_str(b, 2));
 /// @endcode
-#define triax_expect_eq(exp, act)     triaxi_E1(eq, 0, #exp ", " #act, exp, act)
+#define triax_expect_eq(exp, act)     TRIAXI_E(eq, 0, #exp ", " #act, exp, act)
 /// @copydoc triax_expect_eq
-#define triax_assert_eq(exp, act)     triaxi_A1(eq, 0, #exp ", " #act, exp, act)
+#define triax_assert_eq(exp, act)     TRIAXI_A(eq, 0, #exp ", " #act, exp, act)
 /// @brief Passes if @p exp and @p act compare unequal.
 /// @copydetails triax_expect_eq
-#define triax_expect_neq(exp, act)    triaxi_E1(eq, 1, #exp ", " #act, exp, act)
+#define triax_expect_neq(exp, act)    TRIAXI_E(eq, 1, #exp ", " #act, exp, act)
 /// @copydoc triax_expect_neq
-#define triax_assert_neq(exp, act)    triaxi_A1(eq, 1, #exp ", " #act, exp, act)
+#define triax_assert_neq(exp, act)    TRIAXI_A(eq, 1, #exp ", " #act, exp, act)
 
 // ── Element-wise array comparison ─────────────────────────────────────────────
 
@@ -536,24 +536,24 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// corresponding to the requested relation; no reverse or equality comparison is required.
 /// Floating-point comparisons involving NaN fail these ordering checks,
 /// including the non-strict variants.
-#define triax_expect_gt(a, b)  triaxi_E1(gt, 0, #a ", " #b, a, b)
+#define triax_expect_gt(a, b)  TRIAXI_E(gt, 0, #a ", " #b, a, b)
 /// @copydoc triax_expect_gt
-#define triax_assert_gt(a, b)  triaxi_A1(gt, 0, #a ", " #b, a, b)
+#define triax_assert_gt(a, b)  TRIAXI_A(gt, 0, #a ", " #b, a, b)
 /// @brief Passes if @p a is greater than or equal to @p b.
 /// @copydetails triax_expect_gt
-#define triax_expect_geq(a, b) triaxi_E1(lt, 1, #a ", " #b, a, b)
+#define triax_expect_geq(a, b) TRIAXI_E(lt, 1, #a ", " #b, a, b)
 /// @copydoc triax_expect_geq
-#define triax_assert_geq(a, b) triaxi_A1(lt, 1, #a ", " #b, a, b)
+#define triax_assert_geq(a, b) TRIAXI_A(lt, 1, #a ", " #b, a, b)
 /// @brief Passes if @p a is less than @p b.
 /// @copydetails triax_expect_gt
-#define triax_expect_lt(a, b)  triaxi_E1(lt, 0, #a ", " #b, a, b)
+#define triax_expect_lt(a, b)  TRIAXI_E(lt, 0, #a ", " #b, a, b)
 /// @copydoc triax_expect_lt
-#define triax_assert_lt(a, b)  triaxi_A1(lt, 0, #a ", " #b, a, b)
+#define triax_assert_lt(a, b)  TRIAXI_A(lt, 0, #a ", " #b, a, b)
 /// @brief Passes if @p a is less than or equal to @p b.
 /// @copydetails triax_expect_gt
-#define triax_expect_leq(a, b) triaxi_E1(gt, 1, #a ", " #b, a, b)
+#define triax_expect_leq(a, b) TRIAXI_E(gt, 1, #a ", " #b, a, b)
 /// @copydoc triax_expect_leq
-#define triax_assert_leq(a, b) triaxi_A1(gt, 1, #a ", " #b, a, b)
+#define triax_assert_leq(a, b) TRIAXI_A(gt, 1, #a ", " #b, a, b)
 
 // ── Floating-point tolerance ──────────────────────────────────────────────────
 
@@ -571,17 +571,17 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// triax_expect_floateq_abstol(1.0, 1.0001, 0.001);
 /// @endcode
 #define triax_expect_floateq_abstol(exp, act, tol)                                                 \
-  triaxi_E1(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_E(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
 /// @copydoc triax_expect_floateq_abstol
 #define triax_assert_floateq_abstol(exp, act, tol)                                                 \
-  triaxi_A1(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_A(floateq_abstol, 0, #exp ", " #act ", " #tol, exp, act, tol)
 /// @brief Passes if the values are not equal within the absolute tolerance.
 /// @copydetails triax_expect_floateq_abstol
 #define triax_expect_floatneq_abstol(exp, act, tol)                                                \
-  triaxi_E1(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_E(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
 /// @copydoc triax_expect_floatneq_abstol
 #define triax_assert_floatneq_abstol(exp, act, tol)                                                \
-  triaxi_A1(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_A(floateq_abstol, 1, #exp ", " #act ", " #tol, exp, act, tol)
 
 /// @brief Passes if the relative difference is at most @p tol.
 /// @param exp Expected value.
@@ -598,17 +598,17 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// triax_expect_floateq_reltol(100.0, 100.5, 0.01);
 /// @endcode
 #define triax_expect_floateq_reltol(exp, act, tol)                                                 \
-  triaxi_E1(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_E(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
 /// @copydoc triax_expect_floateq_reltol
 #define triax_assert_floateq_reltol(exp, act, tol)                                                 \
-  triaxi_A1(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_A(floateq_reltol, 0, #exp ", " #act ", " #tol, exp, act, tol)
 /// @brief Passes if the values are not equal within the relative tolerance.
 /// @copydetails triax_expect_floateq_reltol
 #define triax_expect_floatneq_reltol(exp, act, tol)                                                \
-  triaxi_E1(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_E(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
 /// @copydoc triax_expect_floatneq_reltol
 #define triax_assert_floatneq_reltol(exp, act, tol)                                                \
-  triaxi_A1(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
+  TRIAXI_A(floateq_reltol, 1, #exp ", " #act ", " #tol, exp, act, tol)
 
 // ── Memory ────────────────────────────────────────────────────────────────────
 
@@ -621,30 +621,30 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// including any padding bytes; use element-wise checks for value comparison.
 /// A zero size satisfies equality and fails inequality.
 #define triax_expect_memeq(ptr1, ptr2, siz)                                                        \
-  triaxi_E1(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+  TRIAXI_E(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
 /// @copydoc triax_expect_memeq
 #define triax_assert_memeq(ptr1, ptr2, siz)                                                        \
-  triaxi_A1(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+  TRIAXI_A(memeq, 0, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
 /// @brief Passes if at least one of the first @p siz bytes differs.
 /// @copydetails triax_expect_memeq
 #define triax_expect_memneq(ptr1, ptr2, siz)                                                       \
-  triaxi_E1(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+  TRIAXI_E(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
 /// @copydoc triax_expect_memneq
 #define triax_assert_memneq(ptr1, ptr2, siz)                                                       \
-  triaxi_A1(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
+  TRIAXI_A(memeq, 1, #ptr1 ", " #ptr2 ", " #siz, ptr1, ptr2, siz)
 
 /// @brief Passes if every byte in the memory region is zero.
 /// @param ptr Memory region containing at least @p siz readable bytes.
 /// @param siz Number of bytes to inspect.
 /// A zero size satisfies `memzero` and fails `memnzero`.
-#define triax_expect_memzero(ptr, siz)  triaxi_E1(memzero, 0, #ptr ", " #siz, ptr, siz)
+#define triax_expect_memzero(ptr, siz)  TRIAXI_E(memzero, 0, #ptr ", " #siz, ptr, siz)
 /// @copydoc triax_expect_memzero
-#define triax_assert_memzero(ptr, siz)  triaxi_A1(memzero, 0, #ptr ", " #siz, ptr, siz)
+#define triax_assert_memzero(ptr, siz)  TRIAXI_A(memzero, 0, #ptr ", " #siz, ptr, siz)
 /// @brief Passes if at least one byte in the memory region is nonzero.
 /// @copydetails triax_expect_memzero
-#define triax_expect_memnzero(ptr, siz) triaxi_E1(memzero, 1, #ptr ", " #siz, ptr, siz)
+#define triax_expect_memnzero(ptr, siz) TRIAXI_E(memzero, 1, #ptr ", " #siz, ptr, siz)
 /// @copydoc triax_expect_memnzero
-#define triax_assert_memnzero(ptr, siz) triaxi_A1(memzero, 1, #ptr ", " #siz, ptr, siz)
+#define triax_assert_memnzero(ptr, siz) TRIAXI_A(memzero, 1, #ptr ", " #siz, ptr, siz)
 
 // ── Strings and byte views ────────────────────────────────────────────────────
 
@@ -731,17 +731,17 @@ static inline Triax_Str triax_read_stderr(void);
 /// Two null strings match; a null string differs from every non-null string,
 /// including an empty one. In C, pass `(const char*)NULL` for a null C string.
 #define triax_expect_streq(str1, str2)                                                             \
-  triaxi_E1(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+  TRIAXI_E(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
 /// @copydoc triax_expect_streq
 #define triax_assert_streq(str1, str2)                                                             \
-  triaxi_A1(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+  TRIAXI_A(streq, 0, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
 /// @brief Passes if the strings differ in contents, length, or nullness.
 /// @copydetails triax_expect_streq
 #define triax_expect_strneq(str1, str2)                                                            \
-  triaxi_E1(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+  TRIAXI_E(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
 /// @copydoc triax_expect_strneq
 #define triax_assert_strneq(str1, str2)                                                            \
-  triaxi_A1(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
+  TRIAXI_A(streq, 1, #str1 ", " #str2, TRIAXI_STR(str1), TRIAXI_STR(str2))
 
 /// @brief Passes if @p str starts with @p pref.
 /// @param str String to inspect.
@@ -750,17 +750,17 @@ static inline Triax_Str triax_read_stderr(void);
 /// Both strings must be non-null for a match. A non-null empty prefix matches
 /// any non-null string, including an empty string.
 #define triax_expect_str_startswith(str, pref)                                                     \
-  triaxi_E1(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+  TRIAXI_E(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
 /// @copydoc triax_expect_str_startswith
 #define triax_assert_str_startswith(str, pref)                                                     \
-  triaxi_A1(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+  TRIAXI_A(str_startswith, 0, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
 /// @brief Passes if @p str does not start with @p pref, or either string is null.
 /// @copydetails triax_expect_str_startswith
 #define triax_expect_str_nstartswith(str, pref)                                                    \
-  triaxi_E1(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+  TRIAXI_E(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
 /// @copydoc triax_expect_str_nstartswith
 #define triax_assert_str_nstartswith(str, pref)                                                    \
-  triaxi_A1(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
+  TRIAXI_A(str_startswith, 1, #str ", " #pref, TRIAXI_STR(str), TRIAXI_STR(pref))
 
 /// @brief Passes if @p str ends with @p suf.
 /// @param str String to inspect.
@@ -769,17 +769,17 @@ static inline Triax_Str triax_read_stderr(void);
 /// Both strings must be non-null for a match. A non-null empty suffix matches
 /// any non-null string, including an empty string.
 #define triax_expect_str_endswith(str, suf)                                                        \
-  triaxi_E1(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+  TRIAXI_E(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
 /// @copydoc triax_expect_str_endswith
 #define triax_assert_str_endswith(str, suf)                                                        \
-  triaxi_A1(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+  TRIAXI_A(str_endswith, 0, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
 /// @brief Passes if @p str does not end with @p suf, or either string is null.
 /// @copydetails triax_expect_str_endswith
 #define triax_expect_str_nendswith(str, suf)                                                       \
-  triaxi_E1(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+  TRIAXI_E(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
 /// @copydoc triax_expect_str_nendswith
 #define triax_assert_str_nendswith(str, suf)                                                       \
-  triaxi_A1(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
+  TRIAXI_A(str_endswith, 1, #str ", " #suf, TRIAXI_STR(str), TRIAXI_STR(suf))
 
 /// @brief Passes if @p str contains @p needle as a contiguous byte sequence.
 /// @param str String to search.
@@ -788,17 +788,17 @@ static inline Triax_Str triax_read_stderr(void);
 /// Both strings must be non-null for a match. A non-null empty needle matches
 /// any non-null string, including an empty string.
 #define triax_expect_str_contains(str, needle)                                                     \
-  triaxi_E1(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+  TRIAXI_E(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
 /// @copydoc triax_expect_str_contains
 #define triax_assert_str_contains(str, needle)                                                     \
-  triaxi_A1(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+  TRIAXI_A(str_contains, 0, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
 /// @brief Passes if @p str lacks @p needle, or either string is null.
 /// @copydetails triax_expect_str_contains
 #define triax_expect_str_ncontains(str, needle)                                                    \
-  triaxi_E1(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+  TRIAXI_E(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
 /// @copydoc triax_expect_str_ncontains
 #define triax_assert_str_ncontains(str, needle)                                                    \
-  triaxi_A1(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
+  TRIAXI_A(str_contains, 1, #str ", " #needle, TRIAXI_STR(str), TRIAXI_STR(needle))
 
 // ── Faults and process exits ──────────────────────────────────────────────────
 
@@ -2264,27 +2264,21 @@ typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_ERROR
 } TRIAXI_ExecOutcome;
 
+// todo should this affect state?
 #if !TRIAXI_CPP
-# define TRIAXI_ABORT_TEST(outcome)                                                                \
-   (TRIAXI_exec.shared->state = TRIAXI_STATE_TEST, longjmp(TRIAXI_exec.jmp, (int)(outcome)))
+# define TRIAXI_ABORT_TEST(outcome) (longjmp(TRIAXI_exec.jmp, (int)(outcome)))
 #else
 struct TRIAXI_TestException { TRIAXI_ExecOutcome outcome; };
-# define TRIAXI_ABORT_TEST(outcome)                                                                \
-   (TRIAXI_exec.shared->state = TRIAXI_STATE_TEST, throw TRIAXI_TestException{(outcome)})
+# define TRIAXI_ABORT_TEST(outcome) (throw TRIAXI_TestException{(outcome)})
 #endif
 
 triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t syserr) {
   TRIAXI_exec.shared->exit.code = triaxi_error_pack((TRIAXI_Error)error, syserr);
-
   // Body/assertion errors stay pending through destructors and teardown, so a cleanup
   // fault/timeout takes precedence. Fixtures may be noexcept: publish their error and abort.
   if (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST
       || TRIAXI_exec.shared->state == TRIAXI_STATE_IN_ASSERT) {
-#if !TRIAXI_CPP
-    longjmp(TRIAXI_exec.jmp, (int)TRIAXI_EXEC_ERROR);
-#else
-    throw TRIAXI_TestException{TRIAXI_EXEC_ERROR};
-#endif
+    TRIAXI_ABORT_TEST(TRIAXI_EXEC_ERROR);
   }
   TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
   abort();
@@ -2295,11 +2289,11 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
        ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_SKIPPED)                                                    \
        : triaxi_user_error(TRIAXI_ERROR_SKIP_IN_FIXTURE))
 
-#define triaxi_A1(type, neg, lit, ...)                                                             \
+#define TRIAXI_A(type, neg, lit, ...)                                                              \
   (triaxi_assert_begin(TRIAXI_AT_##type, 1, neg, 0, lit),                                          \
    triaxi_AF_##type(neg, __VA_ARGS__) ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED) : (void)0)
 
-#define triaxi_E1(type, neg, lit, ...)                                                             \
+#define TRIAXI_E(type, neg, lit, ...)                                                              \
   (triaxi_assert_begin(TRIAXI_AT_##type, 0, neg, 0, lit), (void)triaxi_AF_##type(neg, __VA_ARGS__))
 
 #define triaxi_sprintargs1(RES, a1, f1) ((RES).len = (uint32_t)(sprintf((RES).args, f1, a1) + 1))
