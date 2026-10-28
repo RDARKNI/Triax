@@ -1273,7 +1273,7 @@ static inline WCHAR* triaxi_win_wpath(const char* path) {
   }
   WCHAR* wide = (WCHAR*)malloc((size_t)n * sizeof(*wide));
   if (!wide) {
-    errno = ENOMEM, Å SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+    errno = ENOMEM, SetLastError(ERROR_NOT_ENOUGH_MEMORY);
     return NULL;
   }
   if (!MultiByteToWideChar(cp, flags, path, (int)bytes, wide, n)) {
