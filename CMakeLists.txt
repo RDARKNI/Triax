@@ -299,6 +299,7 @@ if(BUILD_TESTING)
         triax-selftest-cpp
         tests/cpp/main.cpp
         tests/cpp/core.cpp
+        tests/cpp/exceptions.cpp
         tests/cpp/fmt.cpp
         tests/cpp/inputs.cpp
     )

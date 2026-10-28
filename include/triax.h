@@ -891,6 +891,21 @@ typedef uint32_t Triax_Fault;
 #define triax_assert_nexit(...) triaxi_assert_exit(1, 1, 0, #__VA_ARGS__ " ", __VA_ARGS__)
 /// @copydoc triax_assert_nexit
 #define triax_expect_nexit(...) triaxi_assert_exit(1, 0, 0, #__VA_ARGS__ " ", __VA_ARGS__)
+
+#if TRIAXI_CPP
+struct TRIAXI_AnyException {};
+# define TRIAX_EXCEPTION_ANY TRIAXI_AnyException
+# define triax_assert_throw(exception, ...)                                                        \
+   triaxi_assert_throw(1, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
+
+# define triax_expect_throw(exception, ...)                                                        \
+   triaxi_assert_throw(0, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
+
+# define triax_assert_nthrow(...) triaxi_assert_nthrow(1, #__VA_ARGS__ " ", __VA_ARGS__)
+
+# define triax_expect_nthrow(...) triaxi_assert_nthrow(0, #__VA_ARGS__ " ", __VA_ARGS__)
+
+#endif
 /// @}
 /// @} // triax_test_module
 #pragma endregion public_api
@@ -1690,6 +1705,7 @@ TRIAXI_EXTERN_C_END
 #pragma endregion registration_macros
 
 #pragma region assert_protocol
+
 #define TRIAXI_ASSERTTYPE_ITEMS(X, PRE)                                                            \
   X(PRE##exit)                                                                                     \
   X(PRE##fault)                                                                                    \
@@ -1706,7 +1722,7 @@ TRIAXI_EXTERN_C_END
   X(PRE##str_startswith)                                                                           \
   X(PRE##str_endswith)                                                                             \
   X(PRE##str_contains)                                                                             \
-  X(PRE##check) X(PRE##arreq)
+  X(PRE##check) X(PRE##arreq) X(PRE##throw)
 
 typedef enum TRIAXI_AssertType {
   TRIAXI_ASSERTTYPE_ITEMS(TRIAXI_COMMA_ONE, TRIAXI_AT_)
@@ -1715,7 +1731,7 @@ enum { TRIAXI_AT_COUNT = TRIAXI_COUNT_ALL(TRIAXI_ASSERTTYPE_ITEMS) };
 
 typedef uint8_t TRIAXI_PacketPrefix;
 enum {
-  TRIAXI_PACKETPREFIX_RES      = 0, // todo used?
+  TRIAXI_PACKETPREFIX_RES      = 0,
   TRIAXI_PACKETPREFIX_HDR_PASS = 1,
   TRIAXI_PACKETPREFIX_HDR_FAIL = 2
 };
@@ -1851,7 +1867,7 @@ typedef struct TRIAXI_WinLaunch {
 
 typedef struct TRIAXI_Shared {
   // The collector reads metadata only after execution returns or the worker is reaped.
-  triaxi_alignas(64) TRIAXI_State state;
+  triaxi_alignas(64) TRIAXI_State state; // aligned to prevent false sharing between processes
   uint32_t         nasserts, duration_ms;
   TRIAXI_AssertHdr pending;
   TRIAXI_Exit      exit;
@@ -1882,7 +1898,7 @@ TRIAXI_LINKAGE_SHARED struct TRIAXI_ExecState { // per-test execution state
   bool                    isolated, in_test, debug_break, log_successes;
   const void*             param;
   jmp_buf                 jmp;
-  volatile TRIAXI_Shared* shared; // volatile to ensure write before _exit()
+  volatile TRIAXI_Shared* shared; // volatile to ensure writes actually happen
 #if TRIAXI_PLATFORM_WINDOWS
   uintptr_t image_base;
   uint32_t  image_size;
@@ -2094,7 +2110,7 @@ static inline void triaxi_header_load(TRIAXI_AssertHdr* dst, const volatile TRIA
 static inline void triaxi_header_store(volatile TRIAXI_AssertHdr* dst,
                                        const TRIAXI_AssertHdr*    src) {
 #if TRIAXI_C
-  *dst = *src;
+  *dst = *src; // asdf
 #else
   dst->kind     = src->kind;
   dst->type     = src->type;
@@ -2254,7 +2270,7 @@ static inline void triaxi_assert_fail_strings(TRIAXI_AR val, Triax_Str e1, Triax
 #pragma endregion log_protocol
 
 #pragma region assertion_dispatch
-/// @brief Reason we jumped out of the test function
+/// @brief Reason execution left the test body
 typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_RETURNED,
   TRIAXI_EXEC_ASSERTED,
@@ -2264,7 +2280,6 @@ typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_ERROR
 } TRIAXI_ExecOutcome;
 
-// todo should this affect state?
 #if !TRIAXI_CPP
 # define TRIAXI_ABORT_TEST(outcome) (longjmp(TRIAXI_exec.jmp, (int)(outcome)))
 #else
@@ -2276,8 +2291,8 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
   TRIAXI_exec.shared->exit.code = triaxi_error_pack((TRIAXI_Error)error, syserr);
   // Body/assertion errors stay pending through destructors and teardown, so a cleanup
   // fault/timeout takes precedence. Fixtures may be noexcept: publish their error and abort.
-  if (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST
-      || TRIAXI_exec.shared->state == TRIAXI_STATE_IN_ASSERT) {
+  const TRIAXI_State state = TRIAXI_exec.shared->state;
+  if (state == TRIAXI_STATE_TEST || state == TRIAXI_STATE_IN_ASSERT) {
     TRIAXI_ABORT_TEST(TRIAXI_EXEC_ERROR);
   }
   TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
@@ -2360,6 +2375,58 @@ static inline bool triaxi_assert_complete(bool failed) {
       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                   \
     }                                                                                              \
   } while (0)
+
+#if TRIAXI_CPP
+template <class T>
+static inline bool triaxi_exception_matches() {
+  try {
+    throw;
+  } catch (const T&) { return true; } catch (...) {
+    return false;
+  }
+}
+
+template <>
+inline bool triaxi_exception_matches<TRIAXI_AnyException>() {
+  return true;
+}
+# define triaxi_assert_throw(aborting, exception, lit, ...)                                        \
+   do {                                                                                            \
+     triaxi_assert_begin(TRIAXI_AT_throw, aborting, 0, 0, lit);                                    \
+     bool TRIAXI_threw = false, TRIAXI_matched = false;                                            \
+     try {                                                                                         \
+       __VA_ARGS__;                                                                                \
+     } catch (const TRIAXI_TestException&) { throw; } catch (...) {                                \
+       TRIAXI_threw   = true;                                                                      \
+       TRIAXI_matched = triaxi_exception_matches<exception>();                                     \
+     }                                                                                             \
+     if (TRIAXI_matched) {                                                                         \
+       triaxi_assert_pass();                                                                       \
+     } else {                                                                                      \
+       TRIAXI_exec.pkg.len = 0;                                                                    \
+       triaxi_assert_fail(TRIAXI_threw ? TRIAXI_AR_FAIL2 : TRIAXI_AR_FAIL1);                       \
+       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                  \
+     }                                                                                             \
+   } while (0)
+
+# define triaxi_assert_nthrow(aborting, lit, ...)                                                  \
+   do {                                                                                            \
+     triaxi_assert_begin(TRIAXI_AT_throw, aborting, 1, 0, lit);                                    \
+     bool TRIAXI_threw = false;                                                                    \
+     try {                                                                                         \
+       __VA_ARGS__;                                                                                \
+     } catch (const TRIAXI_TestException&) { throw; } catch (...) {                                \
+       TRIAXI_threw = true;                                                                        \
+     }                                                                                             \
+     if (!TRIAXI_threw) {                                                                          \
+       triaxi_assert_pass();                                                                       \
+     } else {                                                                                      \
+       TRIAXI_exec.pkg.len = 0;                                                                    \
+       triaxi_assert_fail(TRIAXI_AR_FAIL1);                                                        \
+       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                  \
+     }                                                                                             \
+   } while (0)
+#endif
 
 #if TRIAXI_GNU_COMPAT
 __attribute__((format(printf, 3, 4)))
@@ -4134,7 +4201,9 @@ TRIAXI_EXTERN_C_END
 # if TRIAXI_PLATFORM_WINDOWS && !TRIAXI_MSVC_COMPAT
 static PVOID                 TRIAXI_veh_handle;
 static volatile sig_atomic_t TRIAXI_crash_signal;
-
+/* todo I'd prefer a Windows-specific DWORD storage type, with an explicit check of how your
+ * exception-recovery path accesses it. The existing cast deserves scrutiny independently of whether
+ * volatile is necessary.*/
 static LONG CALLBACK         triaxi_veh_crash(PEXCEPTION_POINTERS ep) {
   if (TRIAXI_exec.isolated) { return EXCEPTION_CONTINUE_SEARCH; }
   DWORD code = ep->ExceptionRecord->ExceptionCode;
@@ -4456,7 +4525,7 @@ static const char* TRIAXI_assertnames[2][TRIAXI_AT_COUNT]
     = {{TRIAXI_STRINGIFY_ALL(TRIAXI_ASSERTTYPE_ITEMS)},
        {"nexit", "nfault", "false", "nonnull", "neq", "leq", "geq", "floatneq_abstol",
         "floatneq_reltol", "memneq", "memnzero", "strneq", "str_nstartswith", "str_nendswith",
-        "str_ncontains", "check", "arrneq"}};
+        "str_ncontains", "check", "arrneq", "nthrow"}};
 
 typedef enum TRIAXI_PrintMeta {
   TRIAXI_PRINT_META_NONE,
@@ -4534,7 +4603,8 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
   case TRIAXI_AT_str_startswith:
   case TRIAXI_AT_str_endswith  :
   case TRIAXI_AT_str_contains  :
-  case TRIAXI_AT_check         : break;
+  case TRIAXI_AT_check         :
+  case TRIAXI_AT_throw         : break;
   }
   switch (res->code & TRIAXI_ENCODING_MASK) {
   default: triaxi_unreachable();
@@ -4963,7 +5033,16 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       *pre = '\0';
     }
     break;
+  // --- exceptions ---
+  case TRIAXI_AT_throw:
+    if (neg) {
+      op = "unexpected exception thrown";
+    } else {
+      op = res->val == TRIAXI_AR_FAIL1 ? "no exception thrown" : "wrong exception type thrown";
+    }
+    break;
   }
+
   if ((res->code & TRIAXI_ENCODING_MASK) == TRIAXI_ENCODING_BLOB
       && (atype == TRIAXI_AT_gt || atype == TRIAXI_AT_lt)) {
     op = atype == TRIAXI_AT_gt ? (!neg ? " > " : " <= ") : (!neg ? " < " : " >= ");
@@ -5648,15 +5727,15 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
   TRIAXI_exec.shared = shared;
   TRIAXI_exec.log_successes = inv->settings.verbosity == TRIAX_VERBOSITY_ALWAYS;
   memset(&TRIAXI_exec.pkg, 0, sizeof(TRIAXI_exec.pkg));
-  TRIAXI_exec.shared->exit.type   = TRIAXI_EXIT_NONE;
-  TRIAXI_exec.shared->exit.code   = 0;
-  int64_t                     t0  = triaxi_now_ms();
-  volatile TRIAXI_ExecOutcome res = TRIAXI_EXEC_RETURNED;
+  TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_NONE;
+  TRIAXI_exec.shared->exit.code = 0;
+  int64_t            t0         = triaxi_now_ms();
+  TRIAXI_ExecOutcome res        = TRIAXI_EXEC_RETURNED;
   // MSVC GetExceptionCode() returns DWORD; other recovery paths use int.
 # if TRIAXI_PLATFORM_WINDOWS && TRIAXI_MSVC_COMPAT
-  volatile DWORD fault = 0;
+  DWORD fault = 0;
 # else
-  volatile int fault = 0;
+  int fault = 0;
 # endif
 # if TRIAXI_MSVC
 #  pragma warning(push)

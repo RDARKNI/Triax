@@ -2,6 +2,11 @@
 #include "triax.h"
 #include "triax_opt.h"
 
+// Exception assertions are C++-only (tests/cpp/exceptions.cpp).
+#if !defined(__cplusplus) && (defined(triax_expect_throw) || defined(TRIAX_EXCEPTION_ANY))
+# error "C++ exception assertions leaked into the C API"
+#endif
+
 static int add(int a, int b) { return a + b; }
 
 triax_test(core, equality, triax_opt(skip, false)) {
