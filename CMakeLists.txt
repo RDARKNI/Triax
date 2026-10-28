@@ -494,4 +494,40 @@ if(BUILD_TESTING)
             "are both required; one or more not found)"
         )
     endif()
+    # Source-level fault injection; no checkout headers are modified.
+    option(TRIAX_PROTOCOL_REQUIRE_RECOVERY
+           "Require diagnostics from interrupted assertion publication/logging" OFF)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    # Compiler invocation and worker abort behavior are validated on POSIX only.
+    if(Python3_Interpreter_FOUND AND UNIX)
+        set(TRIAX_PROTOCOL_RECOVERY_ARG --known-bugs)
+        if(TRIAX_PROTOCOL_REQUIRE_RECOVERY)
+            set(TRIAX_PROTOCOL_RECOVERY_ARG)
+        endif()
+        set(TRIAX_PROTOCOL_COMPILER_ARGS)
+        if(APPLE AND CMAKE_OSX_SYSROOT)
+            list(APPEND TRIAX_PROTOCOL_COMPILER_ARGS
+                 --compiler-arg=-isysroot --compiler-arg=${CMAKE_OSX_SYSROOT})
+        endif()
+        foreach(TRIAX_PROTOCOL_LANG IN ITEMS c cxx)
+            if(TRIAX_PROTOCOL_LANG STREQUAL "c")
+                set(TRIAX_PROTOCOL_COMPILER "${CMAKE_C_COMPILER}")
+            else()
+                set(TRIAX_PROTOCOL_COMPILER "${CMAKE_CXX_COMPILER}")
+            endif()
+            add_test(
+                NAME triax-assert-protocol-${TRIAX_PROTOCOL_LANG}
+                COMMAND ${Python3_EXECUTABLE}
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/validate_assert_protocol.py
+                        ${CMAKE_CURRENT_SOURCE_DIR}/include/triax.h
+                        --cc ${TRIAX_PROTOCOL_COMPILER}
+                        --language ${TRIAX_PROTOCOL_LANG}
+                        ${TRIAX_PROTOCOL_COMPILER_ARGS}
+                        ${TRIAX_PROTOCOL_RECOVERY_ARG}
+            )
+            set_tests_properties(triax-assert-protocol-${TRIAX_PROTOCOL_LANG}
+                                 PROPERTIES TIMEOUT 180)
+        endforeach()
+    endif()
+
 endif()
