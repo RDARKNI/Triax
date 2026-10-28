@@ -26,8 +26,12 @@ struct Lifetime {
   explicit Lifetime(int* p) : counter(p) {}
   ~Lifetime() { ++*counter; }
 };
+// The flag keeps a returning path in the destructor (MSVC C4722 otherwise).
 struct ExitOnDestroy {
-  ~ExitOnDestroy() { std::exit(0); }
+  bool armed = true;
+  ~ExitOnDestroy() {
+    if (armed) { std::exit(0); }
+  }
 };
 
 int  invocation_count = 0;

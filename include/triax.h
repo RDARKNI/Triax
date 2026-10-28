@@ -2145,8 +2145,8 @@ static inline void triaxi_assert_begin_impl(uint16_t len, uint8_t type, uint8_t 
     triaxi_user_error(TRIAXI_ERROR_ASSERT_IN_FIXTURE);
   }
   triaxi_header_store(&TRIAXI_exec.shared->pending, &hdr);
-  ++TRIAXI_exec.shared->nasserts;
-  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;
+  TRIAXI_exec.shared->nasserts = TRIAXI_exec.shared->nasserts + 1;
+  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;
 }
 #define triaxi_assert_begin(type, ae, neg, cr, lit)                                                \
   triaxi_assert_begin_impl(sizeof(lit) - 1, (uint8_t)(type), (uint8_t)(ae), (uint8_t)(neg), (cr),  \
