@@ -20,7 +20,8 @@ import sys
 import tempfile
 
 # Match exact source fragments; fail loudly after protocol refactors.
-PUBLICATION_ANCHOR = "  ++TRIAXI_exec.shared->nasserts;\n  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;"
+PUBLICATION_ANCHOR = ("  TRIAXI_exec.shared->nasserts = TRIAXI_exec.shared->nasserts + 1;\n"
+                      "  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;")
 FAILURE_ANCHOR = ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
                   "  triaxi_file_write(TRIAXI_exec.log, &TRIAXI_exec.pkg, record_size);")
 
@@ -28,8 +29,8 @@ FAILURE_ANCHOR = ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n
 # Earlier completed assertions are untouched.
 CASES = {
     "evaluation_abort": {
-        "anchor": "  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;\n}",
-        "replacement": "  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;\n}",
+        "anchor": "  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;\n}",
+        "replacement": "  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;\n}",
         "test": "triax_expect_eq((abort(), 1234), 5678);",
         "expression": "expect_eq((abort(), 1234), 5678)",
         "kind": "unexpected_crash",
@@ -37,9 +38,9 @@ CASES = {
     },
     "after_counter_before_state": {
         "anchor": PUBLICATION_ANCHOR,
-        "replacement": ("  ++TRIAXI_exec.shared->nasserts;\n"
+        "replacement": ("  TRIAXI_exec.shared->nasserts = TRIAXI_exec.shared->nasserts + 1;\n"
                         "  if (TRIAXI_exec.shared->nasserts == 10) { abort(); }\n"
-                        "  TRIAXI_exec.shared->state = TRIAXI_STATE_IN_ASSERT;"),
+                        "  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;"),
         "test": "triax_expect_eq(1234, 5678);",
         "expression": "expect_eq(1234, 5678)",
         "kind": "unexpected_crash",
