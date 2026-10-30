@@ -32,8 +32,8 @@ triax_test(header_check, fault_assertions, triax_opt(isolation, TRIAX_ISOLATION_
 }
 
 // The non-conforming short forms, made warning-free by the silencing macros. GCC before 15
-// reports the C case without a warning option, so no pragma can suppress it there.
-#if defined(__cplusplus) || !defined(__GNUC__) || defined(__clang__) || __GNUC__ >= 15
+// reports them without a warning option, so no pragma can suppress them there.
+#if !defined(__GNUC__) || defined(__clang__) || __GNUC__ >= 15
 TRIAX_NONPEDANTIC_BEGIN()
 triax_test(header_check, silenced_short_forms) {
   triax_expect_eq(1, 1);

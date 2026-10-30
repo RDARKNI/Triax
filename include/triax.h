@@ -969,6 +969,8 @@ struct TRIAXI_AnyException {};
 /// inside a function, and must be closed in the same translation unit. Both
 /// macros expand to nothing for C23, C++20, and compilers other than GCC and
 /// Clang (MSVC does not report omitted arguments).
+/// @note GCC before version 15 reports the diagnostic without a warning option,
+/// so no pragma can suppress it; use the explicit forms there.
 /// @code{.c}
 /// #include "triax.h"
 ///
@@ -2163,8 +2165,8 @@ static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
   for (;;) {
     if (len == cap) {
       // Probe before growing: empty files allocate nothing; exactly sized files need no realloc.
-      char byte;
-      if (!triaxi_file_read_some(f, &byte, 1)) { break; }
+      char probe; // not "byte": MinGW's <windows.h> declares a global type of that name
+      if (!triaxi_file_read_some(f, &probe, 1)) { break; }
       if (cap > SIZE_MAX / 2) { triaxi_file_close(f), triaxi_fatal(); }
       cap = cap ? cap * 2 : 4096;
       if (str) {
@@ -2174,7 +2176,7 @@ static inline Triax_Str triaxi_file_read_all(TRIAXI_File f) {
       } else {
         str = (char*)triaxi_allocate(cap);
       }
-      str[len++] = byte;
+      str[len++] = probe;
       continue;
     }
     size_t n = triaxi_file_read_some(f, str + len, cap - len);
@@ -2926,7 +2928,8 @@ static inline bool triaxi_AF_floateq_reltol(bool v, long double e1, long double 
     // Same signs: subtract first to preserve nearby differences without overflow.
     // Opposite signs: compare 1 + lo/hi <= tol as lo/hi <= tol - 1, without
     // overflowing the sum or rounding a nonzero contribution away at tol == 1.
-    if (signbit(e1) != signbit(e2) && lo > 0) {
+    // lo > 0 makes both operands nonzero, so < 0 compares signs; MinGW's signbit narrows.
+    if (lo > 0 && (e1 < 0) != (e2 < 0)) {
       close = tol > 1 && (tol >= 2 || lo / hi <= tol - 1);
     } else {
       close = (hi - lo) / hi <= tol;
@@ -4264,10 +4267,9 @@ triaxi_noreturn TRIAXI_LINKAGE_SHARED void triaxi_fatal_f(const char* file, int 
   int         nfmt = snprintf(buf, cap, "%s:%d - triax framework error", file, line);
   size_t      len  = nfmt > 0 ? TRIAXI_MIN((size_t)nfmt, cap - 1) : 0;
 
-  if (error && len < cap - 1) {
-    size_t rem  = cap - len;
-    int    n    = snprintf(buf + len, rem, ": ");
-    len        += n > 0 ? TRIAXI_MIN((size_t)n, rem - 1) : 0;
+  // memcpy rather than snprintf: GCC cannot prove the separator fits (-Wformat-truncation).
+  if (error && cap - len > 2) {
+    memcpy(buf + len, ": ", 2), len += 2;
 
     if (len < cap - 1) {
       DWORD syslen
@@ -4276,8 +4278,8 @@ triaxi_noreturn TRIAXI_LINKAGE_SHARED void triaxi_fatal_f(const char* file, int 
         len += syslen;
         while (len && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) { --len; }
       } else {
-        n    = snprintf(buf + len, cap - len, "Windows error %lu", (unsigned long)error);
-        len += n > 0 ? TRIAXI_MIN((size_t)n, cap - len - 1) : 0;
+        int n  = snprintf(buf + len, cap - len, "Windows error %lu", (unsigned long)error);
+        len   += n > 0 ? TRIAXI_MIN((size_t)n, cap - len - 1) : 0;
       }
     }
   }
