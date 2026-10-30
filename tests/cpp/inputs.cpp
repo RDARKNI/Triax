@@ -8,6 +8,8 @@
 #include "triax_selfverify.h"
 #include <string>
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triaxi_validate(cpp_inputs, string_comparisons, TRIAXI_VALIDATE_PASSED) {
   const char* str  = "hello";
   const char* cstr = "hello";
@@ -30,3 +32,5 @@ triaxi_validate(cpp_inputs, string_comparisons, TRIAXI_VALIDATE_PASSED) {
   triax_expect_eq(cppstrv, cppstr);
 #endif
 }
+
+TRIAX_NONPEDANTIC_END()

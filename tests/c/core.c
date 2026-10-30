@@ -2,6 +2,8 @@
 #include "triax.h"
 #include "triax_opt.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 // Exception assertions are C++-only (tests/cpp/exceptions.cpp).
 #if !defined(__cplusplus) && (defined(triax_expect_throw) || defined(TRIAX_EXCEPTION_ANY))
 # error "C++ exception assertions leaked into the C API"
@@ -33,3 +35,5 @@ static const int values[] = {1, 2, 3};
 triax_test(core, parameterized, triax_opt_params(values)) {
   triax_assert_gt(*triax_param(int), 0);
 }
+
+TRIAX_NONPEDANTIC_END()

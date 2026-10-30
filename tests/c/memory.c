@@ -8,6 +8,8 @@
 #include "triax_opt.h"
 #include "triax_selfverify.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(memory, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 triaxi_validate(memory, memeq_pass, TRIAXI_VALIDATE_PASSED) {
@@ -44,3 +46,5 @@ triaxi_validate(memory, memnzero_fail, TRIAXI_VALIDATE_FAILED) {
   char a[4] = {0};
   triax_expect_memnzero(a, 4);
 }
+
+TRIAX_NONPEDANTIC_END()

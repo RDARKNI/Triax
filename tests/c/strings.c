@@ -8,6 +8,8 @@
 #include "triax_opt.h"
 #include "triax_selfverify.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(strings,
             triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS) triax_opt(isolation, TRIAX_ISOLATION_ON));
 
@@ -121,5 +123,7 @@ triaxi_validate(strings, arreq_fail_huge, TRIAXI_VALIDATE_FAILED) {
   memset(b, 'b', sizeof(b) - 1), b[sizeof(b) - 1] = '\0';
   const char* arr1[1] = {a};
   const char* arr2[1] = {b};
-  triax_expect_arreq(arr1, arr2);
+  triax_expect_arreq(arr1, arr2, 1);
 }
+
+TRIAX_NONPEDANTIC_END()

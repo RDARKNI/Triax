@@ -31,11 +31,8 @@ triax_test(demo_tests, type_safety, .skip = false) {
 
 triax_test(demo_tests, array_comparisons, .verbosity = TRIAX_VERBOSITY_ALWAYS) {
   int arr1[3] = {1, 2, 3}, arr2[3] = {1, 2, 4};
-  triax_expect_arrneq(arr1, arr2);
-  triax_expect_arreq(arr1, arr2);
-  // int arr3[3] = {1, 2, 3}, arr4[4] = {1, 2, 4,5};
-  // triax_expect_arreq(arr3, arr4); // compile-time error, must have same extents
-  // triax_expect_arrneq(arr3, arr4); // compile-time error, must have same extents
+  triax_expect_arrneq(arr1, arr2, 3);
+  triax_expect_arreq(arr1, arr2, 3);
 }
 
 triax_test(demo_strings, assertion_types, .skip = 0) {
@@ -82,7 +79,7 @@ static const struct Cases {
 } cases[] = {{-3, 3}, {0, 0}, {5, 5}, {0, 5}};
 triax_test(demo_tests, absolute_value, .params = triax_as_params(cases)) {
   const struct Cases* c = triax_param(struct Cases);
-  triax_assert_eq(c->expected, abs(c->input));
+  triax_assert_eq(abs(c->input), c->expected);
 }
 triax_suite(demo_tests, .tags = "all");
 

@@ -11,6 +11,8 @@
 #include "triax_opt.h"
 #include "triax_selfverify.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 // Isolated: skip_in_fixture/assertion_in_fixture abort() the process (see
 // triaxi_user_error_f — fixtures are noexcept in C++17+, so they can't use
 // the normal longjmp/throw unwind), so this suite runs them the same way
@@ -126,3 +128,5 @@ triaxi_validate_opts_user_error(errors_config, exit_assert_without_isolation,
                                 TRIAXI_VALIDATE_ISOLATION_OFF) {
   triax_assert_exit(0, (void)0);
 }
+
+TRIAX_NONPEDANTIC_END()

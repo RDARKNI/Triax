@@ -17,6 +17,8 @@
 
 #include "portable.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(print,
             triax_opt(verbosity, TRIAX_VERBOSITY_DEFAULT) triax_opt(isolation, TRIAX_ISOLATION_ON));
 triaxi_validate(print, test_pass_stdout_noprint, TRIAXI_VALIDATE_PASSED) {
@@ -272,3 +274,5 @@ triaxi_validate_opts(print_never_suitelevel, test_print_to_err_e_never_suiteleve
   fprintf(stderr, "SHANT PRINT\n"); // nolint
   raise(SIGABRT);
 }
+
+TRIAX_NONPEDANTIC_END()

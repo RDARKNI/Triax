@@ -5,6 +5,8 @@
 #include "triax.h"
 #include "triax_selfverify.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(messages, );
 
 triaxi_validate(messages, check_without_message_pass, TRIAXI_VALIDATE_PASSED) {
@@ -14,3 +16,5 @@ triaxi_validate(messages, check_without_message_pass, TRIAXI_VALIDATE_PASSED) {
 triaxi_validate(messages, check_without_message_fail, TRIAXI_VALIDATE_FAILED) {
   triax_expect(0);
 }
+
+TRIAX_NONPEDANTIC_END()

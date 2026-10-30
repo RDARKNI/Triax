@@ -8,6 +8,8 @@
 #include "triax_opt.h"
 #include "triax_selfverify.h"
 #include <float.h>
+
+TRIAX_NONPEDANTIC_BEGIN()
 #if !defined(LDBL_TRUE_MIN) && defined(__LDBL_DENORM_MIN__)
 # define LDBL_TRUE_MIN __LDBL_DENORM_MIN__ // missing from C++ before C++17
 #endif
@@ -236,20 +238,20 @@ triaxi_validate(ordering, str_fail, TRIAXI_VALIDATE_FAILED) {
 triax_suite(float_tol, triax_opt(verbosity, TRIAX_VERBOSITY_ALWAYS));
 
 triaxi_validate(float_tol, floateq_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_expect_floateq_abstol(1.0, 1.0 + 9e-5, 1e-4); // within tolerance
-  triax_expect_floateq_abstol(1.0, 1.0 + 1e-4, 1e-4); // exactly at boundary (<=)
+  triax_expect_floateq_abstol(1.0 + 9e-5, 1.0, 1e-4); // within tolerance
+  triax_expect_floateq_abstol(1.0 + 1e-4, 1.0, 1e-4); // exactly at boundary (<=)
   triax_expect_floateq_abstol(0.0, 0.0, 0.0);         // exact zero, zero tolerance
 }
 triaxi_validate(float_tol, floateq_fail, TRIAXI_VALIDATE_FAILED) {
   triax_expect_floateq_abstol(1.0, 2.0, 0.5);           // well outside
-  triax_expect_floateq_abstol(1.0, 1.0 + 1.1e-4, 1e-4); // just over boundary
+  triax_expect_floateq_abstol(1.0 + 1.1e-4, 1.0, 1e-4); // just over boundary
 }
 triaxi_validate(float_tol, floatneq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_floatneq_abstol(1.0, 2.0, 0.5);
-  triax_expect_floatneq_abstol(1.0, 1.0 + 1.1e-4, 1e-4);
+  triax_expect_floatneq_abstol(1.0 + 1.1e-4, 1.0, 1e-4);
 }
 triaxi_validate(float_tol, floatneq_fail, TRIAXI_VALIDATE_FAILED) {
-  triax_expect_floatneq_abstol(1.0, 1.0 + 9e-5, 1e-4); // within tolerance
+  triax_expect_floatneq_abstol(1.0 + 9e-5, 1.0, 1e-4); // within tolerance
   triax_expect_floatneq_abstol(1.0, 1.0, 1e-4);        // exactly equal
 }
 
@@ -263,7 +265,7 @@ triaxi_validate(float_tol, floatneq_fail, TRIAXI_VALIDATE_FAILED) {
 // wrongly rejects every tolerance, even one exactly matching the true ratio
 // (comparing an unrecoverable Infinity <= tol).
 triaxi_validate(float_tol, reltol_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_expect_floateq_reltol(1.0, 1.0 + 1e-10, 1e-9);    // within tolerance
+  triax_expect_floateq_reltol(1.0 + 1e-10, 1.0, 1e-9);    // within tolerance
   triax_expect_floateq_reltol(100.0, 100.0, 0.0);         // exact, zero tolerance
   triax_expect_floateq_reltol(LDBL_MAX, -LDBL_MAX, 2.0L); // true ratio == tol, exactly
 }
@@ -281,13 +283,15 @@ triaxi_validate(float_tol, reltol_fail, TRIAXI_VALIDATE_FAILED) {
   // to wrongly pass a tolerance deliberately set just under the true ratio.
   // 1.5L - LDBL_EPSILON is 1.5L's predecessor: the spacing in [1, 2) is LDBL_EPSILON. A constant
   // rather than nextafterl(), which needs libm (-lm) on glibc.
-  triax_expect_floateq_reltol(1.5L, 1.5L - LDBL_EPSILON, LDBL_EPSILON / 1.5L * 0.9L);
+  triax_expect_floateq_reltol(1.5L - LDBL_EPSILON, 1.5L, LDBL_EPSILON / 1.5L * 0.9L);
 }
 triaxi_validate(float_tol, reltolneq_pass, TRIAXI_VALIDATE_PASSED) {
   triax_expect_floatneq_reltol(1.0, 2.0, 0.1);
   triax_expect_floatneq_reltol(LDBL_MAX, -LDBL_MAX, 1.5L);
 }
 triaxi_validate(float_tol, reltolneq_fail, TRIAXI_VALIDATE_FAILED) {
-  triax_expect_floatneq_reltol(1.0, 1.0 + 1e-10, 1e-9);
+  triax_expect_floatneq_reltol(1.0 + 1e-10, 1.0, 1e-9);
   triax_expect_floatneq_reltol(LDBL_MAX, -LDBL_MAX, 2.0L);
 }
+
+TRIAX_NONPEDANTIC_END()

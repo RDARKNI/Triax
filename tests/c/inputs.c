@@ -13,6 +13,8 @@
 #include "triax_selfverify.h"
 #include <assert.h>
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triaxi_validate_opts(crash, abort_fires, TRIAXI_VALIDATE_PASSED, TRIAXI_VALIDATE_TIMEOUT_INHERIT,
                      TRIAXI_VALIDATE_ISOLATION_OFF) {
   triax_assert_fault(TRIAX_FAULT_ANY, abort());
@@ -88,3 +90,5 @@ triaxi_validate(invalid_inputs, ptr_str, TRIAXI_VALIDATE_PASSED) {
 triaxi_validate(invalid_inputs, signed_unsigned, TRIAXI_VALIDATE_PASSED) {
   triax_expect_gt(10ull, -1);
 }
+
+TRIAX_NONPEDANTIC_END()

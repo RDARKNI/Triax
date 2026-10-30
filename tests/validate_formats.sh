@@ -193,5 +193,36 @@ else
   echo "OK"
 fi
 
+# Check operand semantics as well as output syntax, for both C and C++ runners.
+echo "== Actual/expected operand order =="
+if ! python3 - "$(native_path "$BIN")" "$(native_path "$WORKDIR/order.json")" <<'PY_ORDER'
+import json, os, subprocess, sys
+binary, report = sys.argv[1:]
+run = subprocess.run([binary, '--no-color', '--text=stdout', '--json=' + report,
+                      '--isolation=on', 'operand_order'],
+                     env={**os.environ, 'TRIAXI_VALIDATE_CHILD': '1'},
+                     capture_output=True, text=True, timeout=30)
+assert run.returncode == 1, (run.returncode, run.stderr)
+tests = {t['name']: t for s in json.load(open(report))['suites'] for t in s['tests']}
+assert set(tests) == {'expectations', 'fatal'}, tests
+failures = tests['expectations']['assert_failures']
+assert tests['expectations']['outcome'] == 'failed'
+assert tests['expectations']['assert_count'] == 6
+assert [f['args'] for f in failures] == [
+    ['7', '9'], ['actual', 'expected'], ['7', '9', '0.5'],
+    ['7', '9', '0.125'], ['7', '9'], ['11', '22']
+], failures
+assert failures[4]['index'] == 0
+assert failures[5]['offset'] == 0
+assert tests['fatal']['assert_count'] == 1
+assert tests['fatal']['assert_failures'][0]['args'] == ['7', '9']
+assert '7 != 9' in run.stdout, run.stdout
+assert '"actual" != "expected"' in run.stdout, run.stdout
+print('OK')
+PY_ORDER
+then
+  status=1
+fi
+
 completed=1
 exit "$status"

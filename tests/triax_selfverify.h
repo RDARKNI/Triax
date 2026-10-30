@@ -36,6 +36,8 @@
 # include <unistd.h>
 #endif
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 typedef enum TRIAXI_ValidateOutcome {
   TRIAXI_VALIDATE_SKIPPED,
   TRIAXI_VALIDATE_PASSED,
@@ -358,7 +360,7 @@ static inline void triaxi_validate_run_ex(const char* filter, TRIAXI_ValidateOut
   triax_assert_eq(triaxi_validate_make_tmp(json_path, sizeof(json_path)), 0);
 
   int code = triaxi_validate_spawn(filter, json_path, timeout_ms, isolation);
-  triax_expect_eq(triaxi_validate_expected_exit(expected), code);
+  triax_expect_eq(code, triaxi_validate_expected_exit(expected));
 
   char* json = triaxi_validate_read_all(json_path);
   remove(json_path);
@@ -509,5 +511,7 @@ static inline void triaxi_validate_run_user_error_opts(const char* filter, const
     triaxi_validate_run_user_error(#suite "::" #name, (reason));                                   \
   }                                                                                                \
   static void TRIAXI_SV_CAT3(triaxi_validate_body_, suite, _##name)(void)
+
+TRIAX_NONPEDANTIC_END()
 
 #endif /* TRIAX_SELFVERIFY_H */

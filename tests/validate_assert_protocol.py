@@ -15,11 +15,13 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
 
-# Match exact source fragments; fail loudly after protocol refactors.
+# Match source fragments token for token; fail loudly after protocol refactors.
+# Whitespace runs match any whitespace, so reformatting does not break anchors.
 PUBLICATION_ANCHOR = ("  TRIAXI_exec.shared->nasserts = TRIAXI_exec.shared->nasserts + 1;\n"
                       "  TRIAXI_exec.shared->state    = TRIAXI_STATE_IN_ASSERT;")
 FAILURE_ANCHOR = ("  triaxi_assert_write_header(TRIAXI_PACKETPREFIX_HDR_FAIL);\n"
@@ -135,10 +137,13 @@ TRIAX_MAIN()
 def run_case(source, compiler, workdir, name, spec, verbosity, known_bugs, language, compiler_args=()):
     header = source
     anchor = spec["anchor"]
-    if anchor and header.count(anchor) != 1:
-        raise RuntimeError(f"{name}: expected exactly one source anchor, found {header.count(anchor)}")
     if anchor:
-        header = header.replace(anchor, spec["replacement"].replace("nasserts == 10", "nasserts == " + str(spec["expected_count"])), 1)
+        pattern = re.compile(r"\s+".join(map(re.escape, anchor.split())))
+        found = len(pattern.findall(header))
+        if found != 1:
+            raise RuntimeError(f"{name}: expected exactly one source anchor, found {found}")
+        replacement = spec["replacement"].replace("nasserts == 10", "nasserts == " + str(spec["expected_count"]))
+        header = pattern.sub(lambda _: replacement, header, count=1)
     build = workdir / f"{language}_{name}"
 
     build.mkdir(exist_ok=True)

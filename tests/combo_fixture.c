@@ -15,6 +15,8 @@
 
 #include "portable.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 // ── isolation x jobs: a fixed mix of outcomes, all isolated, run under
 // --jobs=N>1 so several land in the same concurrent batch. ──────────────────
 triax_suite(combo_isojobs, .isolation = TRIAX_ISOLATION_ON);
@@ -169,3 +171,5 @@ int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
   return triax_run_main(argc, argv, cfg);
 }
+
+TRIAX_NONPEDANTIC_END()

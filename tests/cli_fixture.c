@@ -8,6 +8,8 @@
 // pass/fail shape matter.
 #include "triax.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 // fx_a: two tests, one tagged "alpha" at the suite level, the other adds its
 // own "beta" tag on top (used to check tag matching considers both suite-
 // and test-level tags, not just one).
@@ -55,10 +57,12 @@ triax_test(fx_d, streq_fail, 0) { triax_assert_streq("a", "b"); }
 triax_test(fx_d, arreq_fail, 0) {
   const char* a[1] = {"a"};
   const char* b[1] = {"b"};
-  triax_assert_arreq(a, b);
+  triax_assert_arreq(a, b, 1);
 }
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};
   return triax_run_main(argc, argv, cfg);
 }
+
+TRIAX_NONPEDANTIC_END()

@@ -6,6 +6,8 @@
 
 #include <stdexcept>
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(combo_reporters_cpp, .isolation(TRIAX_ISOLATION_ON));
 triax_test(combo_reporters_cpp, r_uexception, .skip(false)) {
   throw std::runtime_error("combo uexception");
@@ -44,3 +46,5 @@ int main(int argc, char** argv) {
   Triax_RunConfig cfg{};
   return triax_run_main(argc, argv, cfg);
 }
+
+TRIAX_NONPEDANTIC_END()

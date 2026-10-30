@@ -206,6 +206,30 @@ if(BUILD_TESTING)
             target_compile_options(triax-warnings INTERFACE -Werror)
         endif()
     endif()
+# The header, its registration macros and TRIAX_MAIN() must compile with the
+# full warning set, as errors regardless of TRIAX_WARNINGS_AS_ERRORS. Test
+# sources omit optional macro arguments inside TRIAX_NONPEDANTIC_BEGIN()/END().
+    foreach(TRIAX_HEADER_CHECK_LANG c cpp)
+        add_executable(
+            triax-header-check-${TRIAX_HEADER_CHECK_LANG}
+            tests/header_check.${TRIAX_HEADER_CHECK_LANG}
+        )
+        target_link_libraries(
+            triax-header-check-${TRIAX_HEADER_CHECK_LANG}
+            PRIVATE
+                Triax::Triax
+                triax-warnings
+        )
+        if(MSVC)
+            target_compile_options(triax-header-check-${TRIAX_HEADER_CHECK_LANG} PRIVATE /WX)
+        else()
+            target_compile_options(triax-header-check-${TRIAX_HEADER_CHECK_LANG} PRIVATE -Werror)
+        endif()
+        add_test(
+            NAME triax-header-check-${TRIAX_HEADER_CHECK_LANG}
+            COMMAND triax-header-check-${TRIAX_HEADER_CHECK_LANG} --no-color
+        )
+    endforeach()
 # Optional runtime checking for development/CI. Kept separate from normal
 # warning builds because Triax deliberately exercises crashes, exits,
 # signals, fork/CreateProcess, and other behavior that may require
@@ -286,13 +310,12 @@ if(BUILD_TESTING)
     )
 # Regression guard independent of TRIAX_WARNINGS_AS_ERRORS: message-less
 # triax_expect/triax_assert calls must not produce an empty printf format
-# string. -Wno-pedantic only because omitting a variadic macro's arguments
-# is itself a C23 extension that -Wpedantic reports under C11.
+# string.
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         set_source_files_properties(
             tests/c/messages.c
             PROPERTIES
-                COMPILE_OPTIONS "-Werror=format-zero-length;-Wno-pedantic"
+                COMPILE_OPTIONS "-Werror=format-zero-length"
         )
     endif()
     add_executable(
@@ -344,7 +367,7 @@ if(BUILD_TESTING)
         set_source_files_properties(
             "${CMAKE_CURRENT_BINARY_DIR}/c_as_cpp/messages.cpp"
             PROPERTIES
-                COMPILE_OPTIONS "-Werror=format-zero-length;-Wno-pedantic"
+                COMPILE_OPTIONS "-Werror=format-zero-length"
         )
     endif()
     if(TARGET triax-sanitizers)

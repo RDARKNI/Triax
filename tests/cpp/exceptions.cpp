@@ -11,6 +11,8 @@
 #include <cstdlib>
 #include <stdexcept>
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 namespace {
 struct Base {
   virtual ~Base() {}
@@ -167,3 +169,5 @@ EXC_USER_ERROR(skip_in_throw, "skip_in_fixture") {
   triax_expect_throw(TRIAX_EXCEPTION_ANY, triax_skip());
 }
 EXC_USER_ERROR(skip_in_nthrow, "skip_in_fixture") { triax_expect_nthrow(triax_skip()); }
+
+TRIAX_NONPEDANTIC_END()

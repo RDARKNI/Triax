@@ -5,9 +5,13 @@
 #define TRIAX_IMPL
 #include "triax.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_test(multitu_cpp, from_a_pass, .skip(false)) { triax_assert_true(1); }
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg{};
   return triax_run_main(argc, argv, cfg);
 }
+
+TRIAX_NONPEDANTIC_END()

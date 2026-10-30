@@ -9,6 +9,8 @@
 #include "triax.h"
 #include "triax_opt.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 static int*        test_level_mem;
 static size_t      test_level_len;
 
@@ -97,3 +99,5 @@ triax_test(fixtures_suite, test_suite_fixture_independence2,
 triax_test(fixtures_suite_after, test_suite_fixture_after_fini, ) {
   triax_assert_eq(suite_level_len, 0);
 }
+
+TRIAX_NONPEDANTIC_END()

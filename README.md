@@ -8,6 +8,12 @@ Copy `triax.h` into your project, include it, and compile normally. There is no 
 
 Despite the single-header integration, Triax provides automatic test registration, a rich type-generic set of assertion macros, process-isolated tests, crash and `exit()` assertions, timeouts, output capture, parameterized tests, parallel execution, and CI-friendly reporting.
 
+Equality-style assertions use **actual, expected** order, for example
+`triax_expect_eq(add(2, 3), 5)`. The same convention applies to string,
+array, memory, and floating-point equality checks; tolerance or length follows
+the two operands. Ordering checks retain normal left/right order, such as
+`triax_expect_lt(value, limit)`. JSON failure arguments preserve operand order.
+
 ## Quick start
 
 Put `triax.h` next to your test file:

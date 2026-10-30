@@ -2,6 +2,8 @@
 #include "triax.h"
 #include "triax_selfverify.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 #ifdef __cpp_lib_string_view
 static int add(int a, int b) { return a + b; }
 
@@ -51,3 +53,5 @@ triax_test(core, parameterized, .parameterize(values)) { triax_assert_gt(*triax_
 triaxi_validate(debug, deliberate_failure, TRIAXI_VALIDATE_FAILED) {
   triax_assert_true(false);
 }
+
+TRIAX_NONPEDANTIC_END()

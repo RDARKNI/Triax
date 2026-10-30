@@ -15,6 +15,8 @@
 
 #include "portable.h"
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 triax_suite(exits, triax_opt(isolation, TRIAX_ISOLATION_ON));
 
 triaxi_validate(exits, skip, TRIAXI_VALIDATE_SKIPPED) { triax_skip(); }
@@ -115,3 +117,5 @@ triaxi_validate_opts(timeout, timeout_before_after_assert, TRIAXI_VALIDATE_TIMEO
   spin_forever();
   triax_expect_true(1);
 }
+
+TRIAX_NONPEDANTIC_END()

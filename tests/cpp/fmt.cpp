@@ -14,6 +14,8 @@
 #include <iostream>
 #include <limits>
 
+TRIAX_NONPEDANTIC_BEGIN()
+
 // ── Custom type ────────────────────────────────────────────────────────────
 // Exercises the fallback formatting path (operator<< / no operator<<)
 
@@ -102,7 +104,7 @@ triaxi_validate(cpp_fmt, custom_type_arreq_fail, TRIAXI_VALIDATE_FAILED) {
   // expect output: [index 1] (1, 2) != (9, 9)
   Point a[3] = {{1, 1}, {1, 2}, {1, 3}};
   Point b[3] = {{1, 1}, {9, 9}, {1, 3}};
-  triax_expect_arreq(a, b);
+  triax_expect_arreq(a, b, 3);
 }
 
 // ── Integers (template path for non-long-long types) ──────────────────────
@@ -170,7 +172,7 @@ triaxi_validate(cpp_fmt, float_double_mixed_fail, TRIAXI_VALIDATE_FAILED) {
   triax_expect_eq(1.0f, 2.0);
 }
 triaxi_validate(cpp_fmt, float_tol_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_assert_floateq_abstol(1.0f, 1.0f + 1e-5f, 1e-4f);
+  triax_assert_floateq_abstol(1.0f + 1e-5f, 1.0f, 1e-4f);
 }
 triaxi_validate(cpp_fmt, float_tol_fail, TRIAXI_VALIDATE_FAILED) {
   // expect output showing all three: val, expected, tolerance
@@ -204,11 +206,11 @@ triaxi_validate(cpp_fmt, float_tol_at_boundary_pass, TRIAXI_VALIDATE_PASSED) {
   triax_assert_floateq_abstol(0.0f, 1e-4f, 1e-4f);
 }
 triaxi_validate(cpp_fmt, float_tol_just_inside_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_assert_floateq_abstol(1.0f, 1.0f + 9e-5f, 1e-4f);
+  triax_assert_floateq_abstol(1.0f + 9e-5f, 1.0f, 1e-4f);
 }
 triaxi_validate(cpp_fmt, float_tol_just_outside_fail, TRIAXI_VALIDATE_FAILED) {
   // output shows all three args: value, expected, tolerance
-  triax_expect_floateq_abstol(1.0f, 1.0f + 1.1e-4f, 1e-4f);
+  triax_expect_floateq_abstol(1.0f + 1.1e-4f, 1.0f, 1e-4f);
 }
 triaxi_validate(cpp_fmt, double_close_fail, TRIAXI_VALIDATE_FAILED) {
   // close doubles — differ at the 13th significant digit
@@ -242,3 +244,5 @@ triaxi_validate(cpp_fmt, str_lt_fail, TRIAXI_VALIDATE_FAILED) {
   // expect output showing both strings
   triax_expect_lt("banana", "apple");
 }
+
+TRIAX_NONPEDANTIC_END()
