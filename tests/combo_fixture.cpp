@@ -39,7 +39,7 @@ triax_test(combo_exceptions_cpp, caught_noniso, .isolation(TRIAX_ISOLATION_OFF))
   } catch (const std::runtime_error&) {
     caught = true;
   }
-  triax_assert_true(caught);
+  triax_assert(caught);
 }
 
 int main(int argc, char** argv) {

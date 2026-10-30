@@ -14,15 +14,15 @@ TRIAX_NONPEDANTIC_BEGIN()
 // own "beta" tag on top (used to check tag matching considers both suite-
 // and test-level tags, not just one).
 triax_suite(fx_a, .tags = "alpha");
-triax_test(fx_a, one, 0) { triax_assert_true(1); }
-triax_test(fx_a, two, .tags = "beta") { triax_assert_true(1); }
+triax_test(fx_a, one, 0) { triax_assert(1); }
+triax_test(fx_a, two, .tags = "beta") { triax_assert(1); }
 
 // fx_b: untagged, registered after fx_a. "first" fails; "second" would pass
 // if it ran — used to prove --fail-fast stops launching further tests after
 // the first non-pass outcome.
 triax_suite(fx_b, 0);
-triax_test(fx_b, first, 0) { triax_assert_true(0); }
-triax_test(fx_b, second, 0) { triax_assert_true(1); }
+triax_test(fx_b, first, 0) { triax_assert(0); }
+triax_test(fx_b, second, 0) { triax_assert(1); }
 
 // fx_c: tests with malformed .params, e.g. non-null ptr with zero element
 // size — a well-formed TRIAXI_Params from triax_as_params() never produces
@@ -35,15 +35,15 @@ triax_test(fx_b, second, 0) { triax_assert_true(1); }
 static const int fx_c_malformed_params_arr[] = {1, 2, 3};
 triax_suite(fx_c, 0);
 triax_test(fx_c, malformed_params, .params = {0, 3, fx_c_malformed_params_arr}) {
-  triax_assert_true(1); // unreached
+  triax_assert(1); // unreached
 }
 // Two shapes the old check let through: an element count with no array
 // (null ptr, zero size), and elsize * elcount overflowing size_t.
 triax_test(fx_c, params_count_without_ptr, .params = {0, 3, NULL}) {
-  triax_assert_true(1); // unreached
+  triax_assert(1); // unreached
 }
 triax_test(fx_c, params_size_overflow, .params = {SIZE_MAX / 2, 3, fx_c_malformed_params_arr}) {
-  triax_assert_true(1); // unreached
+  triax_assert(1); // unreached
 }
 
 // fx_d: each test fails via one of the streamed string/array result paths

@@ -224,5 +224,40 @@ then
   status=1
 fi
 
+# Skip reasons are reported, survive later log records (C++ destructors asserting during
+# unwinding), and never hide a failed assertion.
+echo "== Skip reasons =="
+if ! python3 - "$(native_path "$BIN")" "$(native_path "$WORKDIR/skip.json")" "$(native_path "$WORKDIR/skip.tap")" <<'PY_SKIP'
+import json, os, subprocess, sys
+binary, report, tap = sys.argv[1:]
+run = subprocess.run([binary, '--no-color', '--text=none', '--json=' + report, '--tap=' + tap,
+                      '--isolation=on', 'skip_reasons'],
+                     env={**os.environ, 'TRIAXI_VALIDATE_CHILD': '1'},
+                     capture_output=True, text=True, timeout=30)
+assert run.returncode == 1, (run.returncode, run.stderr)
+tests = {t['name']: t for s in json.load(open(report))['suites'] for t in s['tests']}
+expected = {'plain': ('skipped', None), 'formatted': ('skipped', 'needs gpu'),
+            'failure_before_skip': ('failed', 'after a failure'),
+            'passing_assert_while_unwinding': ('skipped', 'unwinding'),
+            'failing_assert_while_unwinding': ('failed', 'unwinding')}
+assert {'plain', 'formatted', 'failure_before_skip'} <= set(tests) <= set(expected), tests
+lines = open(tap).read().splitlines()
+for name, test in tests.items():
+    outcome, reason = expected[name]
+    assert test['outcome'] == outcome, test
+    assert test.get('skip_reason') == reason, test
+    if outcome == 'skipped':
+        suffix = ' # SKIP' + (' ' + reason if reason else '')
+        assert any(l.startswith('ok ') and l.endswith('skip_reasons > ' + name + suffix)
+                   for l in lines), (name, lines)
+    else:
+        assert any(l.startswith('not ok ') and l.endswith('skip_reasons > ' + name)
+                   for l in lines), (name, lines)
+print('OK')
+PY_SKIP
+then
+  status=1
+fi
+
 completed=1
 exit "$status"

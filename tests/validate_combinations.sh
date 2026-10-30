@@ -500,7 +500,7 @@ for tc in ET.parse(sys.argv[1]).getroot().iter("testcase"):
         print(tc.get("name"), " ".join(lines))
 PY
 )"
-  if [ "$stale_result" = "b_fails expect_true(2 == 3)" ]; then
+  if [ "$stale_result" = "b_fails expect(2 == 3)" ]; then
     ok "JUnit --jobs=$jobs: no stale assertion lines from a previous test"
   else
     fail "JUnit --jobs=$jobs stale assertion lines" "$stale_result"

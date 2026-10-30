@@ -12,7 +12,7 @@ triax_suite(header_check, );
 triax_test(header_check, compliant_forms, ) {
   int values[2] = {1, 2}, others[2] = {1, 3};
   triax_expect(values[0] == 1, "");
-  triax_assert_true(values[1] == 2, "");
+  triax_assert(values[1] == 2, "");
   triax_expect_eq(values[0], 1, "");
   triax_expect_arreq(values, values, 2, "");
   triax_expect_arrneq(values, others, 2, "");
@@ -31,12 +31,15 @@ triax_test(header_check, fault_assertions, triax_opt(isolation, TRIAX_ISOLATION_
   triax_expect_fault(TRIAX_FAULT_ABORT, abort());
 }
 
-// The non-conforming short forms, made warning-free by the silencing macros.
+// The non-conforming short forms, made warning-free by the silencing macros. GCC before 15
+// reports the C case without a warning option, so no pragma can suppress it there.
+#if defined(__cplusplus) || !defined(__GNUC__) || defined(__clang__) || __GNUC__ >= 15
 TRIAX_NONPEDANTIC_BEGIN()
 triax_test(header_check, silenced_short_forms) {
   triax_expect_eq(1, 1);
-  triax_expect_true(1);
+  triax_expect(1);
 }
 TRIAX_NONPEDANTIC_END()
+#endif
 
 TRIAX_MAIN()

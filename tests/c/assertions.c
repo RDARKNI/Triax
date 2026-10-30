@@ -145,20 +145,20 @@ triaxi_validate_opts(assertions, assert_stops_early, TRIAXI_VALIDATE_FAILED, 200
   triax_expect_eq(3, 4); // never reached
 }
 
-// true / false / null / nonnull
-triaxi_validate(assertions, true_false_null_pass, TRIAXI_VALIDATE_PASSED) {
-  triax_expect_true((bool)1);
-  triax_expect_true((bool)42);
-  triax_expect_true((bool)-1);
-  triax_expect_false((bool)0);
+// generic checks, null / nonnull
+triaxi_validate(assertions, check_null_pass, TRIAXI_VALIDATE_PASSED) {
+  triax_expect((bool)1);
+  triax_expect((bool)42);
+  triax_expect((bool)-1);
+  triax_expect(!(bool)0);
   triax_expect_null(NULL);
   triax_expect_nonnull((void*)1);
   triax_expect_nonnull("hello");
 }
-triaxi_validate(assertions, true_false_null_fail, TRIAXI_VALIDATE_FAILED) {
-  triax_expect_true((bool)0);
-  triax_expect_false((bool)1);
-  triax_expect_false((bool)-1);
+triaxi_validate(assertions, check_null_fail, TRIAXI_VALIDATE_FAILED) {
+  triax_expect((bool)0);
+  triax_expect(!(bool)1);
+  triax_expect(!(bool)-1);
   triax_expect_null((void*)1);
   triax_expect_nonnull(NULL);
 }

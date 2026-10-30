@@ -20,14 +20,14 @@ TRIAX_NONPEDANTIC_BEGIN()
 triax_suite(exits, triax_opt(isolation, TRIAX_ISOLATION_ON));
 
 triaxi_validate(exits, skip, TRIAXI_VALIDATE_SKIPPED) { triax_skip(); }
-triaxi_validate(exits, pass, TRIAXI_VALIDATE_PASSED) { triax_assert_true(1); }
-triaxi_validate(exits, fail, TRIAXI_VALIDATE_FAILED) { triax_assert_true(0); }
+triaxi_validate(exits, pass, TRIAXI_VALIDATE_PASSED) { triax_assert(1); }
+triaxi_validate(exits, fail, TRIAXI_VALIDATE_FAILED) { triax_assert(0); }
 triaxi_validate_opts(exits, timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
   triaxi_test_sleep_ms(100000);
 }
-triaxi_validate(exits, uexit, TRIAXI_VALIDATE_UEXITED) { triax_assert_true((exit(1), 1)); }
-triaxi_validate(exits, ufault, TRIAXI_VALIDATE_UCRASHED) { triax_assert_true(raise(SIGABRT)); }
+triaxi_validate(exits, uexit, TRIAXI_VALIDATE_UEXITED) { triax_assert((exit(1), 1)); }
+triaxi_validate(exits, ufault, TRIAXI_VALIDATE_UCRASHED) { triax_assert(raise(SIGABRT)); }
 // Distinct from uexit/ufault above: those crash/exit from inside an
 // assertion's own expression (state still IN_ASSERT); these do it from plain
 // body code, with no assertion in flight at all (state == TEST). Both are
@@ -78,7 +78,7 @@ triaxi_validate_opts(exits, timeout_pass, TRIAXI_VALIDATE_PASSED, 200,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {}
 triaxi_validate_opts(exits, timeout_fail, TRIAXI_VALIDATE_FAILED, 100,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
-  triax_assert_true(0);
+  triax_assert(0);
 }
 triaxi_validate_opts(exits, timeout_timeout, TRIAXI_VALIDATE_TIMEOUT, 1,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
@@ -100,7 +100,7 @@ static inline int spin_forever(void) {
 triax_suite(timeout, triax_opt(isolation, TRIAX_ISOLATION_ON));
 triaxi_validate_opts(timeout, timeout_in_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
-  triax_expect_true(spin_forever());
+  triax_expect(spin_forever());
 }
 triaxi_validate_opts(timeout, timeout_before_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
@@ -109,13 +109,13 @@ triaxi_validate_opts(timeout, timeout_before_assert, TRIAXI_VALIDATE_TIMEOUT, 10
 triaxi_validate_opts(timeout, timeout_after_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
   spin_forever();
-  triax_expect_true(1);
+  triax_expect(1);
 }
 triaxi_validate_opts(timeout, timeout_before_after_assert, TRIAXI_VALIDATE_TIMEOUT, 10,
                      TRIAXI_VALIDATE_ISOLATION_INHERIT) {
-  triax_expect_true(1);
+  triax_expect(1);
   spin_forever();
-  triax_expect_true(1);
+  triax_expect(1);
 }
 
 TRIAX_NONPEDANTIC_END()

@@ -34,7 +34,7 @@ triaxi_validate_user_error_attrs(errors, skip_in_fixture, "skip_in_fixture",
 }
 
 static void errors_assertion_in_fixture_init(void) {
-  if (triaxi_validate_is_child()) { triax_assert_true(1); }
+  if (triaxi_validate_is_child()) { triax_assert(1); }
 }
 triaxi_validate_user_error_attrs(errors, assertion_in_fixture, "assertion_in_fixture",
                                  triax_opt(init, errors_assertion_in_fixture_init)) {

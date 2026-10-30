@@ -15,8 +15,8 @@
 #ifndef TRIAXI_TEST_H
 #define TRIAXI_TEST_H
 
-#define TRIAX_VERSION_MAJOR  0
-#define TRIAX_VERSION_MINOR  1
+#define TRIAX_VERSION_MAJOR  1
+#define TRIAX_VERSION_MINOR  0
 #define TRIAX_VERSION_PATCH  0
 
 #define TRIAX_VERSION_STRING TRIAXI_VERSION_STRING
@@ -384,6 +384,10 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 ///
 /// Use assertion macros and @ref triax_skip only in the test body, on the thread
 /// executing the test. Calling them from fixtures is a test API error.
+/// In C++, `triax_assert_*` and @ref triax_skip stop the test by throwing an internal
+/// exception. Do not call them from destructors: destructors are `noexcept` by default,
+/// and one that runs while the test is already unwinding cannot throw either, so both
+/// cases end in `std::terminate`. `triax_expect_*` does not throw and is safe there.
 /// Assertions may also be used in helper functions called by the test; diagnostics
 /// identify the source file and line containing the assertion itself.
 /// Stringified assertion expressions are reported in full, up to UINT16_MAX bytes;
@@ -398,13 +402,18 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// @ref triax_assert_exit.
 /// @{
 
-/// @brief Stops the current test and records it as skipped.
+/// @brief Stops the current test and records it as skipped, with an optional reason.
+/// @param ... Optional printf-style format string literal and its arguments.
 /// Fixture teardown still runs. In C++, test-local objects are unwound.
-/// Call only from the test body; calling from a fixture is a test API error.
+/// A skip never hides a failure: if an assertion failed before the skip, or fails while
+/// the test unwinds, the test is reported as failed and the skip reason is still shown.
+/// Call only from the test body. Calling it from a fixture, or from within another
+/// assertion's evaluated code (e.g. `triax_expect_nthrow(triax_skip())`), is a test API
+/// error. In C++, do not call it from a destructor (see @ref triax_assertions).
 /// @code{.c}
-/// if (!feature_available()) { triax_skip(); }
+/// if (!feature_available()) { triax_skip("Feature unavailable: %s", name); }
 /// @endcode
-#define triax_skip()                   TRIAXI_SKIP()
+#define triax_skip(...)                TRIAXI_SKIP(" " __VA_ARGS__)
 
 // ── Generic checks ────────────────────────────────────────────────────────────
 
@@ -424,20 +433,6 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 #define triax_assert(cond, ...)        TRIAXI_A1(check, 0, #cond, !(cond), " " __VA_ARGS__)
 
 // ── Booleans and pointers ─────────────────────────────────────────────────────
-
-/// @brief Passes if @p expr converts to true.
-/// @param expr Value implicitly convertible to bool.
-/// An optional printf-style failure message may be supplied as trailing arguments.
-/// In C++, a type with only an explicit bool conversion can be tested with
-/// @ref triax_expect or an explicit cast to bool.
-#define triax_expect_true(expr, ...)   TRIAXI_E1(true, 0, #expr, expr, " " __VA_ARGS__)
-/// @copydoc triax_expect_true
-#define triax_assert_true(expr, ...)   TRIAXI_A1(true, 0, #expr, expr, " " __VA_ARGS__)
-/// @brief Passes if @p expr converts to false.
-/// @copydetails triax_expect_true
-#define triax_expect_false(expr, ...)  TRIAXI_E1(true, 1, #expr, expr, " " __VA_ARGS__)
-/// @copydoc triax_expect_false
-#define triax_assert_false(expr, ...)  TRIAXI_A1(true, 1, #expr, expr, " " __VA_ARGS__)
 
 /// @brief Passes if @p ptr is a null pointer.
 /// @param ptr Pointer to check.
@@ -865,19 +860,19 @@ typedef uint32_t Triax_Fault;
 /// }
 /// @endcode
 #define triax_assert_fault(fault, ...)                                                             \
-  triaxi_assert_fault(0, 1, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
+  TRIAXI_ASSERT_FAULT(0, 1, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
 /// @copydoc triax_assert_fault
 #define triax_expect_fault(fault, ...)                                                             \
-  triaxi_assert_fault(0, 0, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
+  TRIAXI_ASSERT_FAULT(0, 0, fault, #fault ", " #__VA_ARGS__, __VA_ARGS__)
 
 /// @brief Passes if the code block completes without a native fault.
 /// @param ... Code block executed as statements in the current test's process.
 /// Normal completion continues the test. A fault ends the invocation and fails
 /// the check; a process exit or escaping C++ exception is also an unexpected
 /// termination. Process isolation provides crash containment.
-#define triax_assert_nfault(...) triaxi_assert_fault(1, 1, 0, #__VA_ARGS__ "", __VA_ARGS__)
+#define triax_assert_nfault(...) TRIAXI_ASSERT_FAULT(1, 1, 0, #__VA_ARGS__ "", __VA_ARGS__)
 /// @copydoc triax_assert_nfault
-#define triax_expect_nfault(...) triaxi_assert_fault(1, 0, 0, #__VA_ARGS__ "", __VA_ARGS__)
+#define triax_expect_nfault(...) TRIAXI_ASSERT_FAULT(1, 0, 0, #__VA_ARGS__ "", __VA_ARGS__)
 
 /// @brief Accepts any ordinary process exit status in a positive exit check.
 #define TRIAX_EXIT_ANY           UINT32_MAX
@@ -900,10 +895,10 @@ typedef uint32_t Triax_Fault;
 /// }
 /// @endcode
 #define triax_assert_exit(code, ...)                                                               \
-  triaxi_assert_exit(0, 1, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
+  TRIAXI_ASSERT_EXIT(0, 1, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
 /// @copydoc triax_assert_exit
 #define triax_expect_exit(code, ...)                                                               \
-  triaxi_assert_exit(0, 0, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
+  TRIAXI_ASSERT_EXIT(0, 0, code, #code ", " #__VA_ARGS__, __VA_ARGS__)
 
 /// @brief Passes if the code block completes without terminating the process.
 /// @param ... Code block executed as statements in the current test's process.
@@ -911,22 +906,47 @@ typedef uint32_t Triax_Fault;
 /// escaping C++ exception ends the invocation and fails the check.
 /// @note Requires process isolation, even when the block is expected to return.
 /// Without isolation, a test API error is reported before the block executes.
-#define triax_assert_nexit(...) triaxi_assert_exit(1, 1, 0, #__VA_ARGS__ "", __VA_ARGS__)
+#define triax_assert_nexit(...) TRIAXI_ASSERT_EXIT(1, 1, 0, #__VA_ARGS__ "", __VA_ARGS__)
 /// @copydoc triax_assert_nexit
-#define triax_expect_nexit(...) triaxi_assert_exit(1, 0, 0, #__VA_ARGS__ "", __VA_ARGS__)
+#define triax_expect_nexit(...) TRIAXI_ASSERT_EXIT(1, 0, 0, #__VA_ARGS__ "", __VA_ARGS__)
 
 #if TRIAXI_CPP
+/// @brief Sentinel type accepted by @ref triax_assert_throw and @ref triax_expect_throw
+/// to match any C++ exception.
 struct TRIAXI_AnyException {};
 # define TRIAX_EXCEPTION_ANY TRIAXI_AnyException
+
+/// @brief Passes if the code block throws an exception of the expected type.
+/// @param exception Expected C++ exception type, or @ref TRIAX_EXCEPTION_ANY to accept any.
+/// @param ... Code block executed as statements.
+///
+/// A matching exception satisfies the check. If the block returns normally or throws
+/// a different exception type, the assertion fails and stops the test.
+/// Exception types are matched using C++ catch semantics, including derived classes.
+/// @code{.cpp}
+/// triax_assert_throw(std::runtime_error, throw std::runtime_error("error"));
+/// triax_assert_throw(TRIAX_EXCEPTION_ANY, throw 42);
+/// @endcode
 # define triax_assert_throw(exception, ...)                                                        \
-   triaxi_assert_throw(1, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
+   TRIAXI_ASSERT_THROW(1, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
 
+/// @brief Nonfatal variant of @ref triax_assert_throw.
+/// A mismatch or missing exception records a failure but continues the test.
 # define triax_expect_throw(exception, ...)                                                        \
-   triaxi_assert_throw(0, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
+   TRIAXI_ASSERT_THROW(0, exception, #exception ", " #__VA_ARGS__, __VA_ARGS__)
 
-# define triax_assert_nthrow(...) triaxi_assert_nthrow(1, #__VA_ARGS__ "", __VA_ARGS__)
+/// @brief Passes if the code block completes without throwing a C++ exception.
+/// @param ... Code block executed as statements.
+///
+/// Any C++ exception escaping the block fails the assertion and stops the test.
+/// @code{.cpp}
+/// triax_assert_nthrow(do_work());
+/// @endcode
+# define triax_assert_nthrow(...) TRIAXI_ASSERT_NTHROW(1, #__VA_ARGS__ "", __VA_ARGS__)
 
-# define triax_expect_nthrow(...) triaxi_assert_nthrow(0, #__VA_ARGS__ "", __VA_ARGS__)
+/// @brief Nonfatal variant of @ref triax_assert_nthrow.
+/// An escaping exception records a failure but continues the test.
+# define triax_expect_nthrow(...) TRIAXI_ASSERT_NTHROW(0, #__VA_ARGS__ "", __VA_ARGS__)
 
 #endif
 
@@ -1814,7 +1834,6 @@ TRIAXI_EXTERN_C_END
 #define TRIAXI_ASSERTTYPE_ITEMS(X, PRE)                                                            \
   X(PRE##exit)                                                                                     \
   X(PRE##fault)                                                                                    \
-  X(PRE##true)                                                                                     \
   X(PRE##null)                                                                                     \
   X(PRE##eq)                                                                                       \
   X(PRE##gt)                                                                                       \
@@ -1839,7 +1858,8 @@ enum {
   TRIAXI_PACKETPREFIX_RES      = 0,
   TRIAXI_PACKETPREFIX_HDR_PASS = 1,
   TRIAXI_PACKETPREFIX_HDR_FAIL = 2,
-  TRIAXI_PACKETPREFIX_MESSAGE  = 3
+  TRIAXI_PACKETPREFIX_MESSAGE  = 3,
+  TRIAXI_PACKETPREFIX_HDR_SKIP = 4
 };
 
 typedef struct TRIAXI_AssertHdr {
@@ -1890,7 +1910,7 @@ typedef enum TRIAXI_AR {
 
 typedef struct TRIAXI_AssertRes {
   TRIAXI_PacketPrefix kind; // TRIAXI_PACKETPREFIX_RES
-  uint8_t             val;
+  uint8_t             val;  // TRIAXI_AR
   uint8_t             code; // encoding
   uint8_t             _pad[1];
   uint32_t            len;
@@ -1903,6 +1923,13 @@ typedef struct TRIAXI_AssertRes {
 # pragma warning(pop)
 #endif
 
+typedef struct TRIAXI_MessageHdr {
+  TRIAXI_PacketPrefix kind;
+  uint8_t             pad[3];
+  uint32_t            len;
+} TRIAXI_MessageHdr;
+static_assert(sizeof(TRIAXI_MessageHdr) == 8, ""); // todo why?
+
 /// @brief State of the Test
 typedef enum TRIAXI_State {
   TRIAXI_STATE_SETUP,
@@ -1911,8 +1938,7 @@ typedef enum TRIAXI_State {
   TRIAXI_STATE_IN_ASSERT, // test run in assert
   TRIAXI_STATE_FINI,      // fini fixture
   TRIAXI_STATE_CLEANUP,
-  TRIAXI_STATE_DONE,
-  TRIAXI_STATE_SKIPPED
+  TRIAXI_STATE_DONE
 } TRIAXI_State;
 
 typedef enum TRIAXI_Error {
@@ -2276,10 +2302,7 @@ static inline void triaxi_assert_write_header(TRIAXI_PacketPrefix kind) {
 // Optional failure messages are emitted as sidecar log records.
 static inline void triaxi_assert_write_message(const char* msg, uint32_t len) {
   if (!len) { return; }
-  struct {
-    uint8_t  kind, pad[3];
-    uint32_t len;
-  } hdr = {TRIAXI_PACKETPREFIX_MESSAGE, {0}, len};
+  TRIAXI_MessageHdr hdr = {TRIAXI_PACKETPREFIX_MESSAGE, {0}, len};
   triaxi_file_write(TRIAXI_exec.log, &hdr, sizeof(hdr));
   triaxi_file_write(TRIAXI_exec.log, msg, hdr.len);
   static const char zero[8] = {0};
@@ -2287,30 +2310,54 @@ static inline void triaxi_assert_write_message(const char* msg, uint32_t len) {
   if (pad) { triaxi_file_write(TRIAXI_exec.log, zero, pad); }
 }
 
+// Formats into TRIAXI_exec.storage, which is free once the failure or skip record has been
+// written. Format arguments must not point into it; no public API returns such pointers.
 #if TRIAXI_GNU_COMPAT
-__attribute__((format(printf, 1, 2)))
+__attribute__((format(printf, 1, 0)))
 #endif
-// fmt is " " followed by the user's format, so it is never an empty format string.
-static inline void triaxi_assert_msg_finish(const char* fmt, ...) {
-  if (!fmt[1]) {
-    if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }
-    return;
-  }
-  char    msg[2048];
-  va_list ap;
-  va_start(ap, fmt);
-  int n = vsnprintf(msg, sizeof(msg), fmt + 1, ap);
-  va_end(ap);
-  uint32_t len;
+static inline uint32_t triaxi_format_message(const char* fmt, va_list ap) {
+  char* msg = TRIAXI_exec.storage;
+  int   n   = vsnprintf(msg, sizeof(TRIAXI_exec.storage), fmt + 1, ap);
   if (n < 0) {
     static const char err[] = "[format error]";
     memcpy(msg, err, sizeof(err) - 1);
-    len = sizeof(err) - 1;
-  } else {
-    len = (uint32_t)TRIAXI_MIN((size_t)n, sizeof(msg) - 1);
+    return (uint32_t)(sizeof(err) - 1);
   }
-  triaxi_assert_write_message(msg, len);
+  return (uint32_t)TRIAXI_MIN((size_t)n, sizeof(TRIAXI_exec.storage) - 1);
+}
+
+#if TRIAXI_GNU_COMPAT
+__attribute__((format(printf, 1, 2)))
+#endif
+static inline void triaxi_assert_msg_finish(const char* fmt, ...) {
+  if (fmt[1]) {
+    va_list ap;
+    va_start(ap, fmt);
+    uint32_t len = triaxi_format_message(fmt, ap);
+    va_end(ap);
+    triaxi_assert_write_message(TRIAXI_exec.storage, len);
+  }
   if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }
+}
+
+// Skip uses an assertion header but does not count as an assertion.
+#if TRIAXI_GNU_COMPAT
+__attribute__((format(printf, 1, 2)))
+#endif
+static inline void triaxi_skip_msg_finish(const char* fmt, ...) {
+  const char* msg = NULL;
+  uint32_t    len = 0;
+  if (fmt[1]) {
+    va_list ap;
+    va_start(ap, fmt);
+    len = triaxi_format_message(fmt, ap);
+    va_end(ap);
+    msg = TRIAXI_exec.storage;
+  }
+  TRIAXI_AssertHdr hdr = {TRIAXI_ZINIT};
+  hdr.kind             = TRIAXI_PACKETPREFIX_HDR_SKIP;
+  triaxi_file_write(TRIAXI_exec.log, &hdr, sizeof(hdr));
+  triaxi_assert_write_message(msg, len);
 }
 
 static inline void triaxi_assert_pass(void) {
@@ -2417,8 +2464,7 @@ static inline void triaxi_assert_fail_strings(TRIAXI_AR val, Triax_Str e1, Triax
 /// @brief Reason execution left the test body
 typedef enum TRIAXI_ExecOutcome {
   TRIAXI_EXEC_RETURNED,
-  TRIAXI_EXEC_ASSERTED,
-  TRIAXI_EXEC_SKIPPED,
+  TRIAXI_EXEC_STOPPED,
   TRIAXI_EXEC_EXCEPTION,
   TRIAXI_EXEC_CRASHED,
   TRIAXI_EXEC_ERROR
@@ -2443,14 +2489,18 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
   abort();
 }
 
-#define TRIAXI_SKIP()                                                                              \
-  (TRIAXI_exec.shared->state == TRIAXI_STATE_TEST                                                  \
-       ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_SKIPPED)                                                    \
-       : triaxi_user_error(TRIAXI_ERROR_SKIP_IN_FIXTURE))
+#define TRIAXI_SKIP(...)                                                                           \
+  do {                                                                                             \
+    if (TRIAXI_exec.shared->state != TRIAXI_STATE_TEST) {                                          \
+      triaxi_user_error(TRIAXI_ERROR_SKIP_IN_FIXTURE);                                             \
+    }                                                                                              \
+    triaxi_skip_msg_finish(__VA_ARGS__);                                                           \
+    TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED);                                                        \
+  } while (0)
 
 #define TRIAXI_A(type, neg, lit, ...)                                                              \
   (triaxi_assert_begin(TRIAXI_AT_##type, 1, neg, 0, lit),                                          \
-   triaxi_AF_##type(neg, __VA_ARGS__) ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED) : (void)0)
+   triaxi_AF_##type(neg, __VA_ARGS__) ? TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED) : (void)0)
 
 #define TRIAXI_E(type, neg, lit, ...)                                                              \
   (triaxi_assert_begin(TRIAXI_AT_##type, 0, neg, 0, lit), (void)triaxi_AF_##type(neg, __VA_ARGS__))
@@ -2461,7 +2511,7 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
 #define TRIAXI_A1(type, neg, lit, a, ...)                                                          \
   (triaxi_assert_begin(TRIAXI_AT_##type, 1, neg, 0, lit),                                          \
    triaxi_AF_##type(neg, a)                                                                        \
-       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED))          \
+       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED))           \
        : (void)0)
 #define TRIAXI_E2(type, neg, lit, a, b, ...)                                                       \
   (triaxi_assert_begin(TRIAXI_AT_##type, 0, neg, 0, lit),                                          \
@@ -2469,7 +2519,7 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
 #define TRIAXI_A2(type, neg, lit, a, b, ...)                                                       \
   (triaxi_assert_begin(TRIAXI_AT_##type, 1, neg, 0, lit),                                          \
    triaxi_AF_##type(neg, a, b)                                                                     \
-       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED))          \
+       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED))           \
        : (void)0)
 #define TRIAXI_E3(type, neg, lit, a, b, c, ...)                                                    \
   (triaxi_assert_begin(TRIAXI_AT_##type, 0, neg, 0, lit),                                          \
@@ -2477,7 +2527,7 @@ triaxi_noreturn static inline void triaxi_user_error_f(uint32_t error, uint32_t 
 #define TRIAXI_A3(type, neg, lit, a, b, c, ...)                                                    \
   (triaxi_assert_begin(TRIAXI_AT_##type, 1, neg, 0, lit),                                          \
    triaxi_AF_##type(neg, a, b, c)                                                                  \
-       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED))          \
+       ? (triaxi_assert_msg_finish(__VA_ARGS__), TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED))           \
        : (void)0)
 
 // RES is always TRIAXI_exec.pkg, whose args occupy TRIAXI_exec.storage. snprintf rather than
@@ -2517,7 +2567,7 @@ static inline bool triaxi_assert_complete(bool failed) {
 #define TRIAXI_gt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) <= (e2)) + ((e1) < (e2))) : !((e1) <= (e2))))
 #define TRIAXI_lt(v, e1, e2) ((uint8_t)(!(v) ? (((e1) >= (e2)) + ((e1) > (e2))) : !((e1) >= (e2))))
 
-#define triaxi_assert_fault(neg, aborting, fault, lit, ...)                                        \
+#define TRIAXI_ASSERT_FAULT(neg, aborting, fault, lit, ...)                                        \
   do {                                                                                             \
     const Triax_Fault TRIAXI_expected_v = (Triax_Fault)(fault);                                    \
     triaxi_assert_begin(TRIAXI_AT_fault, aborting, neg, TRIAXI_expected_v, lit);                   \
@@ -2529,11 +2579,11 @@ static inline bool triaxi_assert_complete(bool failed) {
                          "no fault", "%s");                                                        \
       triaxi_assert_fail(TRIAXI_AR_FAIL1);                                                         \
       if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }                                       \
-      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                   \
+      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED); }                                    \
     }                                                                                              \
   } while (0)
 
-#define triaxi_assert_exit(neg, aborting, code, lit, ...)                                          \
+#define TRIAXI_ASSERT_EXIT(neg, aborting, code, lit, ...)                                          \
   do {                                                                                             \
     const uint32_t TRIAXI_expected_v = (uint32_t)(code);                                           \
     if (!TRIAXI_exec.isolated) { triaxi_user_error(TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION); }  \
@@ -2549,7 +2599,7 @@ static inline bool triaxi_assert_complete(bool failed) {
       }                                                                                            \
       triaxi_assert_fail(TRIAXI_AR_FAIL1);                                                         \
       if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }                                       \
-      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                   \
+      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED); }                                    \
     }                                                                                              \
   } while (0)
 
@@ -2567,7 +2617,7 @@ template <>
 inline bool triaxi_exception_matches<TRIAXI_AnyException>() {
   return true;
 }
-# define triaxi_assert_throw(aborting, exception, lit, ...)                                        \
+# define TRIAXI_ASSERT_THROW(aborting, exception, lit, ...)                                        \
    do {                                                                                            \
      triaxi_assert_begin(TRIAXI_AT_throw, aborting, 0, 0, lit);                                    \
      bool TRIAXI_threw = false, TRIAXI_matched = false;                                            \
@@ -2583,11 +2633,11 @@ inline bool triaxi_exception_matches<TRIAXI_AnyException>() {
        TRIAXI_exec.pkg.len = 0;                                                                    \
        triaxi_assert_fail(TRIAXI_threw ? TRIAXI_AR_FAIL2 : TRIAXI_AR_FAIL1);                       \
        if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }                                      \
-       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                  \
+       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED); }                                   \
      }                                                                                             \
    } while (0)
 
-# define triaxi_assert_nthrow(aborting, lit, ...)                                                  \
+# define TRIAXI_ASSERT_NTHROW(aborting, lit, ...)                                                  \
    do {                                                                                            \
      triaxi_assert_begin(TRIAXI_AT_throw, aborting, 1, 0, lit);                                    \
      bool TRIAXI_threw = false;                                                                    \
@@ -2602,7 +2652,7 @@ inline bool triaxi_exception_matches<TRIAXI_AnyException>() {
        TRIAXI_exec.pkg.len = 0;                                                                    \
        triaxi_assert_fail(TRIAXI_AR_FAIL1);                                                        \
        if (TRIAXI_exec.debug_break) { triaxi_debug_break(); }                                      \
-       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                  \
+       if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED); }                                   \
      }                                                                                             \
    } while (0)
 #endif
@@ -2612,9 +2662,6 @@ static inline bool triaxi_AF_check(bool v, bool failed) {
   return triaxi_assert_complete(triaxi_assert_fail_if0(failed));
 }
 
-static inline bool triaxi_AF_true(bool v, bool e1) {
-  return triaxi_assert_complete(triaxi_assert_fail_if0(v ^ !e1));
-}
 static inline bool triaxi_AF_null(bool v, const void* e1) {
   return triaxi_assert_complete(triaxi_assert_fail_if1((e1 != NULL) != v, e1, "%p"));
 }
@@ -2975,7 +3022,7 @@ static inline bool triaxi_array_element_diff_Ss(bool v, size_t index, Triax_Str 
   return triaxi_array_element_diff_SS(v, index, e1, triaxi_str_from_cstr(e2));
 }
 
-#define triaxi_ARREQ(ae, lit, arr1, arr2, N, failed)                                               \
+#define TRIAXI_ARREQ(ae, lit, arr1, arr2, N, failed)                                               \
   do {                                                                                             \
     triaxi_assert_begin(TRIAXI_AT_arreq, ae, 0, 0, lit);                                           \
     const size_t TRIAXI_count = (N);                                                               \
@@ -2987,7 +3034,7 @@ static inline bool triaxi_array_element_diff_Ss(bool v, size_t index, Triax_Str 
     if (!(failed)) { triaxi_assert_pass(); }                                                       \
   } while (0)
 
-#define triaxi_ARRNEQ(ae, lit, arr1, arr2, N, failed)                                              \
+#define TRIAXI_ARRNEQ(ae, lit, arr1, arr2, N, failed)                                              \
   do {                                                                                             \
     triaxi_assert_begin(TRIAXI_AT_arreq, ae, 1, 0, lit);                                           \
     const size_t TRIAXI_count = (N);                                                               \
@@ -3008,13 +3055,13 @@ static inline bool triaxi_array_element_diff_Ss(bool v, size_t index, Triax_Str 
   do {                                                                                             \
     bool TRIAXI_failed = false;                                                                    \
     if (neg) {                                                                                     \
-      triaxi_ARRNEQ(aborting, lit, arr1, arr2, count, TRIAXI_failed);                              \
+      TRIAXI_ARRNEQ(aborting, lit, arr1, arr2, count, TRIAXI_failed);                              \
     } else {                                                                                       \
-      triaxi_ARREQ(aborting, lit, arr1, arr2, count, TRIAXI_failed);                               \
+      TRIAXI_ARREQ(aborting, lit, arr1, arr2, count, TRIAXI_failed);                               \
     }                                                                                              \
     if (TRIAXI_failed) {                                                                           \
       triaxi_assert_msg_finish(__VA_ARGS__);                                                       \
-      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_ASSERTED); }                                   \
+      if (aborting) { TRIAXI_ABORT_TEST(TRIAXI_EXEC_STOPPED); }                                    \
     }                                                                                              \
   } while (0)
 
@@ -3405,6 +3452,7 @@ enum { TRIAXI_OUTCOME_COUNT = TRIAXI_OUTCOME_ERROR + 1 };
 
 typedef struct TRIAXI_TestResult {
   struct { Triax_Str out, err; } capt;
+  Triax_Str      skip_reason;
   unsigned       nasserts;
   unsigned       nfails;
   TRIAXI_Outcome outcome;
@@ -4586,9 +4634,17 @@ static inline void triaxi_runner_cleanup(const TRIAXI_RunCtx* run) {
 # pragma region runner_printing
 static const char* TRIAXI_assertnames[2][TRIAXI_AT_COUNT]
     = {{TRIAXI_STRINGIFY_ALL(TRIAXI_ASSERTTYPE_ITEMS)},
-       {"nexit", "nfault", "false", "nonnull", "neq", "leq", "geq", "floatneq_abstol",
-        "floatneq_reltol", "memneq", "memnzero", "strneq", "str_nstartswith", "str_nendswith",
-        "str_ncontains", "check", "arrneq", "nthrow"}};
+       {"nexit", "nfault", "nonnull", "neq", "leq", "geq", "floatneq_abstol", "floatneq_reltol",
+        "memneq", "memnzero", "strneq", "str_nstartswith", "str_nendswith", "str_ncontains",
+        "check", "arrneq", "nthrow"}};
+
+// Writes the assertion's macro name without the triax_ prefix, e.g. "expect_eq" or "assert".
+static inline void triaxi_print_assert_name(FILE* out, const TRIAXI_AssertHdr* hdr) {
+  fputs(hdr->ae ? "assert" : "expect", out);
+  if (hdr->type == TRIAXI_AT_check) { return; } // triax_expect / triax_assert
+  putc('_', out);
+  fputs(TRIAXI_assertnames[hdr->neg][hdr->type], out);
+}
 
 typedef enum TRIAXI_PrintMeta {
   TRIAXI_PRINT_META_NONE,
@@ -4655,7 +4711,6 @@ static inline TRIAXI_PrintArgs triaxi_print_unpack_args(TRIAXI_AssertType       
     break;
   case TRIAXI_AT_exit          :
   case TRIAXI_AT_fault         :
-  case TRIAXI_AT_true          :
   case TRIAXI_AT_null          :
   case TRIAXI_AT_eq            :
   case TRIAXI_AT_gt            :
@@ -4723,7 +4778,7 @@ static inline Triax_Str triaxi_error_tostr(TRIAXI_Error error) {
   case TRIAXI_ERROR_MALFORMED_PARAMS: return TRIAXI_STRLIT("malformed test parameters");
   case TRIAXI_ERROR_PARAM_ACCESS:
     return TRIAXI_STRLIT("parameter access in non-parameterized test");
-  case TRIAXI_ERROR_SKIP_IN_FIXTURE: return TRIAXI_STRLIT("skip is not valid in fixtures");
+  case TRIAXI_ERROR_SKIP_IN_FIXTURE: return TRIAXI_STRLIT("skip is only valid in the test body");
   case TRIAXI_ERROR_ASSERT_IN_FIXTURE:
     return TRIAXI_STRLIT("assertions are only valid in test functions");
   case TRIAXI_ERROR_EXIT_ASSERT_WITHOUT_ISOLATION:
@@ -4937,10 +4992,10 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
       case TRIAXI_AR_UEXCEPT : more = 0, l = "[X]"; break;
       }
     }
-    fprintf(out, "%s%s%s %.*s:%" PRIu32 " %s_%s(%.*s)%c", c, l, run->out.ansi.reset,
-            (int)hdr->file_len, triaxi_assert_file(hdr), hdr->line, hdr->ae ? "assert" : "expect",
-            TRIAXI_assertnames[neg][atype], (int)hdr->expr_len, triaxi_assert_expr(hdr),
-            more ? ' ' : '\n');
+    fprintf(out, "%s%s%s %.*s:%" PRIu32 " ", c, l, run->out.ansi.reset, (int)hdr->file_len,
+            triaxi_assert_file(hdr), hdr->line);
+    triaxi_print_assert_name(out, hdr);
+    fprintf(out, "(%.*s)%c", (int)hdr->expr_len, triaxi_assert_expr(hdr), more ? ' ' : '\n');
     if (!more) { return; }
   }
   TRIAXI_PrintArgs pa = triaxi_print_unpack_args(atype, res);
@@ -4987,7 +5042,6 @@ static inline void triaxi_print_assert_text(const TRIAXI_RunCtx* run, const TRIA
     break;
 
   // --- unary ---
-  case TRIAXI_AT_true: op = !neg ? "was false" : "was true"; break;
   case TRIAXI_AT_null:
     if (neg) {
       op = "was NULL";
@@ -5130,8 +5184,7 @@ static inline const char* triaxi_state_phase_name(TRIAXI_State state) {
   case TRIAXI_STATE_IN_ASSERT: return "body";
   case TRIAXI_STATE_FINI     : return "fini";
   case TRIAXI_STATE_CLEANUP  : return "cleanup";
-  case TRIAXI_STATE_DONE     :
-  case TRIAXI_STATE_SKIPPED  : return NULL;
+  case TRIAXI_STATE_DONE     : return NULL;
   }
 }
 
@@ -5145,8 +5198,7 @@ static inline const char* triaxi_state_phase_phrase(TRIAXI_State state) {
   case TRIAXI_STATE_IN_ASSERT: return NULL;
   case TRIAXI_STATE_SETUP    :
   case TRIAXI_STATE_CLEANUP  :
-  case TRIAXI_STATE_DONE     :
-  case TRIAXI_STATE_SKIPPED  : return triaxi_state_phase_name(state); // "setup"/"cleanup"/NULL
+  case TRIAXI_STATE_DONE     : return NULL;
   }
 }
 
@@ -5205,19 +5257,18 @@ static inline void triaxi_print_test_end_text(const TRIAXI_RunCtx*         run,
     case TRIAXI_STATE_IN_ASSERT: label = ">> TEST FUNCTION ERROR"; break;
     case TRIAXI_STATE_FINI     : label = ">> FIXTURE FINI ERROR"; break;
     case TRIAXI_STATE_CLEANUP  : label = ">> CLEANUP ERROR"; break;
-    case TRIAXI_STATE_DONE     :
-    case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
+    case TRIAXI_STATE_DONE     : triaxi_unreachable();
     }
     break;
   }
   fprintf(out, "%s%s%s", color, label, run->out.ansi.reset);
-  if (r->outcome == TRIAXI_OUTCOME_SKIP) { goto skip; }
-  triaxi_fputlit(": ", out);
-  fprintf(out, "%u/%u assertions passed", passed, total);
+  if (r->outcome != TRIAXI_OUTCOME_SKIP || r->state == TRIAXI_STATE_DONE) {
+    fprintf(out, ": %u/%u assertions passed", passed, total);
+  }
   switch (r->outcome) {
-  default                   :
-  case TRIAXI_OUTCOME_SKIP  : triaxi_unreachable();
-  case TRIAXI_OUTCOME_PASSED: break;
+  default                   : triaxi_unreachable();
+  case TRIAXI_OUTCOME_SKIP  :
+  case TRIAXI_OUTCOME_PASSED:
   case TRIAXI_OUTCOME_FAIL  : break;
   case TRIAXI_OUTCOME_UCRASH:
     triaxi_fputlit("; crash: ", out), triaxi_fputStr(triaxi_fault_tostr(r->exit.reason), out);
@@ -5253,7 +5304,14 @@ static inline void triaxi_print_test_end_text(const TRIAXI_RunCtx*         run,
     }
     break;
   }
-skip:
+  if (r->skip_reason.len) {
+    if (r->outcome == TRIAXI_OUTCOME_SKIP) {
+      triaxi_fputlit("; ", out);
+    } else {
+      triaxi_fputlit("; skip requested: ", out);
+    }
+    triaxi_fputStr(r->skip_reason, out);
+  }
   fprintf(out, " (%" PRIu32 "ms)\n\n", r->duration_ms);
 }
 
@@ -5358,8 +5416,9 @@ static inline void triaxi_print_assert_json(const TRIAXI_RunCtx* run, const TRIA
           "\n              \"file\": \"",
           pref, hdr->line);
   triaxi_print_json_escape(out, TRIAXI_T(Triax_Str){triaxi_assert_file(hdr), hdr->file_len});
-  fprintf(out, "\",\n              \"expression\": \"%s_%s(", hdr->ae ? "assert" : "expect",
-          TRIAXI_assertnames[hdr->neg][atype]);
+  triaxi_fputlit("\",\n              \"expression\": \"", out);
+  triaxi_print_assert_name(out, hdr);
+  putc('(', out);
   triaxi_print_json_escape(out, TRIAXI_T(Triax_Str){triaxi_assert_expr(hdr), hdr->expr_len});
   triaxi_fputlit(")\"", out);
   switch (res->val) {
@@ -5438,7 +5497,7 @@ static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
   if (!out) { return; }
   TRIAXI_Outcome outcome = r->outcome;
   if (r->nfails > 0) { triaxi_fputlit("\n          ]", out); }
-  if (outcome != TRIAXI_OUTCOME_SKIP) {
+  if (outcome != TRIAXI_OUTCOME_SKIP || r->state == TRIAXI_STATE_DONE) {
     fprintf(out, ",\n          \"assert_count\": %u", r->nasserts);
   }
   triaxi_fputlit(",\n          \"outcome\": \"", out);
@@ -5452,6 +5511,10 @@ static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
   case TRIAXI_OUTCOME_UEXCEPT: triaxi_fputlit("uexception\"", out); break;
   case TRIAXI_OUTCOME_TIMEOUT: triaxi_fputlit("timeout\"", out); break;
   case TRIAXI_OUTCOME_ERROR  : triaxi_fputlit("test_error\"", out); break;
+  }
+  if (r->skip_reason.len) {
+    triaxi_fputlit(",\n          \"skip_reason\": ", out);
+    triaxi_print_json_bytes(out, r->skip_reason);
   }
   if (outcome == TRIAXI_OUTCOME_ERROR || outcome == TRIAXI_OUTCOME_TIMEOUT) {
     const char* phase = triaxi_state_phase_name(r->state);
@@ -5501,7 +5564,7 @@ static inline void triaxi_print_test_end_json(const TRIAXI_RunCtx*     run,
     break;
   }
   fprintf(out, ",\n          \"duration_ms\": %" PRIu32, r->duration_ms);
-  if (outcome != TRIAXI_OUTCOME_SKIP) {
+  {
     if (r->capt.out.len) {
       triaxi_fputlit(",\n          \"stdout\": ", out), triaxi_print_json_bytes(out, r->capt.out);
     }
@@ -5539,11 +5602,23 @@ static inline void triaxi_print_test_end_tap(const TRIAXI_RunCtx*         run,
   } else {
     buf[0] = '\0';
   }
-  const size_t n = triaxi_outcomes_total(r->invocations.cnts) + report_index;
-  fprintf(run->out.streams.tap, "%sok %zu - %s > %s%s%s\n",
+  const size_t n   = triaxi_outcomes_total(r->invocations.cnts) + report_index;
+  FILE*        out = run->out.streams.tap;
+  fprintf(out, "%sok %zu - %s > %s%s",
           (tr->outcome == TRIAXI_OUTCOME_PASSED || tr->outcome == TRIAXI_OUTCOME_SKIP) ? ""
                                                                                        : "not ",
-          n, t->suitename, t->name, buf, tr->outcome == TRIAXI_OUTCOME_SKIP ? " # SKIP" : "");
+          n, t->suitename, t->name, buf);
+  if (tr->outcome == TRIAXI_OUTCOME_SKIP) {
+    triaxi_fputlit(" # SKIP", out);
+    if (tr->skip_reason.len) {
+      putc(' ', out);
+      for (size_t i = 0; i < tr->skip_reason.len; ++i) {
+        unsigned char c = (unsigned char)tr->skip_reason.str[i];
+        putc(c < 0x20 || c == 0x7f ? ' ' : c, out);
+      }
+    }
+  }
+  putc('\n', out);
 }
 
 static inline void triaxi_print_run_end_tap(const TRIAXI_RunCtx* run, const TRIAXI_RunResult* r) {
@@ -5575,8 +5650,9 @@ static inline void triaxi_print_assert_junit(const TRIAXI_RunCtx* run, const TRI
   if (!res) { return; }
   triaxi_fputlit("        ", out);
   triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){triaxi_assert_file(hdr), hdr->file_len});
-  fprintf(out, ":%" PRIu32 ": %s_%s(", hdr->line, hdr->ae ? "assert" : "expect",
-          TRIAXI_assertnames[hdr->neg][(TRIAXI_AssertType)hdr->type]);
+  fprintf(out, ":%" PRIu32 ": ", hdr->line);
+  triaxi_print_assert_name(out, hdr);
+  putc('(', out);
   // Encode invalid XML bytes as hex, including malformed source encodings.
   triaxi_print_xml_bytes(out, TRIAXI_T(Triax_Str){triaxi_assert_expr(hdr), hdr->expr_len});
   triaxi_fputlit(")\n", out);
@@ -5611,7 +5687,9 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
   if (t->params.elcount) { fprintf(out, "[%zu]", inv->idx); }
 
   putc('"', out);
-  if (r->outcome != TRIAXI_OUTCOME_SKIP) { fprintf(out, " assertions=\"%u\"", r->nasserts); }
+  if (r->outcome != TRIAXI_OUTCOME_SKIP || r->state == TRIAXI_STATE_DONE) {
+    fprintf(out, " assertions=\"%u\"", r->nasserts);
+  }
   fprintf(out, " time=\"%" PRIu32 ".%03" PRIu32 "\"", r->duration_ms / 1000, r->duration_ms % 1000);
   if (r->outcome == TRIAXI_OUTCOME_PASSED && !r->capt.out.len && !r->capt.err.len) {
     triaxi_fputlit("/>\n", out);
@@ -5621,8 +5699,16 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
   triaxi_fputlit(">\n", out);
 
   switch (r->outcome) {
-  default                   : triaxi_unreachable();
-  case TRIAXI_OUTCOME_SKIP  : triaxi_fputlit("      <skipped/>\n", out); break;
+  default: triaxi_unreachable();
+  case TRIAXI_OUTCOME_SKIP:
+    if (r->skip_reason.len) {
+      triaxi_fputlit("      <skipped message=\"", out);
+      triaxi_print_xml_bytes(out, r->skip_reason);
+      triaxi_fputlit("\"/>\n", out);
+    } else {
+      triaxi_fputlit("      <skipped/>\n", out);
+    }
+    break;
   case TRIAXI_OUTCOME_PASSED: break;
   case TRIAXI_OUTCOME_FAIL:
     triaxi_fputlit("      <failure type=\"failed\" message=\"assertion failure\">\n", out);
@@ -5663,8 +5749,7 @@ static inline void triaxi_print_test_end_junit(const TRIAXI_RunCtx*         run,
     case TRIAXI_STATE_IN_ASSERT: type = "test_error", phase = "test function: "; break;
     case TRIAXI_STATE_FINI     : type = "fixture_fini_error", phase = "fixture fini: "; break;
     case TRIAXI_STATE_CLEANUP  : type = "cleanup_error", phase = "cleanup: "; break;
-    case TRIAXI_STATE_DONE     :
-    case TRIAXI_STATE_SKIPPED  : triaxi_unreachable();
+    case TRIAXI_STATE_DONE     : triaxi_unreachable();
     }
     fprintf(out, "      <error type=\"%s\" message=\"%s", type, phase);
     switch (r->exit.type) {
@@ -5840,8 +5925,7 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 # endif
     }
     break;
-  case TRIAXI_EXEC_ASSERTED : res = TRIAXI_EXEC_ASSERTED; break;
-  case TRIAXI_EXEC_SKIPPED  : res = TRIAXI_EXEC_SKIPPED; break;
+  case TRIAXI_EXEC_STOPPED  : res = TRIAXI_EXEC_STOPPED; break;
   case TRIAXI_EXEC_EXCEPTION: res = TRIAXI_EXEC_EXCEPTION; break;
   case TRIAXI_EXEC_ERROR    : res = TRIAXI_EXEC_ERROR; break;
   case TRIAXI_EXEC_CRASHED:
@@ -5876,13 +5960,8 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_ERROR;
     break;
   case TRIAXI_EXEC_RETURNED:
-  case TRIAXI_EXEC_ASSERTED:
+  case TRIAXI_EXEC_STOPPED:
     TRIAXI_exec.shared->state     = TRIAXI_STATE_DONE;
-    TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_EXIT;
-    break;
-
-  case TRIAXI_EXEC_SKIPPED:
-    TRIAXI_exec.shared->state     = TRIAXI_STATE_SKIPPED;
     TRIAXI_exec.shared->exit.type = TRIAXI_EXIT_EXIT;
     break;
 
@@ -5906,8 +5985,8 @@ static inline void triaxi_run_func(const TRIAXI_TestInvocation* inv, TRIAXI_Shar
 }
 
 static inline uint32_t triaxi_interpret_log(const TRIAXI_RunCtx*         run,
-                                            const TRIAXI_TestInvocation* invocation,
-                                            Triax_Str                    log) {
+                                            const TRIAXI_TestInvocation* invocation, Triax_Str log,
+                                            Triax_Str* skip_reason, bool* skipped) {
   const char* b      = log.str;
   size_t      left   = log.len;
   uint32_t    nfails = 0;
@@ -5916,7 +5995,8 @@ static inline uint32_t triaxi_interpret_log(const TRIAXI_RunCtx*         run,
     const TRIAXI_AssertHdr* hdr  = (const TRIAXI_AssertHdr*)(const void*)b;
     b += sizeof(*hdr), left -= sizeof(*hdr);
 
-    const TRIAXI_AssertRes* res = NULL;
+    const bool              is_skip = hdr->kind == TRIAXI_PACKETPREFIX_HDR_SKIP;
+    const TRIAXI_AssertRes* res     = NULL;
     if (hdr->kind == TRIAXI_PACKETPREFIX_HDR_FAIL) {
       if (left < sizeof(TRIAXI_AssertRes)) { break; }
       res = (const TRIAXI_AssertRes*)(const void*)b;
@@ -5927,21 +6007,26 @@ static inline uint32_t triaxi_interpret_log(const TRIAXI_RunCtx*         run,
       size_t pad = (8 - (res->len & 7u)) & 7u;
       if (pad > left) { break; }
       b += pad, left -= pad;
-    } else if (hdr->kind != TRIAXI_PACKETPREFIX_HDR_PASS) {
+    } else if (hdr->kind != TRIAXI_PACKETPREFIX_HDR_PASS && !is_skip) {
       break;
     }
 
     Triax_Str message = {TRIAXI_ZINIT};
-    if (res && left >= 8 && (uint8_t)*b == TRIAXI_PACKETPREFIX_MESSAGE) {
-      uint32_t n;
-      memcpy(&n, b + 4, sizeof(n));
-      const size_t padded = ((size_t)n + 7) & ~(size_t)7;
-      if (padded > left - 8) {
+    if ((res || is_skip) && left >= sizeof(TRIAXI_MessageHdr)
+        && (uint8_t)*b == TRIAXI_PACKETPREFIX_MESSAGE) {
+      const TRIAXI_MessageHdr* mh     = (const TRIAXI_MessageHdr*)(const void*)b;
+      const size_t             padded = ((size_t)mh->len + 7u) & ~(size_t)7u;
+      if (padded > left - sizeof(*mh)) {
         left = 0;
       } else {
-        message  = TRIAXI_T(Triax_Str){b + 8, n};
-        b += 8 + padded, left -= 8 + padded;
+        message  = TRIAXI_T(Triax_Str){b + sizeof(*mh), mh->len};
+        b += sizeof(*mh) + padded, left -= sizeof(*mh) + padded;
       }
+    }
+    if (is_skip) {
+      *skipped     = true;
+      *skip_reason = message;
+      continue;
     }
     triaxi_print_assert(run, invocation, nfails, hdr, res, message);
     nfails += res != NULL;
@@ -6022,14 +6107,14 @@ static inline bool triaxi_interpret_pending(const TRIAXI_RunCtx*         run,
 // Classify the final test outcome after all assertion failures have been collected.
 static inline TRIAXI_Outcome triaxi_interpret_outcome(TRIAXI_State state, TRIAXI_Exit exit,
                                                       const TRIAXI_AssertHdr* pending,
-                                                      uint32_t                nfails) {
+                                                      uint32_t nfails, bool skipped) {
   switch (state) {
-  default                  : triaxi_unreachable();
-  case TRIAXI_STATE_SKIPPED: return TRIAXI_OUTCOME_SKIP;
-  case TRIAXI_STATE_DONE   : return nfails ? TRIAXI_OUTCOME_FAIL : TRIAXI_OUTCOME_PASSED;
-  case TRIAXI_STATE_SETUP  :
-  case TRIAXI_STATE_INIT   :
-  case TRIAXI_STATE_FINI   :
+  default: triaxi_unreachable();
+  case TRIAXI_STATE_DONE:
+    return nfails ? TRIAXI_OUTCOME_FAIL : skipped ? TRIAXI_OUTCOME_SKIP : TRIAXI_OUTCOME_PASSED;
+  case TRIAXI_STATE_SETUP:
+  case TRIAXI_STATE_INIT :
+  case TRIAXI_STATE_FINI :
   case TRIAXI_STATE_CLEANUP:
     switch (exit.type) {
     default                   : triaxi_unreachable();
@@ -6058,7 +6143,6 @@ static inline TRIAXI_Outcome triaxi_interpret_outcome(TRIAXI_State state, TRIAXI
   }
   return !nfails ? TRIAXI_OUTCOME_PASSED : TRIAXI_OUTCOME_FAIL;
 }
-
 static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run,
                                                       const TRIAXI_TestSlot* h) {
   TRIAXI_TestResult r = {TRIAXI_ZINIT};
@@ -6067,23 +6151,19 @@ static inline TRIAXI_TestResult triaxi_test_interpret(const TRIAXI_RunCtx*   run
   r.duration_ms       = h->shared->duration_ms;
   r.nasserts          = h->shared->nasserts;
 
-  if (r.state == TRIAXI_STATE_SKIPPED) {
-    r.outcome = TRIAXI_OUTCOME_SKIP;
-    return r;
-  }
-
-  Triax_Str log = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
-  r.capt.out    = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out);
-  r.capt.err    = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
+  Triax_Str log       = triaxi_file_read_buf(h->log, &TRIAXI_global.sbufs.log);
+  r.capt.out          = triaxi_file_read_buf(h->out, &TRIAXI_global.sbufs.out);
+  r.capt.err          = triaxi_file_read_buf(h->err, &TRIAXI_global.sbufs.err);
 
   // Only evaluation leaves a pending assertion; logging runs in TEST.
   const TRIAXI_AssertHdr* pending = r.state == TRIAXI_STATE_IN_ASSERT ? &h->shared->pending : NULL;
 
-  uint32_t                log_fails = triaxi_interpret_log(run, &h->invocation, log);
+  bool                    skipped = false;
+  uint32_t log_fails  = triaxi_interpret_log(run, &h->invocation, log, &r.skip_reason, &skipped);
   bool pending_failed = triaxi_interpret_pending(run, &h->invocation, r.exit, log_fails, pending);
 
   r.nfails            = log_fails + pending_failed;
-  r.outcome           = triaxi_interpret_outcome(r.state, r.exit, pending, r.nfails);
+  r.outcome           = triaxi_interpret_outcome(r.state, r.exit, pending, r.nfails, skipped);
   return r;
 }
 

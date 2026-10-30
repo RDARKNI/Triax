@@ -13,7 +13,7 @@ static int add(int a, int b) { return a + b; }
 
 triax_test(core, equality, triax_opt(skip, false)) {
   triax_assert_eq(add(2, 3), 5);
-  triax_expect_true(1);
+  triax_expect(1);
   triax_assert_streq("triax", "triax");
 }
 

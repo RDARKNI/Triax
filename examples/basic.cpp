@@ -25,7 +25,7 @@ triax_test(process, expected_exit, .isolation(TRIAX_ISOLATION_ON)) {
 }
 
 triax_test(process, within_timeout, .isolation(TRIAX_ISOLATION_ON).timeout_ms(1000)) {
-  triax_assert_true(true);
+  triax_assert(true);
 }
 
 triax_test(io, capture, .isolation(TRIAX_ISOLATION_ON)) {

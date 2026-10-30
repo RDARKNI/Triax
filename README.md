@@ -118,7 +118,7 @@ The same header works in C++. Configuration uses a fluent builder syntax:
 triax_test(io, timeout,
            .timeout_ms(1000)
            .isolation(TRIAX_ISOLATION_ON)) {
-    triax_assert_true(true);
+    triax_assert(true);
 }
 
 TRIAX_MAIN()

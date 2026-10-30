@@ -105,12 +105,12 @@ triax_test(exceptions, locals_unwound, ) {
 triax_test(exceptions, inside_user_try, ) {
   try {
     triax_expect_throw(int, throw 1);
-  } catch (...) { triax_expect_true(false); }
+  } catch (...) { triax_expect(false); }
 }
 triax_test(exceptions, assert_pass_continues, ) {
   triax_assert_throw(int, throw 1);
   triax_assert_nthrow((void)0);
-  triax_expect_true(true);
+  triax_expect(true);
 }
 
 // Failures
@@ -160,10 +160,10 @@ EXC_ISOLATED(assert_failure_unwinds, TRIAXI_VALIDATE_UEXITED) {
 // Framework control flow is not a user exception: assertions and skips
 // inside the evaluated expression are API errors, not caught by the wildcard.
 EXC_USER_ERROR(nested_assert_in_throw, "assertion_in_fixture") {
-  triax_expect_throw(TRIAX_EXCEPTION_ANY, triax_assert_true(false));
+  triax_expect_throw(TRIAX_EXCEPTION_ANY, triax_assert(false));
 }
 EXC_USER_ERROR(nested_assert_in_nthrow, "assertion_in_fixture") {
-  triax_expect_nthrow(triax_assert_true(false));
+  triax_expect_nthrow(triax_assert(false));
 }
 EXC_USER_ERROR(skip_in_throw, "skip_in_fixture") {
   triax_expect_throw(TRIAX_EXCEPTION_ANY, triax_skip());

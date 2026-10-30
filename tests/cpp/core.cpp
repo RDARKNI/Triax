@@ -9,7 +9,7 @@ static int add(int a, int b) { return a + b; }
 
 triax_test(core, equality, .skip(false)) {
   triax_assert_eq(add(2, 3), 5);
-  triax_expect_true(true);
+  triax_expect(true);
   triax_assert_streq(std::string("triax"), std::string_view("triax"));
 }
 #endif
@@ -51,7 +51,7 @@ triax_test(core, parameterized, .parameterize(values)) { triax_assert_gt(*triax_
 // is exactly the signal we want: this test going red in CI confirms the
 // crash, without a human needing to read a segfault message to prove it.
 triaxi_validate(debug, deliberate_failure, TRIAXI_VALIDATE_FAILED) {
-  triax_assert_true(false);
+  triax_assert(false);
 }
 
 TRIAX_NONPEDANTIC_END()
