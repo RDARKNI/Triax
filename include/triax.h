@@ -4278,8 +4278,13 @@ triaxi_noreturn TRIAXI_LINKAGE_SHARED void triaxi_fatal_f(const char* file, int 
         len += syslen;
         while (len && (buf[len - 1] == '\r' || buf[len - 1] == '\n')) { --len; }
       } else {
-        int n  = snprintf(buf + len, cap - len, "Windows error %lu", (unsigned long)error);
-        len   += n > 0 ? TRIAXI_MIN((size_t)n, cap - len - 1) : 0;
+        // Format into a fixed buffer that always fits, then append what the message allows.
+        char code[32];
+        int  n = snprintf(code, sizeof(code), "Windows error %lu", (unsigned long)error);
+        if (n > 0) {
+          size_t ncopy = TRIAXI_MIN((size_t)n, cap - len - 1);
+          memcpy(buf + len, code, ncopy), len += ncopy;
+        }
       }
     }
   }
