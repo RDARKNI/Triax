@@ -9,9 +9,7 @@
 TRIAX_NONPEDANTIC_BEGIN()
 
 triax_suite(combo_reporters_cpp, .isolation(TRIAX_ISOLATION_ON));
-triax_test(combo_reporters_cpp, r_uexception, .skip(false)) {
-  throw std::runtime_error("combo uexception");
-}
+triax_test(combo_reporters_cpp, r_uexception, ) { throw std::runtime_error("combo uexception"); }
 
 // Exception interactions with assertions and the non-isolated crash handlers.
 struct ThrowingEq {
@@ -20,7 +18,7 @@ struct ThrowingEq {
   bool operator!=(const ThrowingEq& o) const { return !(*this == o); }
 };
 
-triax_suite(combo_exceptions_cpp, .skip(false));
+triax_suite(combo_exceptions_cpp, );
 // An exception escaping a comparison used to report uexception while still
 // counting the interrupted assertion as passed.
 triax_test(combo_exceptions_cpp, throwing_compare, .isolation(TRIAX_ISOLATION_ON)) {
@@ -36,9 +34,7 @@ triax_test(combo_exceptions_cpp, caught_noniso, .isolation(TRIAX_ISOLATION_OFF))
   bool caught = false;
   try {
     throw std::runtime_error("caught");
-  } catch (const std::runtime_error&) {
-    caught = true;
-  }
+  } catch (const std::runtime_error&) { caught = true; }
   triax_assert(caught);
 }
 

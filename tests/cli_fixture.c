@@ -14,15 +14,15 @@ TRIAX_NONPEDANTIC_BEGIN()
 // own "beta" tag on top (used to check tag matching considers both suite-
 // and test-level tags, not just one).
 triax_suite(fx_a, .tags = "alpha");
-triax_test(fx_a, one, 0) { triax_assert(1); }
+triax_test(fx_a, one, ) { triax_assert(1); }
 triax_test(fx_a, two, .tags = "beta") { triax_assert(1); }
 
 // fx_b: untagged, registered after fx_a. "first" fails; "second" would pass
 // if it ran — used to prove --fail-fast stops launching further tests after
 // the first non-pass outcome.
-triax_suite(fx_b, 0);
-triax_test(fx_b, first, 0) { triax_assert(0); }
-triax_test(fx_b, second, 0) { triax_assert(1); }
+triax_suite(fx_b, );
+triax_test(fx_b, first, ) { triax_assert(0); }
+triax_test(fx_b, second, ) { triax_assert(1); }
 
 // fx_c: tests with malformed .params, e.g. non-null ptr with zero element
 // size — a well-formed TRIAXI_Params from triax_as_params() never produces
@@ -33,7 +33,7 @@ triax_test(fx_b, second, 0) { triax_assert(1); }
 // via an explicitly filtered invocation in validate_cli.sh, never run
 // unfiltered, since this binary's own default run isn't itself a ctest gate.
 static const int fx_c_malformed_params_arr[] = {1, 2, 3};
-triax_suite(fx_c, 0);
+triax_suite(fx_c, );
 triax_test(fx_c, malformed_params, .params = {0, 3, fx_c_malformed_params_arr}) {
   triax_assert(1); // unreached
 }
@@ -52,9 +52,9 @@ triax_test(fx_c, params_size_overflow, .params = {SIZE_MAX / 2, 3, fx_c_malforme
 // their failure record without ever calling triaxi_debug_break, so --break
 // silently did nothing for a failing streq/arreq — used below to prove it
 // now reports the same "ucrashed" outcome as a plain assertion does.
-triax_suite(fx_d, 0);
-triax_test(fx_d, streq_fail, 0) { triax_assert_streq("a", "b"); }
-triax_test(fx_d, arreq_fail, 0) {
+triax_suite(fx_d, );
+triax_test(fx_d, streq_fail, ) { triax_assert_streq("a", "b"); }
+triax_test(fx_d, arreq_fail, ) {
   const char* a[1] = {"a"};
   const char* b[1] = {"b"};
   triax_assert_arreq(a, b, 1);

@@ -11,7 +11,7 @@
 
 TRIAX_NONPEDANTIC_BEGIN()
 
-triax_test(multitu, from_a_pass, 0) { triax_assert(1); }
+triax_test(multitu, from_a_pass, ) { triax_assert(1); }
 
 int main(int argc, char** argv) {
   Triax_RunConfig cfg = {0};

@@ -259,7 +259,7 @@ static inline int             triax_run_main(int argc, char* argv[], Triax_RunCo
 /// ```c
 /// #include "triax.h"
 ///
-/// triax_test(math, addition, .skip = false) {
+/// triax_test(math, addition, ) {
 ///   triax_assert_eq(2 + 2, 4);
 /// }
 ///

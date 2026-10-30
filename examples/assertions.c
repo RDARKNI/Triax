@@ -1,17 +1,18 @@
 #include "triax.h"
 #include <stdint.h>
 #include <stdlib.h>
+TRIAX_NONPEDANTIC_BEGIN() // optional without the -pedantic flag or on newer C versions
 
-triax_test(demo_tests, assert_vs_expect, .skip = false) {
+triax_test(demo_tests, assert_vs_expect, ) {
   triax_expect_eq(1, 0); // fails, test continues
   triax_assert_eq(1, 0); // fails, test ends
   triax_expect_eq(1, 1); // does not run
 }
 
 static int add(int a, int b) { return a + b; }
-triax_test(demo_tests, addition, .skip = false) { triax_assert_eq(add(2, 3), 5); }
+triax_test(demo_tests, addition, ) { triax_assert_eq(add(2, 3), 5); }
 
-triax_test(demo_tests, type_safety, .skip = false) {
+triax_test(demo_tests, type_safety) {
   triax_expect_eq(add(1, 1), 2);   // int vs int
   triax_expect_eq(UINT32_MAX, -1); // unsigned vs. signed - handled correctly (fails)
   triax_expect_eq(1.0, 1.0);       // float vs float - gets promoted to long double
@@ -35,7 +36,7 @@ triax_test(demo_tests, array_comparisons, .verbosity = TRIAX_VERBOSITY_ALWAYS) {
   triax_expect_arreq(arr1, arr2, 3);
 }
 
-triax_test(demo_strings, assertion_types, .skip = 0) {
+triax_test(demo_strings, assertion_types) {
   const char* teststr = "hello test\n";
   triax_expect_str_startswith(teststr, "hello");
   triax_expect_str_endswith(teststr, "test\n");
@@ -46,7 +47,7 @@ triax_test(demo_strings, assertion_types, .skip = 0) {
   triax_expect_str_contains(testStr, teststr);
 }
 
-triax_test(demo_strings, file_captures, .skip = 0) {
+triax_test(demo_strings, file_captures) {
   printf("hello from stdout\n");
   fprintf(stderr, "hello from stderr\n");
   // stdout and stderr may be captured as Triax_Str objects
@@ -87,3 +88,5 @@ int main(int argc, char** argv) {
   Triax_RunConfig config = {0};
   return triax_run_main(argc, argv, config);
 }
+
+TRIAX_NONPEDANTIC_END()

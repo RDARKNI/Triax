@@ -32,7 +32,7 @@ static int add(int a, int b) {
     return a + b;
 }
 
-triax_test(math, addition, .skip = false) {
+triax_test(math, addition, ) {
     triax_assert_eq(add(2, 3), 5);
 }
 
@@ -251,25 +251,17 @@ TRIAX_MAIN()
 
 ## Empty test configuration
 
-`triax_test(suite, name)` is accepted by GCC, Clang, and MSVC, but omitting a variadic macro argument is only standardized in newer language modes and may trigger `-Wpedantic` under C11 or C++17.
+Test options and assertion messages are optional trailing macro arguments. Leaving them out entirely, as in `triax_test(math, addition)` or `triax_expect_eq(a, b)`, is only standard from C23 and C++20; before that, GCC and Clang report it under `-Wpedantic`.
 
-For warning-clean strict builds, provide an explicit no-op configuration:
+For warning-clean strict builds in any language mode, pass the empty argument explicitly. An empty argument is standard C99/C++11:
 
 ```c
-triax_test(math, addition, .skip = false) {
-    /* ... */
+triax_test(math, addition, ) {
+    triax_expect_eq(add(2, 3), 5, "");
 }
 ```
 
-or in C++:
-
-```cpp
-triax_test(math, addition, .skip(false)) {
-    /* ... */
-}
-```
-
-Alternatively, use a newer language mode where empty variadic arguments are standardized.
+Alternatively, enclose test code in `TRIAX_NONPEDANTIC_BEGIN()` and `TRIAX_NONPEDANTIC_END()` to suppress just that diagnostic. This does not work with GCC before 15, which reports it without a warning option that a pragma could disable.
 
 ## Supported environments
 

@@ -11,13 +11,13 @@ TRIAX_NONPEDANTIC_BEGIN()
 
 static int add(int a, int b) { return a + b; }
 
-triax_test(core, equality, triax_opt(skip, false)) {
+triax_test(core, equality, ) {
   triax_assert_eq(add(2, 3), 5);
   triax_expect(1);
   triax_assert_streq("triax", "triax");
 }
 
-triax_test(core, captured_output, triax_opt(skip, false)) {
+triax_test(core, captured_output, ) {
   fputs("hello-triax", stdout);
   Triax_Str out = triax_read_stdout();
   triax_assert_str_contains(out, "hello-triax");

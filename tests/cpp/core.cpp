@@ -7,14 +7,14 @@ TRIAX_NONPEDANTIC_BEGIN()
 #ifdef __cpp_lib_string_view
 static int add(int a, int b) { return a + b; }
 
-triax_test(core, equality, .skip(false)) {
+triax_test(core, equality, ) {
   triax_assert_eq(add(2, 3), 5);
   triax_expect(true);
   triax_assert_streq(std::string("triax"), std::string_view("triax"));
 }
 #endif
 
-triax_test(core, captured_output, .skip(false)) {
+triax_test(core, captured_output, ) {
   std::cout << "hello-triax";
   Triax_Str out = triax_read_stdout();
   triax_assert_str_contains(out, "hello-triax");
